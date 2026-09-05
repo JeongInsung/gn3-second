@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GN3.Characters;
 using GN3.Mercenaries;
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,6 +20,9 @@ namespace GN3.UI
 
         private void Awake()
         {
+            // MarketPanel(900x680) 안에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역
+            ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -70f));
+
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
             var classPool = new List<MercenaryClassSO>(Resources.LoadAll<MercenaryClassSO>("MercenaryClasses"));
@@ -41,6 +45,8 @@ namespace GN3.UI
 
             foreach (var merc in _market.Refresh())
                 _cardRows.Add(CreateCard(merc));
+
+            LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
         }
 
         private GameObject CreateCard(Mercenary merc)
@@ -62,6 +68,8 @@ namespace GN3.UI
             hLayout.childForceExpandHeight = true;
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
+
+            CreatePortrait(row.transform, merc.Appearance, 48);
 
             var stats = merc.CurrentStats;
             string info = $"{merc.Name}   {merc.Class.ClassName} Lv.{merc.Level}    ATK {stats.Attack} / DEF {stats.Defense} / HP {stats.MaxHealth}";
@@ -99,6 +107,47 @@ namespace GN3.UI
             });
 
             return row;
+        }
+
+        private void CreatePortrait(Transform parent, CharacterAppearance appearance, int size)
+        {
+            var portraitGO = new GameObject("Portrait", typeof(RectTransform), typeof(LayoutElement));
+            portraitGO.transform.SetParent(parent, false);
+
+            var layout = portraitGO.GetComponent<LayoutElement>();
+            layout.minWidth = size;
+            layout.minHeight = size;
+            layout.preferredWidth = size;
+            layout.preferredHeight = size;
+            layout.flexibleWidth = 0;
+
+            var background = AddPortraitLayer(portraitGO.transform, null);
+            background.color = new Color(1f, 1f, 1f, 0.08f);
+
+            // 뒤에서 앞으로 겹쳐 그림: 몸통 -> 다리 -> 팔 -> 무기 -> 머리
+            AddPortraitLayer(portraitGO.transform, appearance.Body);
+            AddPortraitLayer(portraitGO.transform, appearance.Leg);
+            AddPortraitLayer(portraitGO.transform, appearance.Arm);
+            AddPortraitLayer(portraitGO.transform, appearance.Weapon);
+            AddPortraitLayer(portraitGO.transform, appearance.Head);
+        }
+
+        private Image AddPortraitLayer(Transform parent, Sprite sprite)
+        {
+            var go = new GameObject("Part", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+
+            var image = go.GetComponent<Image>();
+            image.sprite = sprite;
+            image.preserveAspect = true;
+            image.color = sprite != null ? Color.white : new Color(0f, 0f, 0f, 0f);
+            return image;
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

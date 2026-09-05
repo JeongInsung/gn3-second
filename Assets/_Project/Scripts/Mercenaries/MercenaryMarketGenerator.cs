@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GN3.Characters;
 
 namespace GN3.Mercenaries
 {
@@ -13,7 +14,8 @@ namespace GN3.Mercenaries
                 var mercClass = classPool[rng.Next(classPool.Count)];
                 int level = rng.Next(minLevel, maxLevel + 1);
                 string name = MercenaryNamePool.GetRandom(rng);
-                result.Add(new Mercenary(name, mercClass, level));
+                var appearance = CharacterAppearance.GenerateRandom(rng);
+                result.Add(new Mercenary(name, mercClass, level, appearance));
             }
             return result;
         }
