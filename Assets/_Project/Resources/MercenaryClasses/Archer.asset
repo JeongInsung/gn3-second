@@ -13,9 +13,12 @@ MonoBehaviour:
   m_Name: Archer
   m_EditorClassIdentifier: Assembly-CSharp::GN3.Mercenaries.MercenaryClassSO
   ClassName: "\uAD81\uC218"
+  Kind: 1
   BaseAttack: 13
   BaseDefense: 3
   BaseHealth: 28
   AttackGrowth: 3
   DefenseGrowth: 1
   HealthGrowth: 4
+  BaseMoveSpeed: 8
+  MoveSpeedGrowth: 1

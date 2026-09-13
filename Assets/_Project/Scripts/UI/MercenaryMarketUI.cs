@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using GN3.Characters;
 using GN3.Mercenaries;
+using GN3.Traits;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -20,7 +21,7 @@ namespace GN3.UI
 
         private void Awake()
         {
-            // MarketPanel(900x680) 안에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역
+            // MarketPanel(1200x780) 안에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역
             ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -70f));
 
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -72,11 +73,25 @@ namespace GN3.UI
             CreatePortrait(row.transform, merc.Appearance, 48);
 
             var stats = merc.CurrentStats;
-            string info = $"{merc.Name}   {merc.Class.ClassName} Lv.{merc.Level}    ATK {stats.Attack} / DEF {stats.Defense} / HP {stats.MaxHealth}";
-            var infoText = CreateText(row.transform, info, 20, TextAnchor.MiddleLeft);
-            var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
-            infoLayout.flexibleWidth = 1;
-            infoLayout.minWidth = 100;
+            var personalityMod = PersonalityTable.Get(merc.Personality);
+            var passives = ClassPassiveFactory.Create(merc.Class.Kind, merc.HasRarePassive);
+            string rareMark = merc.HasRarePassive ? " (레어)" : "";
+
+            string nameInfo = $"{merc.Name}   {merc.Class.ClassName} Lv.{merc.Level}";
+            var nameText = CreateText(row.transform, nameInfo, 20, TextAnchor.MiddleLeft);
+            var nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
+            nameLayout.flexibleWidth = 1;
+            nameLayout.minWidth = 100;
+
+            CreateTaggedLabel(row.transform, $"[{personalityMod.Label}]", 20, personalityMod.Description);
+
+            if (passives.Count > 0)
+                CreateTaggedLabel(row.transform, $"<{passives[0].Name}{rareMark}>", 20, passives[0].Description);
+
+            string statsInfo = $"ATK {stats.Attack} / DEF {stats.Defense} / HP {stats.MaxHealth} / SPD {stats.MoveSpeed}";
+            var statsText = CreateText(row.transform, statsInfo, 20, TextAnchor.MiddleLeft);
+            statsText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            statsText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 0;
 
             var hireButtonGO = new GameObject("HireButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             hireButtonGO.transform.SetParent(row.transform, false);
@@ -148,6 +163,16 @@ namespace GN3.UI
             image.preserveAspect = true;
             image.color = sprite != null ? Color.white : new Color(0f, 0f, 0f, 0f);
             return image;
+        }
+
+        private void CreateTaggedLabel(Transform parent, string label, int fontSize, string tooltip)
+        {
+            var text = CreateText(parent, label, fontSize, TextAnchor.MiddleLeft);
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var layout = text.gameObject.AddComponent<LayoutElement>();
+            layout.flexibleWidth = 0;
+            var trigger = text.gameObject.AddComponent<TooltipTrigger>();
+            trigger.Text = tooltip;
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

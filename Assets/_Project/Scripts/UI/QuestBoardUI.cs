@@ -22,7 +22,7 @@ namespace GN3.UI
 
         private void Awake()
         {
-            // QuestPanel(900x680)에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역 (MarketPanel과 동일 레이아웃)
+            // QuestPanel(1200x780)에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역 (MarketPanel과 동일 레이아웃)
             ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -70f));
 
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -69,7 +69,7 @@ namespace GN3.UI
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
-            string info = $"{quest.Title}    난이도 {quest.Difficulty}";
+            string info = $"{quest.Title}    난이도 {quest.Difficulty}    예상 소요시간 {quest.EstimatedDurationSeconds:0.#}초";
             var infoText = CreateText(row.transform, info, 20, TextAnchor.MiddleLeft);
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
             infoLayout.flexibleWidth = 1;

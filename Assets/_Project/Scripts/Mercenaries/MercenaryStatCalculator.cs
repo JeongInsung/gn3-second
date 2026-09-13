@@ -10,7 +10,8 @@ namespace GN3.Mercenaries
             return new CombatStats(
                 attack: mercenaryClass.BaseAttack + mercenaryClass.AttackGrowth * levelBonus,
                 defense: mercenaryClass.BaseDefense + mercenaryClass.DefenseGrowth * levelBonus,
-                maxHealth: mercenaryClass.BaseHealth + mercenaryClass.HealthGrowth * levelBonus
+                maxHealth: mercenaryClass.BaseHealth + mercenaryClass.HealthGrowth * levelBonus,
+                moveSpeed: mercenaryClass.BaseMoveSpeed + mercenaryClass.MoveSpeedGrowth * levelBonus
             );
         }
     }

@@ -19,6 +19,8 @@ namespace GN3.UI
                 return;
             }
 
+            PanelActivator.RegisterGroup(marketPanel, partyPanel, questPanel);
+
             CreateMenuBar(canvas.transform, marketPanel, partyPanel, questPanel);
             CreateCloseButton(marketPanel.transform, marketPanel);
             CreateCloseButton(partyPanel.transform, partyPanel);

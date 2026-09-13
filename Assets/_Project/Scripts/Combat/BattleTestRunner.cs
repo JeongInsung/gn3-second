@@ -26,7 +26,7 @@ namespace GN3.Combat
 
             foreach (var evt in result.Log)
             {
-                string suffix = evt.TargetDefeated ? " (defeated)" : "";
+                string suffix = evt.Evaded ? " (evaded)" : evt.TargetDefeated ? " (defeated)" : "";
                 Debug.Log($"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : {evt.Damage} dmg{suffix}");
             }
 

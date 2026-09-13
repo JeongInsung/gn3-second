@@ -6,6 +6,7 @@ namespace GN3.Mercenaries
     public class MercenaryClassSO : ScriptableObject
     {
         public string ClassName;
+        public MercenaryClassKind Kind;
 
         [Header("Base Stats (Level 1)")]
         public int BaseAttack;
@@ -16,5 +17,9 @@ namespace GN3.Mercenaries
         public int AttackGrowth;
         public int DefenseGrowth;
         public int HealthGrowth;
+
+        [Header("Move Speed (회피 확률에 영향)")]
+        public int BaseMoveSpeed;
+        public int MoveSpeedGrowth;
     }
 }

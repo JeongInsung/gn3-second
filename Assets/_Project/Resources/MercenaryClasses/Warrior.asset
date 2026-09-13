@@ -13,9 +13,12 @@ MonoBehaviour:
   m_Name: Warrior
   m_EditorClassIdentifier: Assembly-CSharp::GN3.Mercenaries.MercenaryClassSO
   ClassName: "\uC804\uC0AC"
+  Kind: 0
   BaseAttack: 10
   BaseDefense: 6
   BaseHealth: 40
   AttackGrowth: 2
   DefenseGrowth: 2
   HealthGrowth: 6
+  BaseMoveSpeed: 4
+  MoveSpeedGrowth: 0

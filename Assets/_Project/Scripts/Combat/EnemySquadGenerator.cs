@@ -19,11 +19,13 @@ namespace GN3.Combat
                 int attack = 6 + difficulty * 2 + rng.Next(-1, 2);
                 int defense = 2 + difficulty + rng.Next(-1, 2);
                 int health = 20 + difficulty * 8 + rng.Next(-3, 4);
+                int moveSpeed = 4 + difficulty + rng.Next(-1, 2);
 
                 var stats = new CombatStats(
                     attack: Math.Max(1, attack),
                     defense: Math.Max(0, defense),
-                    maxHealth: Math.Max(1, health));
+                    maxHealth: Math.Max(1, health),
+                    moveSpeed: Math.Max(0, moveSpeed));
 
                 result.Add(new Combatant(name, stats));
             }

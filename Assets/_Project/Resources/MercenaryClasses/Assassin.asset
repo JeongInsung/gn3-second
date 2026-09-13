@@ -10,15 +10,15 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 62a5196a9fc1434409a8226bc8425ea0, type: 3}
-  m_Name: Healer
+  m_Name: Assassin
   m_EditorClassIdentifier: Assembly-CSharp::GN3.Mercenaries.MercenaryClassSO
-  ClassName: "\uD790\uB7EC"
-  Kind: 2
-  BaseAttack: 7
-  BaseDefense: 4
-  BaseHealth: 32
-  AttackGrowth: 1
+  ClassName: "암살자"
+  Kind: 3
+  BaseAttack: 15
+  BaseDefense: 2
+  BaseHealth: 22
+  AttackGrowth: 3
   DefenseGrowth: 1
-  HealthGrowth: 5
-  BaseMoveSpeed: 6
-  MoveSpeedGrowth: 1
+  HealthGrowth: 3
+  BaseMoveSpeed: 14
+  MoveSpeedGrowth: 2

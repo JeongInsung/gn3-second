@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -5,6 +6,7 @@ using GN3.Characters;
 using GN3.Combat;
 using GN3.Mercenaries;
 using GN3.Quests;
+using GN3.Traits;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -20,13 +22,14 @@ namespace GN3.UI
         private Transform _panelTransform;
         private GameObject _battleButtonGO;
         private Quest _activeQuest;
+        private Coroutine _battlePlayback;
 
         private void Awake()
         {
             // ScrollListWrapper가 listContainer를 새 계층으로 옮기기 전에, 원래 부모(PartyPanel)를 기억해둔다.
             _panelTransform = listContainer.parent;
 
-            // PartyPanel(480x680) 안에서 제목 아래 ~ 결과 텍스트 위까지의 고정 영역
+            // PartyPanel(640x780) 안에서 제목 아래 ~ 결과 텍스트 위까지의 고정 영역
             ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 170f), new Vector2(-20f, -105f));
 
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -89,12 +92,48 @@ namespace GN3.UI
             CreatePortrait(row.transform, merc.Appearance, 40);
 
             var stats = merc.CurrentStats;
-            string info = $"{merc.Name} {merc.Class.ClassName} Lv.{merc.Level}\n공{stats.Attack} 방{stats.Defense} 체{stats.MaxHealth}";
-            var infoText = CreateText(row.transform, info, 14, TextAnchor.MiddleLeft);
-            infoText.color = active ? Color.white : new Color(1f, 1f, 1f, 0.4f);
-            var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
-            infoLayout.flexibleWidth = 1;
-            infoLayout.minWidth = 90;
+            var personalityMod = PersonalityTable.Get(merc.Personality);
+            var passives = ClassPassiveFactory.Create(merc.Class.Kind, merc.HasRarePassive);
+            string rareMark = merc.HasRarePassive ? " (레어)" : "";
+            Color textColor = active ? Color.white : new Color(1f, 1f, 1f, 0.4f);
+
+            var infoColumnGO = new GameObject("InfoColumn", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
+            infoColumnGO.transform.SetParent(row.transform, false);
+            var infoColumnLayout = infoColumnGO.GetComponent<LayoutElement>();
+            infoColumnLayout.flexibleWidth = 1;
+            infoColumnLayout.minWidth = 90;
+            var infoColumnVLayout = infoColumnGO.GetComponent<VerticalLayoutGroup>();
+            infoColumnVLayout.spacing = 2;
+            infoColumnVLayout.childAlignment = TextAnchor.MiddleLeft;
+            infoColumnVLayout.childForceExpandWidth = true;
+            infoColumnVLayout.childForceExpandHeight = false;
+            infoColumnVLayout.childControlWidth = true;
+            infoColumnVLayout.childControlHeight = true;
+
+            var topRowGO = new GameObject("TopRow", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            topRowGO.transform.SetParent(infoColumnGO.transform, false);
+            var topRowLayout = topRowGO.GetComponent<HorizontalLayoutGroup>();
+            topRowLayout.spacing = 4;
+            topRowLayout.childAlignment = TextAnchor.MiddleLeft;
+            topRowLayout.childForceExpandWidth = false;
+            topRowLayout.childForceExpandHeight = true;
+            topRowLayout.childControlWidth = true;
+            topRowLayout.childControlHeight = true;
+
+            string nameInfo = $"{merc.Name} {merc.Class.ClassName} Lv.{merc.Level}";
+            var nameText = CreateText(topRowGO.transform, nameInfo, 14, TextAnchor.MiddleLeft);
+            nameText.color = textColor;
+            var nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
+            nameLayout.flexibleWidth = 1;
+
+            CreateTaggedLabel(topRowGO.transform, $"[{personalityMod.Label}]", 14, personalityMod.Description, textColor);
+
+            if (passives.Count > 0)
+                CreateTaggedLabel(topRowGO.transform, $"<{passives[0].Name}{rareMark}>", 14, passives[0].Description, textColor);
+
+            string statsInfo = $"공{stats.Attack} 방{stats.Defense} 체{stats.MaxHealth} 속{stats.MoveSpeed}";
+            var statsText = CreateText(infoColumnGO.transform, statsInfo, 14, TextAnchor.MiddleLeft);
+            statsText.color = textColor;
 
             CreateActionButton(row.transform, active ? "제외" : "참가",
                 active ? new Color(0.5f, 0.45f, 0.2f, 1f) : new Color(0.25f, 0.5f, 0.3f, 1f),
@@ -166,15 +205,55 @@ namespace GN3.UI
                 return;
             }
 
+            var quest = _activeQuest;
             var rng = new System.Random();
-            var enemies = EnemySquadGenerator.Generate(_activeQuest.EnemyCount, _activeQuest.Difficulty, rng);
+            var enemies = EnemySquadGenerator.Generate(quest.EnemyCount, quest.Difficulty, rng);
 
             var simulator = new AutoBattleSimulator();
             var result = simulator.Simulate(party, enemies);
 
+            if (_battleButtonGO != null)
+            {
+                var button = _battleButtonGO.GetComponent<Button>();
+                if (button != null)
+                    button.interactable = false;
+            }
+
+            var host = CoroutineHost.Instance;
+            if (_battlePlayback != null)
+                host.StopCoroutine(_battlePlayback);
+            _battlePlayback = host.StartCoroutine(PlayBattle(quest, result));
+        }
+
+        private IEnumerator PlayBattle(Quest quest, BattleResult result)
+        {
+            const int MaxVisibleLines = 8;
+            var lines = new LinkedList<string>();
+
+            void AppendLine(string line)
+            {
+                lines.AddLast(line);
+                while (lines.Count > MaxVisibleLines)
+                    lines.RemoveFirst();
+                RenderResultText(string.Join("\n", lines));
+            }
+
+            AppendLine("전투 진행 중...");
+
+            int eventCount = Mathf.Max(1, result.Log.Count);
+            float delayPerEvent = quest.EstimatedDurationSeconds / eventCount;
+
+            foreach (var evt in result.Log)
+            {
+                string suffix = evt.Evaded ? " (회피)" : evt.TargetDefeated ? " (처치)" : "";
+                AppendLine($"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : {evt.Damage}{suffix}");
+                yield return new WaitForSeconds(delayPerEvent);
+            }
+
             string questOutcome = result.Outcome == BattleOutcome.TeamAVictory ? "임무 완료" : "임무 실패";
             SetResultText($"{questOutcome}\n{BuildResultSummary(result)}");
 
+            _battlePlayback = null;
             EndQuest();
         }
 
@@ -195,17 +274,22 @@ namespace GN3.UI
 
             foreach (var evt in result.Log.TakeLast(10))
             {
-                string suffix = evt.TargetDefeated ? " (처치)" : "";
+                string suffix = evt.Evaded ? " (회피)" : evt.TargetDefeated ? " (처치)" : "";
                 sb.AppendLine($"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : {evt.Damage}{suffix}");
             }
 
             return sb.ToString();
         }
 
-        private void SetResultText(string text)
+        private void RenderResultText(string text)
         {
             if (resultText != null)
                 resultText.text = text;
+        }
+
+        private void SetResultText(string text)
+        {
+            RenderResultText(text);
             Debug.Log(text);
         }
 
@@ -248,6 +332,17 @@ namespace GN3.UI
             image.preserveAspect = true;
             image.color = sprite != null ? Color.white : new Color(0f, 0f, 0f, 0f);
             return image;
+        }
+
+        private void CreateTaggedLabel(Transform parent, string label, int fontSize, string tooltip, Color color)
+        {
+            var text = CreateText(parent, label, fontSize, TextAnchor.MiddleLeft);
+            text.color = color;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var layout = text.gameObject.AddComponent<LayoutElement>();
+            layout.flexibleWidth = 0;
+            var trigger = text.gameObject.AddComponent<TooltipTrigger>();
+            trigger.Text = tooltip;
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

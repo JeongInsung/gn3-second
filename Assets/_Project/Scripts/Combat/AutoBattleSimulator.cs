@@ -18,21 +18,31 @@ namespace GN3.Combat
             var log = new List<BattleEvent>();
             var order = BuildTurnOrder(teamA, teamB);
 
+            RaiseBattleStart(teamA, teamB);
+
             int round = 0;
             while (round < maxRounds && teamA.Any(c => c.IsAlive) && teamB.Any(c => c.IsAlive))
             {
                 round++;
+                RaiseRoundStart(order, round);
+
                 foreach (var entry in order)
                 {
                     if (!entry.unit.IsAlive) continue;
 
                     var enemies = entry.isTeamA ? teamB : teamA;
-                    var target = PickTarget(enemies);
-                    if (target == null) break;
 
-                    int damage = CombatFormulas.CalculateDamage(entry.unit, target);
-                    target.TakeDamage(damage);
-                    log.Add(new BattleEvent(round, entry.unit, target, damage, !target.IsAlive));
+                    if (entry.unit.Passives.Any(p => p.TryTriggerAoeAttack(_random)))
+                    {
+                        foreach (var enemyTarget in enemies.Where(c => c.IsAlive).ToList())
+                            ResolveAttack(entry.unit, enemyTarget, round, enemies, log);
+                    }
+                    else
+                    {
+                        var target = PickTarget(enemies);
+                        if (target == null) break;
+                        ResolveAttack(entry.unit, target, round, enemies, log);
+                    }
 
                     if (!teamA.Any(c => c.IsAlive) || !teamB.Any(c => c.IsAlive))
                         break;
@@ -49,10 +59,82 @@ namespace GN3.Combat
             };
         }
 
+        private static void RaiseBattleStart(List<Combatant> teamA, List<Combatant> teamB)
+        {
+            foreach (var c in teamA)
+                foreach (var passive in c.Passives)
+                    passive.OnBattleStart(c, teamA, teamB);
+            foreach (var c in teamB)
+                foreach (var passive in c.Passives)
+                    passive.OnBattleStart(c, teamB, teamA);
+        }
+
+        private void RaiseRoundStart(List<(Combatant unit, bool isTeamA)> order, int round)
+        {
+            foreach (var entry in order)
+            {
+                if (!entry.unit.IsAlive) continue;
+                foreach (var passive in entry.unit.Passives)
+                    passive.OnRoundStart(entry.unit, round, _random);
+            }
+        }
+
+        private void ResolveAttack(Combatant attacker, Combatant target, int round, List<Combatant> targetTeam, List<BattleEvent> log)
+        {
+            int baseDamage = CombatFormulas.CalculateDamage(attacker, target);
+            var context = new AttackContext(attacker, target, round, baseDamage, _random);
+
+            foreach (var passive in attacker.Passives)
+                passive.OnAttack(context);
+            foreach (var passive in target.Passives)
+                passive.OnDefend(context);
+
+            if (!context.Evaded && _random.NextDouble() < CombatFormulas.CalculateEvadeChance(target))
+                context.Evaded = true;
+
+            bool targetDefeated = false;
+            if (!context.Evaded)
+            {
+                if (context.Damage >= target.CurrentHealth &&
+                    target.Passives.Any(p => p.OnLethalDamage(context)))
+                {
+                    context.Damage = Math.Max(0, target.CurrentHealth - 1);
+                }
+
+                target.TakeDamage(context.Damage);
+                foreach (var passive in attacker.Passives)
+                    passive.OnDamageDealt(context);
+
+                targetDefeated = !target.IsAlive;
+            }
+
+            int loggedDamage = context.Evaded ? 0 : context.Damage;
+            log.Add(new BattleEvent(round, attacker, target, loggedDamage, targetDefeated, context.Evaded));
+
+            if (targetDefeated)
+                RaiseAllyDefeated(targetTeam, target);
+        }
+
+        private static void RaiseAllyDefeated(List<Combatant> allies, Combatant defeated)
+        {
+            foreach (var c in allies)
+            {
+                if (!c.IsAlive) continue;
+                foreach (var passive in c.Passives)
+                    passive.OnAllyDefeated(c, defeated);
+            }
+        }
+
         private Combatant PickTarget(List<Combatant> enemies)
         {
             var alive = enemies.Where(c => c.IsAlive).ToList();
-            return alive.Count == 0 ? null : alive[_random.Next(alive.Count)];
+            if (alive.Count == 0) return null;
+
+            var taunting = alive.Where(c => c.IsTaunting).ToList();
+            if (taunting.Count > 0)
+                return taunting[_random.Next(taunting.Count)];
+
+            return alive[_random.Next(alive.Count)];
         }
 
         private static List<(Combatant unit, bool isTeamA)> BuildTurnOrder(List<Combatant> teamA, List<Combatant> teamB)
