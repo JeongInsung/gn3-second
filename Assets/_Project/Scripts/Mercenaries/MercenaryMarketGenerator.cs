@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using GN3.Characters;
+using GN3.CharacterAnim;
 using GN3.Traits;
 
 namespace GN3.Mercenaries
@@ -21,7 +21,7 @@ namespace GN3.Mercenaries
                 int level = rng.Next(minLevel, maxLevel + 1);
                 string name = MercenaryNamePool.GetRandom(rng, excludedNames);
                 excludedNames.Add(name);
-                var appearance = CharacterAppearance.GenerateRandom(rng);
+                var appearance = RandomCharacterComposer.Compose(rng);
                 var personality = PersonalityTable.GetRandom(rng);
                 bool hasRarePassive = ClassPassiveFactory.RollRare(rng);
                 result.Add(new Mercenary(name, mercClass, level, appearance, personality, hasRarePassive));

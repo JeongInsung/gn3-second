@@ -284,3 +284,118 @@ Unity는 `GameObject.SetActive(false)`가 호출되면 그 오브젝트에 붙�
 - `MercenaryNamePool.GetRandom`에서 static `_usedNames`(영구 소비 기록) 제거. 대신 `GetRandom(rng, excluded)`로 시그니처 변경 — 매 호출마다 외부에서 넘겨준 제외 목록만 참고하는 순수 함수로 단순화(내부 상태 없음)
 - `MercenaryMarketGenerator.Generate`가 매 새로고침마다 `PlayerParty.Instance.Members`의 이름을 제외 목록으로 구성해서 `GetRandom`에 전달 → 현재 파티에 있는(고용 중인) 용병과 이름이 겹치지 않음. 같은 배치 안에서 뽑힌 이름도 즉시 제외 목록에 추가해 한 새로고침 내 중복도 방지
 - 고용하지 않고 새로고침만 반복하면 이전에 보였던(고용 안 한) 이름은 다시 등장할 수 있음(의도된 동작 — "고용한" 이름만 막는 것이 이번 요청 사항). 파티에서 해고하면 그 순간부터 `Members`에서 빠지므로 다음 새로고침부터 그 이름이 다시 등장 가능
+
+## 2026-09-15 — DesignScene 랜덤 캐릭터 생성 (파츠 시트 1프레임 조합)
+
+pixel-anim-tool로 만든 캐릭터 파츠 스프라이트 시트를 게임에 넣는 첫 단계. **MainScene은 건드리지 않고 DesignScene에서만** 동작하며, 아직 애니메이션은 없고 각 시트의 **프레임 0(rest pose)** 만 잘라 조합한다.
+
+- 자산: `Downloads\저장\저장\<캐릭터>\parts_<clip>_sheets\` → `Assets/_Project/Resources/CharacterAnim/<캐릭터>/<clip>/`로 복사 (`clip` = idle/walk/slash/slash2). 캐릭터 4개(`갈_짧_남_작업복`, `금 조끼`, `금_짧_갈조끼`, `붉 보통 로브`), 파츠 PNG(256×256 프레임 가로 1행) + `manifest.json`(z-order/fps 등) 그대로 포함. 툴 내부 리그 데이터인 최상위 `<캐릭터>.json`은 복사 안 함
+- `Scripts/Editor/CharacterAnimImporter.cs` (Editor 전용 `AssetPostprocessor`)
+  - `Resources/CharacterAnim/` 아래 PNG를 자동으로 Sprite(Multiple) / Point 필터 / 무압축 / PPU 64 / maxTextureSize 4096으로 임포트하고, PNG 헤더에서 폭을 읽어 256×256 셀로 슬라이스 (`{파츠}_{NN}` 이름, pivot 바닥 중앙). Unity 6에서 `TextureImporter.spritesheet`가 obsolete라 `ISpriteEditorDataProvider`(com.unity.2d.sprite) 사용
+  - Resources는 디렉터리를 나열할 수 없어서, 임포트 때마다 캐릭터 폴더 목록을 `Resources/CharacterAnim/characters.txt`로 자동 생성 (메뉴 `GN3/CharacterAnim/캐릭터 목록 재생성`으로 수동 실행도 가능). 새 캐릭터는 폴더만 넣으면 인식됨
+- `Scripts/CharacterAnim/` (`GN3.CharacterAnim` 네임스페이스, 기존 `GN3.Characters`의 정적 5파츠 시스템과는 별개)
+  - `CharacterPartId` — 파츠 이름 상수 + 몸 세트(torso/arm_f/arm_b/leg_f/leg_b) / 독립 파츠(head/hair/weapon) 구분
+  - `PartClipManifest` — manifest.json 매핑(`JsonUtility`), z-order 기본값 폴백
+  - `CharacterAnimLibrary` — `characters.txt` 파싱, `Resources.LoadAll<Sprite>`로 파츠 프레임 로드/캐싱(이름 접미 인덱스로 정렬), manifest 로드
+  - `RandomCharacterComposer.Compose(rng, clip="slash")` — **몸 세트는 한 캐릭터 폴더에서 함께**, head/hair/weapon은 각각 폴더 무관 독립 랜덤. z-order는 몸 세트 캐릭터의 manifest 사용. slash 클립을 쓰는 이유: 프레임 0이 idle과 같은 rest pose이면서 무기가 포함된 유일한 클립. `slash_fx`는 이펙트라 제외(프레임 0이 완전 투명)
+  - `CharacterPartView` — 파츠별 `SpriteRenderer` 자식을 (0,0)에 두고 sortingOrder만 z-order 순서로 부여 (모든 시트가 같은 좌표계라 별도 오프셋 불필요). 이후 애니메이션 단계에서 프레임 인덱스만 바꾸면 되도록 설계
+- `Scripts/UI/DesignSceneBootstrapper.cs` — `MainMenuBootstrapper`와 같은 `RuntimeInitializeOnLoadMethod` 패턴이지만 **활성 씬 이름이 `DesignScene`일 때만** 동작. Canvas(1920×1080 스케일) + EventSystem(`InputSystemUIInputModule`) + 좌상단 "랜덤 캐릭터" 버튼 + 조합 정보 텍스트를 코드로 생성하고, `CharacterDesigner` 오브젝트(위치 0,-2)에 캐릭터를 그림. 시작 시 1회 자동 생성. 씬 파일(`DesignScene.unity`)은 편집하지 않음
+- 검증: UnityMCP 미연결 상태라 Roslyn(csc)으로 Assets 전체 52파일을 Unity 참조 DLL과 함께 컴파일해 에러 0 확인. 실제 임포트/플레이는 에디터에서 확인 필요
+- (참고) `MainMenuBootstrapper`는 DesignScene에서 패널을 못 찾아 경고 1줄을 남기지만 무해하므로 그대로 둠
+
+## 2026-09-15 — 랜덤 캐릭터 소스 클립을 slash → idle로 변경
+
+- `CharacterAnimLibrary.DefaultClip`을 `"idle"`로 변경. 사용자 요청대로 **idle 폴더의 시트 프레임 0만** 사용. idle 폴더에는 `weapon.png`/`slash_fx.png`가 없으므로 무기 없는 rest pose 캐릭터가 나옴 (`RandomCharacterComposer`가 `HasPart`로 존재하는 파츠만 뽑아 추가 수정 없이 동작)
+- `DesignSceneBootstrapper` 조합 정보 텍스트에서 "무기" 줄 제거
+
+## 2026-09-15 — 용병시장/파티 초상화를 파츠 조합 캐릭터로 교체
+
+DesignScene에서 검증한 파츠 조합 캐릭터를 MainScene의 시장 카드/파티 로우 초상화 슬롯에 프로필처럼 표시. 씬 파일은 편집하지 않음.
+
+- `Mercenary.Appearance` 타입을 `GN3.Characters.CharacterAppearance` → `GN3.CharacterAnim.ComposedCharacter`로 교체. `MercenaryMarketGenerator.Generate`가 시장 rng로 `RandomCharacterComposer.Compose(rng)`를 호출해 생성 시 외형 확정(시드 재현성 유지, 고용 후 파티에서도 같은 얼굴)
+- `UI/CharacterPortraitUI.cs` 추가 — 시장/파티 양쪽에서 재사용하는 공용 초상화 위젯(프리팹 역할). 파츠 시트가 256×256 캔버스에서 캐릭터를 작게 담고 있어(x 104~158, y 74~198) 슬롯을 `RectMask2D`로 마스킹하고 레이어를 확대·이동해 크롭. 프리셋 `Bust`(중심 (131,106), 84px — 머리~가슴, 기본값) / `FullBody`(중심 (131,136), 136px). 레이어는 `ComposedCharacter.ZOrderBackToFront` 순서로 `Image` 생성, 파츠 없으면 배경만 표시
+- `MercenaryMarketUI`(48px)/`PartyUI`(40px)의 중복 `CreatePortrait`/`AddPortraitLayer`를 제거하고 `CharacterPortraitUI.Create` 호출로 교체
+- 구 시스템 삭제: `Scripts/Characters/`(CharacterAppearance/CharacterPartLibrary/CharacterPartCategory)와 비어 있던 `Resources/CharacterParts/` — 새 시스템이 완전히 대체
+- 검증: Roslyn 컴파일 에러 0, `GN3.Characters` 참조 0건. 실제 표시는 에디터에서 MainScene Play로 확인 필요
+
+## 2026-09-16 — 캐릭터 폴더 드롭 자동 임포트
+
+새 캐릭터를 만들 때마다 수동으로 복사/폴더명 변경하던 것을 없앰. `CharacterAnimImporter` 확장.
+
+- **사용법**: pixel-anim-tool "💾 저장" 결과 폴더(예: `Downloads\저장\저장\귀족옷\`)를 **그대로** `Assets/_Project/Resources/CharacterAnim/`에 복사하고 Unity 창을 클릭하면 끝. `parts_{clip}_sheets` 폴더는 `{clip}`으로 자동 정리(`AssetDatabase.MoveAsset`), PNG는 기존대로 자동 슬라이스, `characters.txt`가 갱신되어 시장/DesignScene에 바로 등장
+- 정리 작업은 임포트 중에 `MoveAsset`을 부를 수 없어서 `OnPostprocessAllAssets`에서 `EditorApplication.delayCall`로 한 프레임 미룸(중복 예약 방지 플래그). 같은 이름의 `{clip}` 폴더가 이미 있으면 경고만 하고 건너뜀
+- 최상위 `<캐릭터>.json`(툴 리그 데이터)은 그대로 둠 — Resources는 요청 시에만 로드하므로 부담 없음
+- 메뉴 `GN3/CharacterAnim/저장 폴더에서 캐릭터 가져오기...`: 폴더 선택 창에서 툴 저장 폴더를 고르면 하위 캐릭터 전부를 복사(PNG/manifest.json만, 덮어쓰기) 후 Refresh. 마지막 경로는 `EditorPrefs`에 기억. 여러 캐릭터를 한 번에 동기화할 때용
+- 외부 경로(Downloads) 감시는 팀원 PC마다 경로가 달라 깨지므로 채택하지 않고, 프로젝트 안 폴더를 드롭 지점으로 삼음
+- 검증: `귀족옷`을 툴 형식 그대로 드롭해 두었음(수동 rename 없이) → Unity 임포트 시 자동 정규화되는지로 확인
+
+## 2026-09-16 — 귀족옷 자동 임포트 확인 + 캐릭터 디자인 관련 파일을 `Assets/조정식/`으로 이동
+
+- `귀족옷` 드롭 자동화 검증 완료: `parts_*_sheets` → `idle/slash/walk` 자동 정리, `characters.txt` 5개 갱신 (Editor.log 확인)
+- 캐릭터 디자인 관련 파일을 팀원 작업 폴더로 이동 (.meta 함께 이동해 GUID 유지):
+  - `_Project/Resources/CharacterAnim/` → `조정식/Resources/CharacterAnim/` (`Resources` 폴더는 Assets 어디에 있어도 `Resources.Load` 동작)
+  - `_Project/Scripts/CharacterAnim/` → `조정식/Scripts/CharacterAnim/`
+  - `_Project/Scripts/Editor/CharacterAnimImporter.cs` → `조정식/Scripts/Editor/` (빈 `_Project/Scripts/Editor` 폴더는 삭제)
+  - `_Project/Scripts/UI/{DesignSceneBootstrapper, CharacterPortraitUI}.cs` → `조정식/Scripts/UI/`
+  - `Scenes/DesignScene.unity` → `조정식/DesignScene.unity` (부트스트랩은 씬 이름으로 판별하므로 영향 없음, 빌드 세팅엔 MainScene만 등록)
+  - `Mercenary`/`MercenaryMarketGenerator`/`MercenaryMarketUI`/`PartyUI`는 게임 코어라 `_Project`에 유지 (같은 Assembly-CSharp이라 위치 무관)
+- `CharacterAnimImporter.RootFolder`를 `Assets/조정식/Resources/CharacterAnim`으로 변경. **이후 새 캐릭터 드롭 위치도 이 폴더**
+- 메뉴 "저장 폴더에서 캐릭터 가져오기" 보강: 상위 폴더 대신 캐릭터 폴더 자체(`parts_*_sheets`를 직접 가진 폴더)를 골라도 그 하나를 가져옴 — 사용자가 `귀족옷` 폴더를 직접 골라 `0개 가져옴`이 찍혔던 문제 대응
+
+## 2026-09-16 — (버그 수정) Play 재시작 후 새로 가져온 캐릭터가 시장에 안 나오던 문제
+
+- 원인: `ProjectSettings/EditorSettings.asset`의 Enter Play Mode Options에서 **Domain Reload가 꺼져 있음**(`m_EnterPlayModeOptions: 1`). Play를 껐다 켜도 static 필드가 초기화되지 않아 `CharacterAnimLibrary`의 캐릭터 목록/스프라이트 캐시가 첫 Play 값(5개)으로 남아 있었음. 머풀러 자체는 정상 임포트되어 있었음
+- 수정: `CharacterAnimLibrary.ResetCache()`에 `[RuntimeInitializeOnLoadMethod(SubsystemRegistration)]`을 붙여 Play 진입마다 캐시 초기화 (Domain Reload가 꺼져 있어도 호출되는 Unity 권장 패턴)
+- (참고) 같은 설정 때문에 `PlayerParty.Instance`, `PanelActivator._group` 같은 기존 static 싱글턴도 Play 간에 유지됨 — 지금은 문제로 드러나지 않았지만, "Play 다시 켰는데 상태가 남아 있다" 싶으면 이 설정을 먼저 의심할 것
+
+## 2026-09-16 — (데이터 패치) 머풀러 목이 잘려 보이던 문제
+
+- 원인: 코드가 아니라 원화. head 파츠는 6캐릭터 공통(맨몸 머리, 아래끝 y=126)인데 머풀러의 idle `torso.png`만 프레임 0·3에서 y=128부터 시작해 126~127 두 줄이 투명 → 턱 아래에 배경색 줄이 보임. walk/slash/slash2에는 빈 줄 없음
+- 조치: `Assets/조정식/Resources/CharacterAnim/머풀러/idle/torso.png`를 스크립트로 패치 — 프레임마다 head bbox 아래끝과 torso bbox 위끝 사이가 비어 있으면 torso 첫 줄(머플러 윗줄)의 불투명 픽셀을 그 빈 줄에 복사해 채움. .meta는 그대로라 Unity는 재임포트만 함
+- **주의**: 원본 `Downloads\저장\저장\머풀러`는 손대지 않았으므로 메뉴로 다시 가져오면 되돌아감. 근본 해결은 툴/Aseprite에서 머풀러 torso 목 부분(y 126~127)을 채워 다시 저장하는 것
+
+## 2026-09-16 — (툴 쪽) pixel-anim-tool에 "그림 한 장으로 파츠 나누기" 추가
+
+Unity 저장소 밖 작업이지만 파이프라인의 앞단이라 기록. 상세는 `Downloads\정리\README.md` §68.
+
+- `C:\Users\wjdtl\pixel-anim-tool\index_213_slash_baked.html`에 버튼 `📷 그림 한 장으로 파츠 나누기` 추가. 옷 입힌 평면 그림 한 장을 **이 프로젝트의 `Assets/조정식/Resources/CharacterAnim/*/idle` 프레임 0에서 뽑은 파츠별 평균(vis/full 확률 맵)** 으로 torso/arm_f/arm_b/leg_f/leg_b/hair로 나눠 기존 자동 전파(검격/걷기/대기)로 넘김. 얼굴은 내장 head 사용
+- 평균 데이터는 `정리\scripts\build_part_priors.py`가 Unity 폴더를 읽어 HTML에 주입 → **캐릭터가 늘면 다시 돌려야 정확도가 올라감** (현재 6개 기준, leave-one-out 라벨 정확도 0.91)
+- 전제: 그림은 기존 캐릭터와 같은 rest 포즈·위치의 128×128
+
+## 2026-09-16 — (툴 쪽) "파츠 나누기"를 독립 탭으로
+
+- pixel-anim-tool 탭 바(애니메이션/내보내기/픽셀화)에 **파츠 나누기** 탭 추가. 그림 고르기 → 스테이지에서 파츠별 색 오버레이로 분할 결과 확인 → "파츠에 적용하고 딸깍"으로 검격/걷기/대기 생성. 애니메이션 탭 안에 있던 버튼은 제거. 실제 브라우저에서 업로드→적용까지 확인. 상세 `정리\README.md` §69
+
+## 2026-09-16 — 파츠 나누기 "머리" 통합에 맞춰 head/hair를 한 세트로 조합
+
+툴의 파츠 나누기가 이제 얼굴+머리카락을 **head 하나**로 내고 hair는 투명으로 비운다(`정리\README.md` §70). 그런 캐릭터를 head/hair 독립 랜덤으로 섞으면 머리카락이 겹치거나(남의 hair가 위에) 대머리(빈 hair가 남의 head에)가 되므로:
+
+- `CharacterPartId`: `IndependentParts = {Head, Hair, Weapon}` → `HeadSetParts = {Head, Hair}` + `IndependentParts = {Weapon}`
+- `RandomCharacterComposer.Compose`: 몸 세트 캐릭터 1개 + **머리 세트 캐릭터 1개**(head/hair 같은 폴더) + weapon 독립. 기존 캐릭터 6개는 head가 전부 같은 맨몸 얼굴이라 결과 차이 없음
+- `DesignSceneBootstrapper` 정보 텍스트: "머리(얼굴+머리카락): X"
+- Roslyn 컴파일 에러 0
+
+## 2026-09-16 — (툴 쪽) 파츠 나누기 v3: 크기 자동 맞춤 + 옷만 적용
+
+- 새 그림을 고르면 기존 캐릭터 평균 실루엣(높이 58.5·바닥 97·중심 65.3)에 맞춰 자동 축소·배치(윤곽선 보존 축소 규칙, 새 색 0). 머리/머리카락은 그림에서 버리고 **base 맨몸 머리**로 대체, 옷 5파츠만 적용. 상세 `정리\README.md` §72
+- Unity 쪽 변경 없음. 이렇게 만든 캐릭터는 head = 맨몸 얼굴, hair = 투명이라 `RandomCharacterComposer`의 head/hair 세트 규칙(2026-09-16)으로 그대로 조합 가능(다른 캐릭터의 머리 세트가 붙으면 머리카락이 생김)
+
+## 2026-09-16 — (툴 쪽) 파츠 나누기 메움 범위 버그 수정
+
+- 바지/부츠 바깥에 살구색 테두리가 생기던 문제: "가려진 부분 메움"이 그림 실루엣 밖까지 채우던 것 → 실루엣 안에서 다른 파츠에 가려진 자리만 채우도록 한정. `정리\README.md` §73
+
+## 2026-09-16 — (툴 쪽) "머리카락" 탭 추가
+
+- 파츠 나누기와 같은 흐름으로 그림에서 머리카락만 뽑아 hair 슬롯에 적용하는 탭. 옷(파츠 나누기)과 머리카락을 서로 다른 그림에서 조합 가능. 살색 제외 + 머리카락 팔레트 색 필터로 머플러 같은 오염 제거. `정리\README.md` §74. Unity 변경 없음
+
+## 2026-09-16 — (툴 쪽) 머리카락 탭을 얼굴 크기 기준으로
+
+- 머리카락은 전신 높이가 아니라 그림 속 얼굴 폭을 base 얼굴 폭에 맞춰 축소·정렬 → base 머리를 제대로 덮는 크기가 됨(머리만 있는 그림도 동작). `정리\README.md` §75. Unity 변경 없음
+
+## 2026-09-16 — (툴 쪽) 머리카락 폭 상한
+
+- 머리카락 탭: 얼굴 기준 맞춤 뒤 머리카락 폭이 기존 캐릭터 평균(25px)을 넘으면 그만큼 더 축소 → 기존 캐릭터와 같은 크기(실측 폭 25, 위 y 37). `정리\README.md` §76
+
+## 2026-09-16 — (툴 쪽) 머리카락 탭: 머리카락만 그린 그림 지원
+
+- 얼굴이 없는 그림은 전체를 머리카락으로 보고 기존 캐릭터 머리카락 평균 크기(폭 25)·위치(위 y 38.5)에 맞춰 배치. 64/128 캔버스 무관. `정리\README.md` §77

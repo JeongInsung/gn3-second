@@ -2,7 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using GN3.Characters;
 using GN3.Combat;
 using GN3.Mercenaries;
 using GN3.Quests;
@@ -89,7 +88,7 @@ namespace GN3.UI
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
-            CreatePortrait(row.transform, merc.Appearance, 40);
+            CharacterPortraitUI.Create(row.transform, merc.Appearance, 40);
 
             var stats = merc.CurrentStats;
             var personalityMod = PersonalityTable.Get(merc.Personality);
@@ -291,47 +290,6 @@ namespace GN3.UI
         {
             RenderResultText(text);
             Debug.Log(text);
-        }
-
-        private void CreatePortrait(Transform parent, CharacterAppearance appearance, int size)
-        {
-            var portraitGO = new GameObject("Portrait", typeof(RectTransform), typeof(LayoutElement));
-            portraitGO.transform.SetParent(parent, false);
-
-            var layout = portraitGO.GetComponent<LayoutElement>();
-            layout.minWidth = size;
-            layout.minHeight = size;
-            layout.preferredWidth = size;
-            layout.preferredHeight = size;
-            layout.flexibleWidth = 0;
-
-            var background = AddPortraitLayer(portraitGO.transform, null);
-            background.color = new Color(1f, 1f, 1f, 0.08f);
-
-            // 뒤에서 앞으로 겹쳐 그림: 몸통 -> 다리 -> 팔 -> 무기 -> 머리
-            AddPortraitLayer(portraitGO.transform, appearance.Body);
-            AddPortraitLayer(portraitGO.transform, appearance.Leg);
-            AddPortraitLayer(portraitGO.transform, appearance.Arm);
-            AddPortraitLayer(portraitGO.transform, appearance.Weapon);
-            AddPortraitLayer(portraitGO.transform, appearance.Head);
-        }
-
-        private Image AddPortraitLayer(Transform parent, Sprite sprite)
-        {
-            var go = new GameObject("Part", typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(parent, false);
-
-            var rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-
-            var image = go.GetComponent<Image>();
-            image.sprite = sprite;
-            image.preserveAspect = true;
-            image.color = sprite != null ? Color.white : new Color(0f, 0f, 0f, 0f);
-            return image;
         }
 
         private void CreateTaggedLabel(Transform parent, string label, int fontSize, string tooltip, Color color)

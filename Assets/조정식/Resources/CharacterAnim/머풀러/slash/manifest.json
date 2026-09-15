@@ -1,0 +1,29 @@
+{
+  "clip": "slash",
+  "canvasSize": {
+    "w": 128,
+    "h": 128
+  },
+  "frameCount": 12,
+  "fps": 10,
+  "loop": true,
+  "scale": 2,
+  "sheet": {
+    "cols": 12,
+    "rows": 1,
+    "frameWidth": 256,
+    "frameHeight": 256
+  },
+  "zOrderBackToFront": [
+    "arm_b",
+    "leg_b",
+    "leg_f",
+    "torso",
+    "arm_f",
+    "weapon",
+    "slash_fx",
+    "head",
+    "hair"
+  ],
+  "note": "모든 파츠 시트는 같은 좌표계(캔버스 크기 128x128, 배율 2x)를 공유합니다. Unity에서 파츠별 GameObject를 전부 동일한 위치(0,0)에 두고, Sorting Order만 zOrderBackToFront 배열 순서(뒤→앞)대로 주면 프레임이 바뀔 때마다 서로 맞물려 움직입니다 — 회전/이동은 이미 각 프레임 이미지에 반영되어 있어 Unity에서 별도 관절 계산이 필요 없습니다."
+}
