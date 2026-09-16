@@ -1,21 +1,22 @@
 using System;
 using System.Collections.Generic;
+using GN3.World;
 
 namespace GN3.Combat
 {
     public static class EnemySquadGenerator
     {
-        private static readonly string[] Names =
+        /// <summary>tierOverride를 주면 이름 계층(약탈 세력/지형 동물/보스)은 그 값으로 고정하고
+        /// difficulty는 스탯 강도에만 반영한다. 예: 이동 중 습격은 항상 "약탈 세력" 이름(tier 0)을 쓰되,
+        /// 퀘스트 난이도에 맞춰 스탯만 세게 만들 때 사용.</summary>
+        public static List<Combatant> Generate(Region region, int count, int difficulty, Random rng, int? tierOverride = null)
         {
-            "고블린", "오크", "슬라임", "스켈레톤", "도적", "늑대", "코볼트", "트롤"
-        };
+            int tier = tierOverride ?? Math.Clamp(difficulty - 1, 0, 2);
 
-        public static List<Combatant> Generate(int count, int difficulty, Random rng)
-        {
             var result = new List<Combatant>(count);
             for (int i = 0; i < count; i++)
             {
-                string name = Names[rng.Next(Names.Length)];
+                string name = RegionInfo.GetMonsterName(region, tier, rng);
                 int attack = 6 + difficulty * 2 + rng.Next(-1, 2);
                 int defense = 2 + difficulty + rng.Next(-1, 2);
                 int health = 20 + difficulty * 8 + rng.Next(-3, 4);

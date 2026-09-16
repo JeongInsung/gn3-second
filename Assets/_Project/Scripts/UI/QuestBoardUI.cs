@@ -69,7 +69,7 @@ namespace GN3.UI
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
-            string info = $"{quest.Title}    난이도 {quest.Difficulty}    예상 소요시간 {quest.EstimatedDurationSeconds:0.#}초";
+            string info = $"{quest.Title}    난이도 {quest.Difficulty}    예상 소요 {quest.DurationDays}일";
             var infoText = CreateText(row.transform, info, 20, TextAnchor.MiddleLeft);
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
             infoLayout.flexibleWidth = 1;
@@ -92,7 +92,7 @@ namespace GN3.UI
 
             acceptButtonGO.GetComponent<Button>().onClick.AddListener(() =>
             {
-                GetComponent<PartyUI>()?.ActivateQuest(quest);
+                GetComponent<PartyUI>()?.BeginDispatch(quest);
                 if (partyPanel != null)
                     PanelActivator.Open(partyPanel);
 

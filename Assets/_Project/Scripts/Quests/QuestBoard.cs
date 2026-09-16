@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using GN3.World;
 
 namespace GN3.Quests
 {
@@ -26,9 +27,13 @@ namespace GN3.Quests
 
         public IReadOnlyList<Quest> Refresh()
         {
+            var unlockedRegions = RegionInfo.GetUnlockedRegions();
             var result = new List<Quest>(Size);
             for (int i = 0; i < Size; i++)
-                result.Add(QuestGenerator.Generate(MinEnemyCount, MaxEnemyCount, MinDifficulty, MaxDifficulty, _random));
+            {
+                var region = unlockedRegions[_random.Next(unlockedRegions.Count)];
+                result.Add(QuestGenerator.Generate(region, MinEnemyCount, MaxEnemyCount, MinDifficulty, MaxDifficulty, _random));
+            }
 
             Listings = result;
             return Listings;

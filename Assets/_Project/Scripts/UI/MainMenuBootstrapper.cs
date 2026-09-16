@@ -1,3 +1,4 @@
+using GN3.World;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -25,10 +26,61 @@ namespace GN3.UI
             CreateCloseButton(marketPanel.transform, marketPanel);
             CreateCloseButton(partyPanel.transform, partyPanel);
             CreateCloseButton(questPanel.transform, questPanel);
+            CreateDayControls(canvas.transform);
 
             marketPanel.SetActive(false);
             partyPanel.SetActive(false);
             questPanel.SetActive(false);
+        }
+
+        /// <summary>날짜 표시 + "하루 지나기" 버튼. 누르면 GameClock을 1일 진행시키고,
+        /// 그 이벤트를 구독하는 진행 중인 파견들의 남은 일수가 함께 줄어든다(ExpeditionLog).
+        /// MarketPanel/PartyPanel/QuestPanel은 전부 화면 우측에 붙어 있어서(우상단 anchor),
+        /// 패널 안쪽 버튼(예: PartyUI의 파견 시작 버튼)과 겹치지 않도록 좌상단 메뉴 버튼바 바로 아래에 둔다.</summary>
+        private static void CreateDayControls(Transform canvasTransform)
+        {
+            var barGO = new GameObject("DayControlBar", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(DayAdvanceInput));
+            barGO.transform.SetParent(canvasTransform, false);
+
+            var rect = barGO.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(16f, -64f);
+
+            var layout = barGO.GetComponent<HorizontalLayoutGroup>();
+            layout.spacing = 8f;
+            layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+
+            var dayTextGO = new GameObject("DayText", typeof(RectTransform), typeof(Text), typeof(LayoutElement));
+            dayTextGO.transform.SetParent(barGO.transform, false);
+            var dayTextLayout = dayTextGO.GetComponent<LayoutElement>();
+            dayTextLayout.minWidth = 90f;
+            dayTextLayout.minHeight = 40f;
+            var dayText = dayTextGO.GetComponent<Text>();
+            dayText.text = $"{GameClock.CurrentDay}일차";
+            dayText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            dayText.fontSize = 18;
+            dayText.alignment = TextAnchor.MiddleLeft;
+            dayText.color = Color.white;
+
+            // 버튼 클릭이든 스페이스바(DayAdvanceInput)든 GameClock.AdvanceDay()만 부르면
+            // 이 이벤트 하나로 날짜 텍스트가 갱신된다.
+            GameClock.OnDayAdvanced += () => dayText.text = $"{GameClock.CurrentDay}일차";
+
+            var buttonGO = new GameObject("AdvanceDayButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+            buttonGO.transform.SetParent(barGO.transform, false);
+            buttonGO.GetComponent<Image>().color = new Color(0.25f, 0.35f, 0.5f, 0.9f);
+            var buttonLayout = buttonGO.GetComponent<LayoutElement>();
+            buttonLayout.minWidth = 120f;
+            buttonLayout.minHeight = 40f;
+            CreateFillText(buttonGO.transform, "하루 지나기", 16);
+
+            buttonGO.GetComponent<Button>().onClick.AddListener(GameClock.AdvanceDay);
         }
 
         private static void CreateMenuBar(Transform canvasTransform, GameObject marketPanel, GameObject partyPanel, GameObject questPanel)
@@ -46,8 +98,8 @@ namespace GN3.UI
             layout.spacing = 8f;
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
-            layout.childControlWidth = false;
-            layout.childControlHeight = false;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
 
             CreateMenuButton(barGO.transform, "용병시장", () => OpenPanel(marketPanel));
             CreateMenuButton(barGO.transform, "파티 구성", () => OpenPanel(partyPanel));
