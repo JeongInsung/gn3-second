@@ -550,3 +550,35 @@ Unity 저장소 밖 작업이지만 파이프라인의 앞단이라 기록. 상�
 - 원인: `PartyUI.resultText`는 전투 재생이 끝난 뒤(`PlayBattle`) 텍스트를 남겨둔 채로 그대로 방치됨. 새 퀘스트를 수락(`BeginDispatch`)해도 지워주는 코드가 없어서, 새로 "전투 시작"을 눌러 그 파견의 `PlayBattle`이 시작되기 전까지는 화면에 직전 임무 결과가 계속 떠 있었음
 - 수정: `PartyUI.BeginDispatch(quest)`에서 `_pendingQuest` 설정 직후 `RenderResultText(string.Empty)` 호출 — 퀘스트를 수락하는 순간 결과 텍스트가 바로 비워짐
 - 검증: 컴파일 에러 0. 에디터에서 직접 확인 필요
+
+## 2026-10-01 — 타일 브러시(B)로 안 그려지던 문제 진단 + 팔레트 프리팹 버그 수정
+
+UnityMCP로 에디터 상태를 직접 읽어 확인.
+
+- **직접 원인(코드 아님)**: `ToolManager.activeToolType = UnityEditor.Tilemaps.PaintTool`, `GridPaintingState.scenePaintTarget = Floor`, `validTargets = [Floor]`로 B 키·브러시·대상은 전부 정상이었고, **`gridBrush.cells[0].tile == null`** — 팔레트에서 칠할 타일을 고르지 않아 브러시가 비어 있었다. 빈 브러시는 빈 칸을 찍으므로 화면에 변화가 없다. → Tile Palette 창에서 타일을 한 번 클릭하면 해결
+- **별개 버그**: `Tiles/TILE 1/TILE 1 Palette.prefab`에 `GridPalette` 서브에셋이 없어 Tile Palette 창 목록에 아예 안 떴다(그래서 사용자가 `Tiles/New Tile Palette.prefab`을 따로 만들어 쓰고 있었음)
+  - 원인: `FloorTileSetup.CreatePalette`가 GameObject를 만들어 `PrefabUtility.SaveAsPrefabAsset`으로 저장하면 프리팹이 통째로 다시 쓰여 `GridPalette` 서브에셋이 사라진다. 뒤이어 `AddObjectToAsset`으로 붙여도 프리팹에는 남지 않았다(실측: 재실행해도 계속 없음)
+  - 수정: 공식 API `GridPaletteUtility.CreateNewPalette(folder, name, Rectangle, CellSizing.Manual, cellSize, XYZ)`로 팔레트를 만들고, **타일은 프리팹 에셋의 Tilemap에 직접 `SetTile`**(프리팹을 다시 쓰지 않으니 서브에셋 보존). 셀 크기는 `Manual`로 고정해 Floor Grid(0.5)와 어긋나지 않게 함. 기존 칸은 지우고 다시 찍어 타일 수가 줄어도 잔재가 안 남음
+- 검증: 메뉴 재실행 후 `TILE 1 Palette`에 `GridPalette` + 타일 16개 유지, Tile Palette 창 팔레트 목록에 `New Tile Palette | TILE 1 Palette` 둘 다 노출. Floor Tilemap에 테스트로 2칸 찍어 렌더러 bounds(1.0×0.5 유닛, isVisible=true)까지 확인 후 원복(0 tiles)
+
+## 2026-10-01 — (후속) 빈 팔레트 인스턴스 때문에 계속 안 그려지던 문제
+
+- 추가 실측: `Floor` Tilemap이 `tiles=0` 인데 `cellBounds = Position(-7,-3), Size(7,4)` → **칠하는 동작 자체는 되고 있었다**(셀 영역이 늘어남). 대상/그리드/좌표 전부 정상이고 브러시만 비어 있어 빈 칸만 찍히던 것
+- 진짜 원인: 선택돼 있던 팔레트 `Tiles/New Tile Palette.prefab` 의 **로드된 미리보기 인스턴스가 빈 상태**(Preview Scene의 `New Tile Palette/Layer1` 타일 0개). 프리팹 파일에는 16개가 들어 있는데 창이 들고 있는 인스턴스만 비어 있어 **팔레트 창에 고를 타일이 하나도 안 보였다**
+- 조치(에디터 상태만, 프로젝트 코드 변경 없음): `GridPaintingState.palette` 를 `TILE 1 Palette`(인스턴스 타일 16개 정상)로 전환, 브러시에 `TILE 1_00` 을 담아 바로 칠할 수 있게 함, `Floor` 의 빈 셀 흔적 `CompressBounds()` 로 정리
+- 현재 상태: palette=TILE 1 Palette / target=Floor / brushTile=TILE 1_00. 참고로 활성 툴은 `FillTool`(G) 이라 클릭하면 영역이 한 번에 채워진다 — 한 칸씩 찍으려면 B(브러시)로 바꿀 것
+
+## 2026-10-01 — (최종) 칠할 대상(Floor)이 삭제돼 있던 것이 진짜 원인
+
+- 실측: `GridPaintingState.scenePaintTarget = NULL`, `validTargets = 0`, 씬 계층에서 `Floor Grid` 에 자식이 없음 — **칠할 Tilemap(`Floor`) 자체가 사라져 있었다**. `Undo.GetCurrentGroupName() = "Delete Game Objects"`
+  → 대상이 없으면 브러시가 멀쩡해도 칠해지지 않는다("B가 안 먹는" 게 아님)
+- 정황 하나 더: `TILE 1 Palette` 미리보기 타일이 16 → 15 로 줄어 있었음 = **Scene 뷰가 아니라 Tile Palette 창 안을 클릭**해 팔레트를 편집한 흔적(당시 활성 툴도 FillTool)
+- 조치: 메뉴 재실행으로 `Floor Grid/Floor` 재생성 + 팔레트 16칸 복구, `scenePaintTarget = Floor` / `palette = TILE 1 Palette` / 브러시 `TILE 1_00` 설정, 활성 툴 `PaintTool`(B)로 전환, 팔레트 잠금(unlocked=false) 확인, **씬 저장**
+- 검증: Floor에 2칸 테스트 칠 → `tiles=1`(2칸이 한 종류), 렌더러 bounds 0.5×1.0 유닛·isVisible=true → 원복(0 tiles). 최종 상태 palette=TILE 1 Palette / target=Floor / brushTile=TILE 1_00 / tool=PaintTool
+
+## 2026-10-02 — 타일 경계가 끊겨 보이던 문제: 타일에 구워진 테두리 그림자 제거
+
+- 원인: `Tiles/TILE 1/TILE 1.png` 의 **각 타일 바깥 3~4px이 어둡게 칠해져 있음**(실측: 풀 타일 가장자리 밝기 27~94 vs 안쪽 134). 1px 선이 아니라 그라데이션(그림자)이라, 칸을 이어 붙이면 경계마다 검은 격자선이 생겨 바닥이 끊겨 보였다. Unity 임포트 설정(Point/무압축/mipmap off/PPU 256 = 셀 0.5)은 이미 정상이었다
+- 시도: ① 바깥 1~2px만 안쪽 줄로 덮기 → 그라데이션이 남아 가로줄 그대로 ② 가장자리 밝기 보정(gain) → 밝은 선·누런 얼룩 발생 ③ **바깥 4px을 안쪽 텍스처의 거울상으로 덮기 → 깨끗하게 이어짐(채택)**
+- 구현: `FloorTileSetup.OnPostprocessTexture(Texture2D)` — `Tiles/` 아래 PNG를 128px 칸 단위로 순회하며 **그 변이 안쪽보다 10 이상 어두울 때만** 바깥 `SeamFixPixels(4)` 줄을 안쪽 4~8줄의 거울상으로 덮는다(상/하/좌/우 순서, 모서리는 두 방향 모두 반영). **원본 PNG는 안 건드리고 임포트된 텍스처만** 고치므로 되돌리려면 이 메서드만 지우면 됨. 이미 매끄러운 타일셋을 나중에 넣어도 가드 때문에 손상 없음
+- 검증: 임포트된 텍스처를 RenderTexture로 복사해 측정 → "안쪽 − 가장 어두운 변" 최대 차이 **60~110 → 24.1**. 씬 `Floor`에 6×4 임시 배치 후 Main Camera 스크린샷으로 격자선이 사라진 것 확인, 임시 타일·스크린샷 자산 삭제하고 씬 저장
