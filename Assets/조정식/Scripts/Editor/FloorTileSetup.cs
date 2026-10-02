@@ -21,17 +21,14 @@ namespace GN3.EditorTools
     {
         private const string RootFolder = "Assets/조정식/Tiles";
         private const string TileSetName = "TILE 1";
-        private const string TileSetFolder = RootFolder + "/" + TileSetName;
-        private const string TexturePath = TileSetFolder + "/" + TileSetName + ".png";
-        private const string TileAssetFolder = TileSetFolder + "/Tiles";
-        private const string PalettePath = TileSetFolder + "/" + TileSetName + " Palette.prefab";
+        private const string TileSet2Name = "TILE 2";
         private const string ScenePath = "Assets/조정식/DesignScene.unity";
         private const string GridObjectName = "Floor Grid";
         private const string TilemapObjectName = "Floor";
         private const int TileSize = 128;
         private const int PixelsPerUnit = 256; // 1칸 = 0.5유닛
         private const float CellSize = (float)TileSize / PixelsPerUnit; // 스프라이트 크기와 같아야 칸 사이 틈이 없다
-        private const int FloorSortingOrder = -100; // 캐릭터 파츠(0부터)보다 뒤
+        private const int FloorSortingOrder = -1; // 캐릭터 파츠(0부터)보다 뒤
         private const int SeamFixPixels = 4;        // 타일에 구워진 테두리 그림자 두께(실측 3~4px) - OnPostprocessTexture 참고
         private const int SeamFixThreshold = 10;    // 이만큼 어두운 변만 보정(이미 매끄러운 타일셋은 안 건드림)
 
@@ -172,55 +169,82 @@ namespace GN3.EditorTools
                 pixels[(y + j) * stride + toX] = pixels[(y + j) * stride + fromX];
         }
 
+        // 타일셋 폴더 규칙: Tiles/{이름}/{이름}.png, Tiles/{이름}/Tiles/*.asset, Tiles/{이름}/{이름} Palette.prefab
+        private static string TileSetFolderOf(string setName) => RootFolder + "/" + setName;
+        private static string TexturePathOf(string setName) => TileSetFolderOf(setName) + "/" + setName + ".png";
+        private static string TileAssetFolderOf(string setName) => TileSetFolderOf(setName) + "/Tiles";
+        private static string PalettePathOf(string setName) => TileSetFolderOf(setName) + "/" + setName + " Palette.prefab";
+
         [MenuItem("GN3/Tilemap/TILE 1 바닥 세팅")]
         public static void Setup()
         {
-            if (!File.Exists(Path.GetFullPath(TexturePath)))
-            {
-                Debug.LogError($"[FloorTileSetup] 타일셋 이미지가 없습니다: {TexturePath}");
-                return;
-            }
-
-            // 이 스크립트가 컴파일되기 전에 들어온 PNG일 수 있으니 전처리를 다시 태운다.
-            AssetDatabase.ImportAsset(TexturePath, ImportAssetOptions.ForceUpdate);
-
-            var tiles = CreateTiles(out int cols, out int rows);
-            if (tiles.Count == 0)
-            {
-                Debug.LogError($"[FloorTileSetup] {TexturePath} 에서 스프라이트를 찾지 못했습니다.");
-                return;
-            }
-
-            CreatePalette(tiles, cols, rows);
+            if (!SetupTileSet(TileSetName)) return;
             EnsureSceneTilemap();
-
             AssetDatabase.SaveAssets();
-            Debug.Log($"[FloorTileSetup] 완료: 타일 {tiles.Count}개, 팔레트 {PalettePath}, {ScenePath} 의 {GridObjectName}/{TilemapObjectName}");
+            Debug.Log($"[FloorTileSetup] 씬 Tilemap 확인: {ScenePath} 의 {GridObjectName}/{TilemapObjectName}");
 
             if (!Application.isBatchMode)
                 EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
         }
 
-        /// <summary>스프라이트마다 Tile 에셋을 만든다(있으면 스프라이트만 갱신). 반환 순서 = 위쪽 행부터.</summary>
-        private static List<Tile> CreateTiles(out int cols, out int rows)
+        /// <summary>TILE 2(흙길·초원)는 같은 Floor Tilemap에 칠하므로 타일과 팔레트만 만든다.</summary>
+        [MenuItem("GN3/Tilemap/TILE 2 타일·팔레트 만들기")]
+        public static void SetupTileSet2()
         {
-            TryReadPngSize(TexturePath, out int width, out int height);
+            if (!SetupTileSet(TileSet2Name)) return;
+            if (!Application.isBatchMode)
+                EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
+        }
+
+        /// <summary>타일셋 이미지를 다시 임포트하고 Tile 에셋과 Tile Palette를 만든다. 실패하면 false.</summary>
+        private static bool SetupTileSet(string setName)
+        {
+            string texturePath = TexturePathOf(setName);
+            if (!File.Exists(Path.GetFullPath(texturePath)))
+            {
+                Debug.LogError($"[FloorTileSetup] 타일셋 이미지가 없습니다: {texturePath}");
+                return false;
+            }
+
+            // 이 스크립트가 컴파일되기 전에 들어온 PNG일 수 있으니 전처리를 다시 태운다.
+            AssetDatabase.ImportAsset(texturePath, ImportAssetOptions.ForceUpdate);
+
+            var tiles = CreateTiles(setName, out int cols, out int rows);
+            if (tiles.Count == 0)
+            {
+                Debug.LogError($"[FloorTileSetup] {texturePath} 에서 스프라이트를 찾지 못했습니다.");
+                return false;
+            }
+
+            CreatePalette(setName, tiles, cols, rows);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[FloorTileSetup] 완료: 타일 {tiles.Count}개, 팔레트 {PalettePathOf(setName)}");
+            return true;
+        }
+
+        /// <summary>스프라이트마다 Tile 에셋을 만든다(있으면 스프라이트만 갱신). 반환 순서 = 위쪽 행부터.</summary>
+        private static List<Tile> CreateTiles(string setName, out int cols, out int rows)
+        {
+            string texturePath = TexturePathOf(setName);
+            string tileAssetFolder = TileAssetFolderOf(setName);
+
+            TryReadPngSize(texturePath, out int width, out int height);
             cols = Mathf.Max(1, width / TileSize);
             rows = Mathf.Max(1, height / TileSize);
 
             var sprites = new Dictionary<string, Sprite>();
-            foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(TexturePath))
+            foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(texturePath))
                 if (asset is Sprite sprite) sprites[sprite.name] = sprite;
 
-            EnsureFolder(TileAssetFolder);
+            EnsureFolder(tileAssetFolder);
 
             var tiles = new List<Tile>();
             for (int i = 0; i < cols * rows; i++)
             {
-                string name = $"{TileSetName}_{i:00}";
+                string name = $"{setName}_{i:00}";
                 if (!sprites.TryGetValue(name, out var sprite)) continue;
 
-                string tilePath = $"{TileAssetFolder}/{name}.asset";
+                string tilePath = $"{tileAssetFolder}/{name}.asset";
                 var tile = AssetDatabase.LoadAssetAtPath<Tile>(tilePath);
                 if (tile == null)
                 {
@@ -239,28 +263,29 @@ namespace GN3.EditorTools
         }
 
         /// <summary>원본 이미지와 같은 배치의 Tile Palette 프리팹을 만든다(매번 새로 써서 타일 변경을 반영).</summary>
-        private static void CreatePalette(List<Tile> tiles, int cols, int rows)
+        private static void CreatePalette(string setName, List<Tile> tiles, int cols, int rows)
         {
+            string palettePath = PalettePathOf(setName);
             var cellSize = new Vector3(CellSize, CellSize, 0f);
 
             // Tile Palette 창은 GridPalette 서브에셋이 있는 프리팹만 팔레트로 인식한다. 직접 만든 GameObject를
             // PrefabUtility.SaveAsPrefabAsset으로 저장하면 그 서브에셋이 날아가고, AddObjectToAsset으로 다시 붙여도
             // 프리팹에는 남지 않아 팔레트 목록에 아예 안 떴다(실측). 그래서 공식 API로 팔레트를 만들고,
             // 타일은 프리팹 에셋의 Tilemap에 직접 찍는다(프리팹을 다시 쓰지 않으므로 서브에셋이 보존된다).
-            if (!HasGridPalette(PalettePath))
+            if (!HasGridPalette(palettePath))
             {
-                if (AssetDatabase.LoadAssetAtPath<GameObject>(PalettePath) != null)
-                    AssetDatabase.DeleteAsset(PalettePath);
+                if (AssetDatabase.LoadAssetAtPath<GameObject>(palettePath) != null)
+                    AssetDatabase.DeleteAsset(palettePath);
 
                 // Automatic은 스프라이트 크기에서 셀 크기를 다시 계산해 Floor Grid(0.5)와 어긋날 수 있어 Manual로 고정한다.
-                GridPaletteUtility.CreateNewPalette(TileSetFolder, Path.GetFileNameWithoutExtension(PalettePath),
+                GridPaletteUtility.CreateNewPalette(TileSetFolderOf(setName), Path.GetFileNameWithoutExtension(palettePath),
                     GridLayout.CellLayout.Rectangle, GridPalette.CellSizing.Manual, cellSize, GridLayout.CellSwizzle.XYZ);
             }
 
-            var paletteRoot = AssetDatabase.LoadAssetAtPath<GameObject>(PalettePath);
+            var paletteRoot = AssetDatabase.LoadAssetAtPath<GameObject>(palettePath);
             if (paletteRoot == null)
             {
-                Debug.LogError($"[FloorTileSetup] 팔레트를 만들지 못했습니다: {PalettePath}");
+                Debug.LogError($"[FloorTileSetup] 팔레트를 만들지 못했습니다: {palettePath}");
                 return;
             }
 
@@ -274,7 +299,7 @@ namespace GN3.EditorTools
             var tilemap = paletteRoot.GetComponentInChildren<Tilemap>(true);
             if (tilemap == null)
             {
-                Debug.LogError($"[FloorTileSetup] 팔레트 안에 Tilemap이 없습니다: {PalettePath}");
+                Debug.LogError($"[FloorTileSetup] 팔레트 안에 Tilemap이 없습니다: {palettePath}");
                 return;
             }
 
@@ -290,7 +315,7 @@ namespace GN3.EditorTools
 
             EditorUtility.SetDirty(tilemap);
             AssetDatabase.SaveAssets();
-            AssetDatabase.ImportAsset(PalettePath, ImportAssetOptions.ForceUpdate);
+            AssetDatabase.ImportAsset(palettePath, ImportAssetOptions.ForceUpdate);
         }
 
         /// <summary>프리팹 안에 GridPalette 서브에셋이 실제로 들어 있는지 확인한다.</summary>
