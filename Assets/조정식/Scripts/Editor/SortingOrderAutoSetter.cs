@@ -123,6 +123,8 @@ namespace GN3.EditorTools
     /// Buildings / Decorations 의 PNG는 항상 통짜 스프라이트(Single)로 임포트한다.
     /// Tiles 폴더에 잘못 넣었다 옮기면 128px 조각(Multiple) 설정이 .meta에 남아, 씬에 첫 조각만 그려져 안 보였다.
     /// PPU는 처음 임포트할 때만 기본값을 넣는다(장식마다 따로 정한 PPU 보호).
+    /// 이 그림들은 화면에 7~16배 축소돼 그려져서, 밉맵 없이 Point로만 찍으면 화면 픽셀마다 아무 텍셀이나 집혀
+    /// 도트가 깨지고 지글거렸다. 밉맵(미리 줄인 텍스처)을 켜고 Point는 유지해 또렷함은 지킨다.
     /// </summary>
     public class PropTextureImportRules : AssetPostprocessor
     {
@@ -137,7 +139,11 @@ namespace GN3.EditorTools
             importer.spriteImportMode = SpriteImportMode.Single;
             importer.filterMode = FilterMode.Point;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.mipmapEnabled = false;
+            importer.mipmapEnabled = true;
+            // Box는 검은 윤곽선이 평균에 묻혀 반투명처럼 흐려졌다. Kaiser(선명) + 바이어스 -0.5가
+            // 노이즈 없이 윤곽을 살리는 중간값이었다(-1은 점 노이즈가 다시 생김). 2026-10-03 비교 후 선택.
+            importer.mipmapFilter = TextureImporterMipFilter.KaiserFilter;
+            importer.mipMapBias = -0.5f;
             importer.alphaIsTransparency = true;
             if (importer.importSettingsMissing) importer.spritePixelsPerUnit = 100;
         }

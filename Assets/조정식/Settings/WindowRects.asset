@@ -1,0 +1,115 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 663da0df10ceccf45ad817ba2e96d841, type: 3}
+  m_Name: WindowRects
+  m_EditorClassIdentifier: Assembly-CSharp::GN3.World.WindowRectSet
+  buildings:
+  - sourceName: "\uBD89\uC740 \uAE30\uC640 \uC9C0\uBD95\uC758 \uC791\uC740 \uC624\uB450\uB9C9-1"
+    windows:
+    - serializedVersion: 2
+      x: 0.2831
+      y: 0.2593
+      width: 0.0708
+      height: 0.1019
+    - serializedVersion: 2
+      x: 0.6462
+      y: 0.2778
+      width: 0.0677
+      height: 0.0833
+    forgeIndices: 
+  - sourceName: "\uC1E0\uB77D\uD55C \uBAA8\uD5D8\uAC00 \uAE38\uB4DC \uD640 (1)"
+    windows:
+    - serializedVersion: 2
+      x: 0.2772
+      y: 0.2772
+      width: 0.0351
+      height: 0.0702
+    - serializedVersion: 2
+      x: 0.7404
+      y: 0.4632
+      width: 0.0316
+      height: 0.0632
+    - serializedVersion: 2
+      x: 0.793
+      y: 0.2772
+      width: 0.0281
+      height: 0.0667
+    - serializedVersion: 2
+      x: 0.2772
+      y: 0.1298
+      width: 0.0351
+      height: 0.0702
+    - serializedVersion: 2
+      x: 0.793
+      y: 0.1298
+      width: 0.0421
+      height: 0.0702
+    forgeIndices: 
+  - sourceName: "\uC911\uC138 \uB9C8\uC744\uC758 \uC18C\uBC15\uD55C 2\uCE35 \uC8FC\uD0DD-3"
+    windows:
+    - serializedVersion: 2
+      x: 0.4457
+      y: 0.4
+      width: 0.0375
+      height: 0.0667
+    - serializedVersion: 2
+      x: 0.5169
+      y: 0.4
+      width: 0.0375
+      height: 0.0667
+    - serializedVersion: 2
+      x: 0.5131
+      y: 0.1852
+      width: 0.0524
+      height: 0.0556
+    - serializedVersion: 2
+      x: 0.618
+      y: 0.1852
+      width: 0.0524
+      height: 0.0556
+    forgeIndices: 
+  - sourceName: "\uC774\uB07C \uC9C0\uBD95\uC758 \uC911\uC138 \uB9C8\uC744 \uC7A1\uD654\uC810"
+    windows:
+    - serializedVersion: 2
+      x: 0.4754
+      y: 0.5041
+      width: 0.0528
+      height: 0.0785
+    - serializedVersion: 2
+      x: 0.6831
+      y: 0.2562
+      width: 0.0599
+      height: 0.0785
+    forgeIndices: 
+  - sourceName: "\uB300\uC7A5\uAC04 \uC5F0\uAE30"
+    windows:
+    - serializedVersion: 2
+      x: 0.444
+      y: 0.445
+      width: 0.052
+      height: 0.059
+    - serializedVersion: 2
+      x: 0.222
+      y: 0.203
+      width: 0.04
+      height: 0.049
+    - serializedVersion: 2
+      x: 0.306
+      y: 0.228
+      width: 0.032
+      height: 0.034
+    - serializedVersion: 2
+      x: 0.575
+      y: 0.169
+      width: 0.1
+      height: 0.063
+    forgeIndices: 03000000

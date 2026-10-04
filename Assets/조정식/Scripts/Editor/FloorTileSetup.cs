@@ -45,7 +45,11 @@ namespace GN3.EditorTools
             importer.spritePixelsPerUnit = PixelsPerUnit;
             importer.filterMode = FilterMode.Point;
             importer.textureCompression = TextureImporterCompression.Uncompressed;
-            importer.mipmapEnabled = false;
+            // 타일이 화면에 약 5배 축소돼 그려져 밉맵 없이는 돌바닥·잔디 도트가 깨진다(PropTextureImportRules 참고).
+            // 필터·바이어스는 PropTextureImportRules와 같은 값(Kaiser, -0.5)으로 맞춘다.
+            importer.mipmapEnabled = true;
+            importer.mipmapFilter = TextureImporterMipFilter.KaiserFilter;
+            importer.mipMapBias = -0.5f;
             importer.alphaIsTransparency = true;
             importer.wrapMode = TextureWrapMode.Clamp;
 
@@ -107,7 +111,7 @@ namespace GN3.EditorTools
 
             if (!changed) return;
             texture.SetPixels32(pixels);
-            texture.Apply(false);
+            texture.Apply(true); // 밉맵도 고친 픽셀로 다시 만든다(안 그러면 축소 시 옛 검은 격자선이 보인다)
         }
 
         /// <summary>타일 한 칸의 네 변을 검사해 어두운 변만 안쪽 거울상으로 덮는다. 고친 변이 있으면 true.</summary>
