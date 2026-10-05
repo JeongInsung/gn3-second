@@ -399,9 +399,9 @@ PrefabInstance:
       propertyPath: m_Name
       value: Village
       objectReference: {fileID: 0}
-    - target: {fileID: 5460944596975830269, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+    - target: {fileID: 5963428767879497789, guid: d1c207afe720ae543a813995aab03b26, type: 3}
       propertyPath: m_Intensity
-      value: 0.41668135
+      value: 0.41089588
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

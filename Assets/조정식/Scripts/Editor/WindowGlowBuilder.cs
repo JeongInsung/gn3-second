@@ -31,6 +31,12 @@ namespace GN3.EditorTools
         private const float LowerWindowLimit = 0.45f; // 이보다 아래(그림 높이 비율)에 있는 창만 바닥을 비춘다
 
         [MenuItem("GN3/Light/창문 불빛 만들기 (현재 씬)")]
+        private static void BuildFromMenu()
+        {
+            if (VillagePrefabBuilder.RefuseInMainScene("창문 불빛 만들기")) return;
+            Build();
+        }
+
         public static void Build()
         {
             var rects = EnsureRects();

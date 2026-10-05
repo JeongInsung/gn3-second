@@ -84,6 +84,7 @@ namespace GN3.UI
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;
             scrollRect.scrollSensitivity = 20f;
+            SmoothWheelScroll.Attach(scrollRect); // 휠로 부드럽게(기본 휠 처리는 끈다)
         }
     }
 }

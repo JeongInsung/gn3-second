@@ -26,6 +26,21 @@ namespace GN3.Mercenaries
             return true;
         }
 
+        /// <summary>새로 시작·불러오기 전에 파티를 비운다.</summary>
+        public void Clear()
+        {
+            if (_members.Count == 0) return;
+            _members.Clear();
+            OnChanged?.Invoke();
+        }
+
+        /// <summary>불러올 때: 정원과 관계없이 넣는다(정원보다 많이 데리고 있던 저장도 그대로 복원).</summary>
+        public void RestoreAdd(Mercenary mercenary)
+        {
+            _members.Add(mercenary);
+            OnChanged?.Invoke();
+        }
+
         public bool Remove(Mercenary mercenary)
         {
             bool removed = _members.RemoveAll(m => m.Id == mercenary.Id) > 0;

@@ -22,7 +22,7 @@ namespace GN3.UI
         private void Awake()
         {
             // MarketPanel(1200x780) 안에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역
-            ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -70f));
+            ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -80f)); // 새로고침 버튼(아래 끝 약 67px)과 띄움
 
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
@@ -38,11 +38,23 @@ namespace GN3.UI
             RefreshMarket();
         }
 
+        /// <summary>불러오기 직후처럼 밖에서 시장을 새로 뽑을 때.</summary>
+        public void RefreshFromOutside()
+        {
+            if (_market != null) RefreshMarket(); // 아직 한 번도 안 열려 Awake 전이면 열 때 Start에서 뽑는다
+        }
+
         private void RefreshMarket()
         {
             foreach (var row in _cardRows)
                 Destroy(row);
             _cardRows.Clear();
+
+            // 길드 단계에 따라 시장 레벨 범위·최고 등급이 바뀐다.
+            var rank = Guild.Current;
+            _market.MinLevel = rank.MarketMinLevel;
+            _market.MaxLevel = rank.MarketMaxLevel;
+            _market.MaxGrade = rank.MaxMercGrade;
 
             foreach (var merc in _market.Refresh())
                 _cardRows.Add(CreateCard(merc));
@@ -72,26 +84,24 @@ namespace GN3.UI
 
             CharacterPortraitUI.Create(row.transform, merc.Appearance, 48);
 
-            var stats = merc.CurrentStats;
-            var personalityMod = PersonalityTable.Get(merc.Personality);
-            var passives = ClassPassiveFactory.Create(merc.Class.Kind, merc.HasRarePassive);
-            string rareMark = merc.HasRarePassive ? " (레어)" : "";
+            // 줄에는 등급·이름·직업·레벨·전투력만. 성격·패시브·능력치는 줄을 클릭하면 열리는 캐릭터 창에서 본다.
+            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}", 22, TextAnchor.MiddleLeft);
+            nameText.fontStyle = FontStyle.Bold;
+            nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            nameText.gameObject.AddComponent<LayoutElement>().minWidth = 220;
 
-            string nameInfo = $"{merc.Name}   {merc.Class.ClassName} Lv.{merc.Level}";
-            var nameText = CreateText(row.transform, nameInfo, 20, TextAnchor.MiddleLeft);
-            var nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
-            nameLayout.flexibleWidth = 1;
-            nameLayout.minWidth = 100;
+            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  Lv.{merc.Level}", 18, TextAnchor.MiddleLeft);
+            classText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            classText.gameObject.AddComponent<LayoutElement>().minWidth = 140;
 
-            CreateTaggedLabel(row.transform, $"[{personalityMod.Label}]", 20, personalityMod.Description);
+            var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}", 18, TextAnchor.MiddleLeft);
+            powerText.color = UITheme.TitleText;
+            powerText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var powerLayout = powerText.gameObject.AddComponent<LayoutElement>();
+            powerLayout.minWidth = 140;
+            powerLayout.flexibleWidth = 1; // 남는 폭을 차지해 고용 버튼을 오른쪽 끝으로 민다
 
-            if (passives.Count > 0)
-                CreateTaggedLabel(row.transform, $"<{passives[0].Name}{rareMark}>", 20, passives[0].Description);
-
-            string statsInfo = $"ATK {stats.Attack} / DEF {stats.Defense} / HP {stats.MaxHealth} / SPD {stats.MoveSpeed}";
-            var statsText = CreateText(row.transform, statsInfo, 20, TextAnchor.MiddleLeft);
-            statsText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            statsText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 0;
+            RowClickHandler.Attach(row, () => MercenaryInfoPanel.ShowGlobal(merc));
 
             var hireButtonGO = new GameObject("HireButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             hireButtonGO.transform.SetParent(row.transform, false);
@@ -135,16 +145,6 @@ namespace GN3.UI
             });
 
             return row;
-        }
-
-        private void CreateTaggedLabel(Transform parent, string label, int fontSize, string tooltip)
-        {
-            var text = CreateText(parent, label, fontSize, TextAnchor.MiddleLeft);
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            var layout = text.gameObject.AddComponent<LayoutElement>();
-            layout.flexibleWidth = 0;
-            var trigger = text.gameObject.AddComponent<TooltipTrigger>();
-            trigger.Text = tooltip;
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

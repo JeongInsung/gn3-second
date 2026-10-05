@@ -15,6 +15,7 @@ namespace GN3.Quests
     public class ExpeditionLog
     {
         private const double AmbushChance = 0.25;
+        private const int AmbushSurvivalXp = 10;
 
         /// <summary>파견대에 길잡이(Guide)가 한 명이라도 있으면, 발생한 습격을 이 확률로 통째로 무효화한다.</summary>
         private const double GuideAvoidChance = 0.5;
@@ -32,6 +33,9 @@ namespace GN3.Quests
         /// <summary>습격 등 이동 중 이벤트가 발생했을 때 결과 문구를 전달한다. UI가 구독해서 표시한다.</summary>
         public event Action<string> OnTravelEvent;
 
+        /// <summary>파견대가 목적지에 막 도착했을 때(남은 일수가 0이 된 순간). 도착 알림창이 구독한다.</summary>
+        public event Action<Expedition> OnArrived;
+
         private ExpeditionLog()
         {
             GameClock.OnDayAdvanced += HandleDayAdvanced;
@@ -45,14 +49,46 @@ namespace GN3.Quests
         {
             var expedition = new Expedition(quest, members);
             _active.Add(expedition);
+
+            // 전투력이 넉넉한 편성(쉬움·매우 쉬움)은 더 빨리 도착한다(QuestDifficulty.DaysSaved).
+            int before = quest.RemainingDays;
+            quest.Shorten(QuestDifficulty.DaysSaved(QuestDifficulty.Rate(QuestDifficulty.TeamPower(members), quest)));
+            if (quest.RemainingDays < before)
+                OnTravelEvent?.Invoke($"[{quest.Title}] 전투력이 넉넉해 빠르게 진군한다 (소요 {before}일 → {quest.RemainingDays}일)");
+
             OnChanged?.Invoke();
             return expedition;
+        }
+
+        /// <summary>저장 파일에서 불러온 파견을 그대로 넣는다(빠른 진군 계산·출발 알림 없음).
+        /// 이미 도착해 선택을 기다리던 파견이면 도착 알림창을 다시 띄운다.</summary>
+        public void Restore(Expedition expedition)
+        {
+            _active.Add(expedition);
+            OnChanged?.Invoke();
+            if (expedition.IsReady) OnArrived?.Invoke(expedition);
+        }
+
+        /// <summary>새로 시작·불러오기 전에 진행 중인 파견을 모두 비운다.</summary>
+        public void Clear()
+        {
+            _active.Clear();
+            OnChanged?.Invoke();
         }
 
         public void Complete(Expedition expedition)
         {
             if (_active.Remove(expedition))
                 OnChanged?.Invoke();
+        }
+
+        /// <summary>테스트·디버그용(게임 상태 조정 창). 파견대를 바로 목적지에 도착시킨다.</summary>
+        public void DebugArriveNow(Expedition expedition)
+        {
+            if (!_active.Contains(expedition)) return;
+            expedition.Quest.ArriveNow();
+            OnChanged?.Invoke();
+            OnArrived?.Invoke(expedition);
         }
 
         /// <summary>파견대가 하루를 더 들여 휴식하며 체력을 회복한다.</summary>
@@ -73,16 +109,23 @@ namespace GN3.Quests
         private void HandleDayAdvanced()
         {
             // TryTriggerAmbush가 전멸한 파견을 _active에서 제거할 수 있어 스냅샷을 순회한다.
+            var arrived = new List<Expedition>();
             foreach (var expedition in _active.ToList())
             {
                 bool wasTraveling = !expedition.Quest.IsReady;
                 expedition.Quest.AdvanceDay();
 
                 if (wasTraveling)
+                {
                     TryTriggerAmbush(expedition);
+                    if (expedition.IsReady && _active.Contains(expedition)) arrived.Add(expedition);
+                }
             }
 
             OnChanged?.Invoke();
+            // 순회가 끝난 뒤 알린다(자동 진행이 바로 Complete해도 목록이 안전하다).
+            foreach (var expedition in arrived)
+                if (_active.Contains(expedition)) OnArrived?.Invoke(expedition);
         }
 
         private void TryTriggerAmbush(Expedition expedition)
@@ -135,6 +178,13 @@ namespace GN3.Quests
             {
                 sb.Append(" 파견대가 전멸했다...");
                 Complete(expedition);
+            }
+            else
+            {
+                // 습격에서 살아남으면 경험치 +10.
+                sb.Append($" 생존자 경험치 +{AmbushSurvivalXp}.");
+                foreach (var line in ExpeditionBattle.GrantExperience(expedition.Members.Where(m => m.IsAlive), AmbushSurvivalXp))
+                    sb.Append($" {line}");
             }
 
             OnTravelEvent?.Invoke(sb.ToString());

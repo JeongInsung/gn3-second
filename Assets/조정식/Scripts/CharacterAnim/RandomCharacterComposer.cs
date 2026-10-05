@@ -57,6 +57,21 @@ namespace GN3.CharacterAnim
             return result;
         }
 
+        /// <summary>저장 파일에서 불러올 때: 파츠별 출처 캐릭터로 같은 외형을 다시 조합한다.</summary>
+        public static ComposedCharacter Rebuild(IEnumerable<KeyValuePair<string, string>> partSources, string bodyCharacter,
+            string clip = CharacterAnimLibrary.DefaultClip, int frameIndex = 0)
+        {
+            var result = new ComposedCharacter { BodyCharacter = bodyCharacter };
+            foreach (var pair in partSources)
+                Assign(result, pair.Value, clip, pair.Key, frameIndex);
+            if (!string.IsNullOrEmpty(bodyCharacter))
+            {
+                var manifest = CharacterAnimLibrary.LoadManifest(bodyCharacter, clip);
+                result.ZOrderBackToFront = manifest?.ZOrderOrDefault ?? PartClipManifest.DefaultZOrderBackToFront;
+            }
+            return result;
+        }
+
         private static void Assign(ComposedCharacter result, string character, string clip, string part, int frameIndex)
         {
             var sprite = CharacterAnimLibrary.LoadFrame(character, clip, part, frameIndex);

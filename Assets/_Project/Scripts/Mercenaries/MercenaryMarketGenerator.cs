@@ -8,7 +8,8 @@ namespace GN3.Mercenaries
 {
     public static class MercenaryMarketGenerator
     {
-        public static List<Mercenary> Generate(IReadOnlyList<MercenaryClassSO> classPool, int count, int minLevel, int maxLevel, Random rng)
+        public static List<Mercenary> Generate(IReadOnlyList<MercenaryClassSO> classPool, int count, int minLevel, int maxLevel, Random rng,
+            MercenaryGrade maxGrade = MercenaryGrade.S)
         {
             var result = new List<Mercenary>(count);
 
@@ -24,7 +25,8 @@ namespace GN3.Mercenaries
                 var appearance = RandomCharacterComposer.Compose(rng);
                 var personality = PersonalityTable.GetRandom(rng);
                 bool hasRarePassive = ClassPassiveFactory.RollRare(rng);
-                result.Add(new Mercenary(name, mercClass, level, appearance, personality, hasRarePassive));
+                var grade = GradeTable.Roll(rng, maxGrade);
+                result.Add(new Mercenary(name, mercClass, level, appearance, personality, hasRarePassive, grade));
             }
             return result;
         }

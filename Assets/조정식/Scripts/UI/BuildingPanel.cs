@@ -37,7 +37,7 @@ namespace GN3.UI
 
         /// <summary>
         /// 가운데 건물 패널(처음엔 숨김): 화면 전체 어두운 배경(누르면 닫힘) + 520x420 판에 제목·설명·상품 목록 칸·닫기 버튼.
-        /// 상품 데이터가 아직 없어 목록 칸에는 "상품 준비 중"만 보인다.
+        /// 목록 칸은 기본으로 "상품 준비 중"이고, 상점(HospitalShop 등)이 Opened 때 채운다. 상인 그림은 쓰지 않는다.
         /// </summary>
         public static BuildingPanel Create(Transform parent)
         {
@@ -54,20 +54,8 @@ namespace GN3.UI
             box.GetComponent<Button>().transition = Selectable.Transition.None;
             var boxRect = box.GetComponent<RectTransform>();
             boxRect.sizeDelta = new Vector2(520f, 420f);
-            boxRect.anchoredPosition = new Vector2(130f, 0f); // 왼쪽에 서는 상인까지 합쳐 화면 가운데에 오게
-
-            // 판 왼쪽에 서 있는 상인(512px 그림 1배). 그림 아래 투명 여백(약 47px)만큼 내려 발을 판 아래 선에 맞추고,
-            // 손이 판 가장자리에 살짝 걸치게 판 앞에 둔다. 클릭은 막지 않는다(raycastTarget 끔).
-            var portrait = new GameObject("Portrait", typeof(RectTransform), typeof(Image));
-            portrait.transform.SetParent(root.transform, false);
-            var portraitRect = portrait.GetComponent<RectTransform>();
-            portraitRect.pivot = new Vector2(0.5f, 0f);
-            portraitRect.sizeDelta = new Vector2(512f, 512f);
-            portraitRect.anchoredPosition = new Vector2(130f - 260f - 110f, -210f - 47f);
-            var portraitImage = portrait.GetComponent<Image>();
-            portraitImage.preserveAspect = true;
-            portraitImage.raycastTarget = false;
-            panel.Portrait = portraitImage;
+            boxRect.anchoredPosition = Vector2.zero; // 화면 가운데(상인 그림은 빼서 Portrait는 null)
+            DraggablePanel.Attach(boxRect); // 판을 잡고 끌어 옮길 수 있다(뒤 어두운 막은 고정)
             box.GetComponent<Image>().color = new Color(0.13f, 0.12f, 0.15f, 0.96f);
 
             panel.Title = CreateText(box.transform, "", 28, TextAnchor.MiddleLeft);
@@ -93,6 +81,7 @@ namespace GN3.UI
             var scroll = list.GetComponent<ScrollRect>();
             scroll.content = contentRect;
             scroll.horizontal = false;
+            SmoothWheelScroll.Attach(scroll); // 휠로 한 줄씩 부드럽게(끝에서 튕기지 않게 Clamped)
             panel.ItemListContent = contentRect;
 
             var empty = CreateText(list.transform, "상품 준비 중", 18, TextAnchor.MiddleCenter);

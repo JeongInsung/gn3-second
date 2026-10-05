@@ -1,4 +1,5 @@
 using System.Collections;
+using GN3.Save;
 using GN3.World;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -25,8 +26,12 @@ namespace GN3.UI
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForPlaySession() => Midpoint = null;
 
+        private const float SkipTransitionSeconds = 1.4f;
+        private const int StepsPerDay = 8; // 3시간 × 8 = 하루
+
         private Text _clockText;
         private Button _button;
+        private Button[] _skipButtons = new Button[0];
         private bool _isAdvancing;
 
         private Image _dim;
@@ -40,6 +45,15 @@ namespace GN3.UI
             _clockText = clockText;
             _button = button;
             UpdateClockText(GameClock.CurrentHour);
+        }
+
+        /// <summary>하루·4일·일주일 건너뛰기 버튼. 전환 중에는 진행 버튼과 함께 잠근다.</summary>
+        public void SetSkipButtons(params Button[] buttons) => _skipButtons = buttons ?? new Button[0];
+
+        private void SetLocked(bool locked)
+        {
+            if (_button != null) _button.interactable = !locked;
+            foreach (var b in _skipButtons) if (b != null) b.interactable = !locked;
         }
 
         private void Start()
@@ -64,7 +78,8 @@ namespace GN3.UI
         private IEnumerator AdvanceRoutine()
         {
             _isAdvancing = true;
-            if (_button != null) _button.interactable = false;
+            SetLocked(true);
+            int dayBefore = GameClock.CurrentDay;
 
             var cycle = DayNightCycle.Instance;
             float from = GameClock.CurrentHour;
@@ -94,8 +109,81 @@ namespace GN3.UI
             SetDim(0f);
             _bannerFade = StartCoroutine(FadeBanner());
 
-            if (_button != null) _button.interactable = true;
+            SetLocked(false);
             _isAdvancing = false;
+
+            // 자정을 넘겼으면 그날 보고서(파견 진행·있었던 일)를 띄우고 자동 저장한다.
+            if (GameClock.CurrentDay != dayBefore)
+            {
+                DayReportPanel.Show(GameClock.CurrentDay, GameClock.CurrentDay);
+                AutoSave();
+            }
+        }
+
+        /// <summary>하루(1)·4일(4)·일주일(7)을 한 번에 건너뛴다. 시각은 그대로, 끝나면 그동안의 날짜별 보고서를 띄운다.</summary>
+        public void RequestSkipDays(int days)
+        {
+            if (_isAdvancing || days <= 0) return;
+            StartCoroutine(SkipRoutine(days));
+        }
+
+        private IEnumerator SkipRoutine(int days)
+        {
+            _isAdvancing = true;
+            SetLocked(true);
+            int startDay = GameClock.CurrentDay;
+            float hour = GameClock.CurrentHour;
+
+            EnsureOverlay();
+            if (_bannerFade != null) StopCoroutine(_bannerFade);
+            _bannerFade = null;
+            _bannerTitle.text = days == 1 ? "하루 후…" : days == 7 ? "일주일 후…" : $"{days}일 후…";
+            _bannerSub.text = $"{startDay}일차 {DayNightCycle.FormatTime(hour)}  →  {startDay + days}일차 {DayNightCycle.FormatTime(hour)}";
+            _banner.alpha = 1f;
+
+            bool skipped = false;
+            for (float t = 0f; t < SkipTransitionSeconds; t += Time.deltaTime)
+            {
+                float k = t / SkipTransitionSeconds;
+                SetDim(MaxDim * Mathf.Sin(Mathf.PI * k));
+                if (!skipped && k >= 0.5f)
+                {
+                    skipped = true;
+                    SkipNow(days);
+                }
+                yield return null;
+            }
+            if (!skipped) SkipNow(days);
+
+            SetDim(0f);
+            _bannerFade = StartCoroutine(FadeBanner());
+            SetLocked(false);
+            _isAdvancing = false;
+            DayReportPanel.Show(startDay + 1, GameClock.CurrentDay);
+            AutoSave();
+        }
+
+        private static void AutoSave()
+        {
+            if (SaveSystem.Save()) ToastLog.Show("자동 저장됨");
+        }
+
+        /// <summary>불러오기 직후: 낮/밤과 시각 표시를 게임 시계에 맞춘다.</summary>
+        public void SyncToClock()
+        {
+            var cycle = DayNightCycle.Instance;
+            if (cycle != null) cycle.TimeOfDay = GameClock.CurrentHour;
+            UpdateClockText(GameClock.CurrentHour);
+        }
+
+        // 가장 어두운 순간: 3시간 진행을 하루 8번씩 즉시 반복한다. 자정마다 파견 진행·습격·여관 회복이 그대로 일어나 DailyLog에 쌓인다.
+        private void SkipNow(int days)
+        {
+            for (int i = 0; i < days * StepsPerDay; i++) GameClock.AdvanceTime();
+            var cycle = DayNightCycle.Instance;
+            if (cycle != null) cycle.TimeOfDay = GameClock.CurrentHour;
+            UpdateClockText(GameClock.CurrentHour);
+            Midpoint?.Invoke(); // 마을 사람 자리 섞기
         }
 
         // 자정을 넘는 중에도 일차는 GameClock 기준이라 0시에 확정될 때 바뀐다.

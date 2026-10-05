@@ -20,6 +20,14 @@ namespace GN3.Economy
             OnChanged?.Invoke(amount);
         }
 
+        /// <summary>저장 파일에서 불러올 때 골드를 그대로 맞춘다.</summary>
+        public static void Restore(int gold)
+        {
+            int delta = Math.Max(0, gold) - Gold;
+            Gold = Math.Max(0, gold);
+            OnChanged?.Invoke(delta);
+        }
+
         public static bool TrySpend(int amount)
         {
             if (amount < 0 || Gold < amount) return false;

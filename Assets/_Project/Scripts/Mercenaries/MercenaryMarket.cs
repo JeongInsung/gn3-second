@@ -9,8 +9,11 @@ namespace GN3.Mercenaries
         private readonly Random _random;
 
         public int Size { get; }
-        public int MinLevel { get; }
-        public int MaxLevel { get; }
+        public int MinLevel { get; set; }
+        public int MaxLevel { get; set; }
+
+        /// <summary>시장에 나올 수 있는 최고 등급(길드 단계가 정한다).</summary>
+        public MercenaryGrade MaxGrade { get; set; } = MercenaryGrade.S;
         public IReadOnlyList<Mercenary> Listings { get; private set; } = new List<Mercenary>();
 
         public MercenaryMarket(List<MercenaryClassSO> classPool, int size = 5, int minLevel = 1, int maxLevel = 3, int? seed = null)
@@ -24,7 +27,7 @@ namespace GN3.Mercenaries
 
         public IReadOnlyList<Mercenary> Refresh()
         {
-            Listings = MercenaryMarketGenerator.Generate(_classPool, Size, MinLevel, MaxLevel, _random);
+            Listings = MercenaryMarketGenerator.Generate(_classPool, Size, MinLevel, MaxLevel, _random, MaxGrade);
             return Listings;
         }
     }

@@ -82,7 +82,12 @@ namespace GN3.UI
             }
 
             if (_pendingQuest != null)
-                _rows.Add(CreateSectionHeader($"파견 편성 — {_pendingQuest.Title} ({_selectedForDispatch.Count}/{_pendingQuest.MaxDispatchSize}명)"));
+            {
+                var selected = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id));
+                int teamPower = QuestDifficulty.TeamPower(selected);
+                string power = $"{QuestDifficulty.DescribeTeam(_pendingQuest, teamPower)} · {QuestDifficulty.DurationText(_pendingQuest, teamPower)}";
+                _rows.Add(CreateSectionHeader($"파견 편성 — {QuestDifficulty.RichTitle(_pendingQuest)} ({_selectedForDispatch.Count}/{_pendingQuest.MaxDispatchSize}명)  {power}"));
+            }
 
             _rows.Add(CreateSectionHeader("보유 용병"));
             foreach (var merc in PlayerParty.Instance.Members)
@@ -136,7 +141,7 @@ namespace GN3.UI
 
             string members = string.Join(", ", expedition.Members.Select(m => m.IsAlive ? m.Name : $"{m.Name}(사망)"));
             string status = expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {quest.RemainingDays}일)";
-            string info = $"{quest.Title}    {status}    파견: {members}";
+            string info = $"{QuestDifficulty.RichTitle(quest)}    {status}    파견: {members}    {QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(expedition.Members))}";
             var infoText = CreateText(row.transform, info, 15, TextAnchor.MiddleLeft);
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
             infoLayout.flexibleWidth = 1;
@@ -182,7 +187,7 @@ namespace GN3.UI
 
             var button = buttonGO.GetComponent<Button>();
             button.interactable = canFight;
-            button.onClick.AddListener(() => StartExpeditionBattle(expedition));
+            button.onClick.AddListener(() => StartBattle(expedition));
 
             return row;
         }
@@ -215,51 +220,31 @@ namespace GN3.UI
 
             CharacterPortraitUI.Create(row.transform, merc.Appearance, 40);
 
+            // 시장과 같은 형태: [등급] 이름 · 직업 Lv · 전투력 (+ 꼭 필요한 상태만). 성격·패시브·능력치는 줄을 클릭해 캐릭터 창에서 본다.
             var stats = merc.CurrentStats;
-            var personalityMod = PersonalityTable.Get(merc.Personality);
-            var passives = ClassPassiveFactory.Create(merc.Class.Kind, merc.HasRarePassive);
-            string rareMark = merc.HasRarePassive ? " (레어)" : "";
-            Color textColor = onExpedition ? new Color(1f, 1f, 1f, 0.4f) : Color.white;
+            Color textColor = onExpedition ? new Color(1f, 1f, 1f, 0.45f) : Color.white;
 
-            var infoColumnGO = new GameObject("InfoColumn", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
-            infoColumnGO.transform.SetParent(row.transform, false);
-            var infoColumnLayout = infoColumnGO.GetComponent<LayoutElement>();
-            infoColumnLayout.flexibleWidth = 1;
-            infoColumnLayout.minWidth = 90;
-            var infoColumnVLayout = infoColumnGO.GetComponent<VerticalLayoutGroup>();
-            infoColumnVLayout.spacing = 2;
-            infoColumnVLayout.childAlignment = TextAnchor.MiddleLeft;
-            infoColumnVLayout.childForceExpandWidth = true;
-            infoColumnVLayout.childForceExpandHeight = false;
-            infoColumnVLayout.childControlWidth = true;
-            infoColumnVLayout.childControlHeight = true;
-
-            var topRowGO = new GameObject("TopRow", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
-            topRowGO.transform.SetParent(infoColumnGO.transform, false);
-            var topRowLayout = topRowGO.GetComponent<HorizontalLayoutGroup>();
-            topRowLayout.spacing = 4;
-            topRowLayout.childAlignment = TextAnchor.MiddleLeft;
-            topRowLayout.childForceExpandWidth = false;
-            topRowLayout.childForceExpandHeight = true;
-            topRowLayout.childControlWidth = true;
-            topRowLayout.childControlHeight = true;
-
-            string nameInfo = $"{merc.Name} {merc.Class.ClassName} Lv.{merc.Level}";
-            var nameText = CreateText(topRowGO.transform, nameInfo, 14, TextAnchor.MiddleLeft);
+            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}", 17, TextAnchor.MiddleLeft);
+            nameText.fontStyle = FontStyle.Bold;
             nameText.color = textColor;
-            var nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
-            nameLayout.flexibleWidth = 1;
+            nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            nameText.gameObject.AddComponent<LayoutElement>().minWidth = 150;
 
-            CreateTaggedLabel(topRowGO.transform, $"[{personalityMod.Label}]", 14, personalityMod.Description, textColor);
+            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  Lv.{merc.Level}", 15, TextAnchor.MiddleLeft);
+            classText.color = textColor;
+            classText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            classText.gameObject.AddComponent<LayoutElement>().minWidth = 100;
 
-            if (passives.Count > 0)
-                CreateTaggedLabel(topRowGO.transform, $"<{passives[0].Name}{rareMark}>", 14, passives[0].Description, textColor);
+            string status = onExpedition ? "  · 파견 중"
+                : merc.CurrentHealth < stats.MaxHealth ? $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}" : "";
+            var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
+            powerText.color = onExpedition ? new Color(UITheme.TitleText.r, UITheme.TitleText.g, UITheme.TitleText.b, 0.5f) : UITheme.TitleText;
+            powerText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var powerLayout = powerText.gameObject.AddComponent<LayoutElement>();
+            powerLayout.minWidth = 100;
+            powerLayout.flexibleWidth = 1; // 남는 폭을 차지해 버튼을 오른쪽 끝으로 민다
 
-            string statsInfo = $"공{stats.Attack} 방{stats.Defense} 체{merc.CurrentHealth}/{stats.MaxHealth} 속{stats.MoveSpeed}";
-            if (onExpedition)
-                statsInfo += $"    (파견 중: {ExpeditionLog.Instance.FindQuest(merc)?.Title})";
-            var statsText = CreateText(infoColumnGO.transform, statsInfo, 14, TextAnchor.MiddleLeft);
-            statsText.color = textColor;
+            RowClickHandler.Attach(row, () => MercenaryInfoPanel.ShowGlobal(merc));
 
             if (_pendingQuest != null && !onExpedition)
             {
@@ -349,30 +334,34 @@ namespace GN3.UI
             RefreshList();
         }
 
-        private void StartExpeditionBattle(Expedition expedition)
+        private readonly Queue<Expedition> _battleQueue = new Queue<Expedition>();
+
+        /// <summary>
+        /// 도착한 파견의 전투를 로그와 함께 재생하고 결과를 반영한다(ExpeditionBattle). 다른 전투가 재생 중이면
+        /// 끝난 뒤 이어서 시작한다(도착 알림창에서 여러 개를 "전투 진행"으로 고른 경우).
+        /// </summary>
+        public void StartBattle(Expedition expedition)
         {
-            if (_battlingExpedition != null || !expedition.IsReady)
+            if (expedition == null || !expedition.IsReady || !ExpeditionLog.Instance.Active.Contains(expedition)) return;
+            if (_battlingExpedition != null)
+            {
+                if (_battlingExpedition != expedition && !_battleQueue.Contains(expedition)) _battleQueue.Enqueue(expedition);
                 return;
+            }
 
-            var combatants = expedition.Members.Where(m => m.IsAlive).Select(m => m.ToCombatant()).ToList();
-            var quest = expedition.Quest;
-            var rng = new System.Random();
-            var enemies = EnemySquadGenerator.Generate(quest.Region, quest.EnemyCount, quest.Difficulty, rng);
-
-            var simulator = new AutoBattleSimulator();
-            var result = simulator.Simulate(combatants, enemies);
-
+            var battle = ExpeditionBattle.Simulate(expedition);
             _battlingExpedition = expedition;
             RefreshList();
 
             var host = CoroutineHost.Instance;
-            _battlePlayback = host.StartCoroutine(PlayBattle(expedition, result));
+            _battlePlayback = host.StartCoroutine(PlayBattle(expedition, battle));
         }
 
-        private IEnumerator PlayBattle(Expedition expedition, BattleResult result)
+        private IEnumerator PlayBattle(Expedition expedition, ExpeditionBattle.Battle battle)
         {
             const int MaxVisibleLines = 8;
             var lines = new LinkedList<string>();
+            var result = battle.Result;
 
             void AppendLine(string line)
             {
@@ -394,26 +383,21 @@ namespace GN3.UI
                 yield return new WaitForSeconds(delayPerEvent);
             }
 
-            bool victory = result.Outcome == BattleOutcome.TeamAVictory;
-            string questOutcome = victory ? "임무 완료" : "임무 실패";
-            string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
-            if (victory)
-            {
-                int reward = Pricing.QuestReward(expedition.Quest);
-                Wallet.Add(reward);
-                questOutcome += $" — 보상 +{reward}G";
-                ToastLog.Show($"[{expedition.Quest.Title}] 임무 완료! 보상 +{reward}G");
-            }
-            else
-            {
-                ToastLog.Show($"[{expedition.Quest.Title}] 임무 실패...");
-            }
-            if (survivors.Length > 0) ToastLog.Show($"파견대 귀환: {survivors}");
-            SetResultText($"{questOutcome}\n{BuildResultSummary(result)}");
-
             _battlePlayback = null;
             _battlingExpedition = null;
-            ExpeditionLog.Instance.Complete(expedition);
+            // 체력 반영·전사·보상·알림·귀환은 ExpeditionBattle이 맡는다(자동 진행과 같은 처리).
+            string summary = ExpeditionBattle.Conclude(expedition, battle);
+            SetResultText($"{summary}\n{BuildResultSummary(result)}");
+
+            while (_battleQueue.Count > 0)
+            {
+                var next = _battleQueue.Dequeue();
+                if (next.IsReady && ExpeditionLog.Instance.Active.Contains(next))
+                {
+                    StartBattle(next);
+                    break;
+                }
+            }
         }
 
         private string BuildResultSummary(BattleResult result)
@@ -440,17 +424,6 @@ namespace GN3.UI
         {
             RenderResultText(text);
             Debug.Log(text);
-        }
-
-        private void CreateTaggedLabel(Transform parent, string label, int fontSize, string tooltip, Color color)
-        {
-            var text = CreateText(parent, label, fontSize, TextAnchor.MiddleLeft);
-            text.color = color;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            var layout = text.gameObject.AddComponent<LayoutElement>();
-            layout.flexibleWidth = 0;
-            var trigger = text.gameObject.AddComponent<TooltipTrigger>();
-            trigger.Text = tooltip;
         }
 
         private void CreateActionButton(Transform parent, string label, Color color, UnityEngine.Events.UnityAction onClick, bool interactable = true)

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -104,7 +105,16 @@ namespace GN3.EditorTools
                 Debug.Log("[VillagePrefab] MainScene의 기존 Global Light 2D를 지웠습니다(마을 프리팹 안의 것을 사용).");
             }
 
-            if (FindRoot(scene, VillageName) == null)
+            var existing = FindRoot(scene, VillageName);
+            if (existing != null && !PrefabUtility.IsPartOfPrefabInstance(existing))
+            {
+                // 프리팹과 연결이 끊긴 옛 마을: 지우고 새로 넣는다.
+                Object.DestroyImmediate(existing);
+                existing = null;
+                Debug.Log("[VillagePrefab] MainScene의 Village가 프리팹 인스턴스가 아니라 지우고 새로 넣습니다.");
+            }
+
+            if (existing == null)
             {
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
                 var instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, scene);
@@ -114,7 +124,9 @@ namespace GN3.EditorTools
             }
             else
             {
-                Debug.Log("[VillagePrefab] MainScene에 이미 Village가 있어 다시 넣지 않았습니다.");
+                // MainScene에서 따로 고친 값(위치 이동·불빛 다시 만들기 등)은 프리팹보다 우선해 DesignScene 변경을 가린다.
+                // 전부 되돌려 MainScene 마을을 프리팹(= DesignScene)과 똑같이 맞춘다.
+                RevertMainSceneOverrides(existing);
             }
 
             var mainCamera = FindRoot(scene, "Main Camera");
@@ -129,6 +141,55 @@ namespace GN3.EditorTools
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
+        }
+
+        private static void RevertMainSceneOverrides(GameObject instance)
+        {
+            var root = PrefabUtility.GetOutermostPrefabInstanceRoot(instance);
+            var details = new List<string>();
+            var modified = PrefabUtility.GetObjectOverrides(root, false)
+                .Where(o => o.instanceObject != root.transform && o.instanceObject != root) // 루트 위치·이름은 씬마다 원래 있는 값
+                .ToList();
+            var added = PrefabUtility.GetAddedGameObjects(root);
+            var removed = PrefabUtility.GetRemovedGameObjects(root);
+            var addedComponents = PrefabUtility.GetAddedComponents(root);
+            var removedComponents = PrefabUtility.GetRemovedComponents(root);
+
+            foreach (var o in modified) details.Add($"값 수정: {Describe(o.instanceObject)}");
+            foreach (var o in added) details.Add($"씬에만 추가: {Describe(o.instanceGameObject)}");
+            foreach (var o in removed) details.Add($"프리팹에서 삭제: {Describe(o.assetGameObject)}");
+            foreach (var o in addedComponents) details.Add($"컴포넌트 추가: {Describe(o.instanceComponent)}");
+            foreach (var o in removedComponents) details.Add($"컴포넌트 삭제: {Describe(o.assetComponent)}");
+
+            PrefabUtility.RevertPrefabInstance(root, InteractionMode.AutomatedAction);
+            root.transform.position = Vector3.zero;
+
+            Debug.Log(details.Count > 0
+                ? $"[VillagePrefab] MainScene 마을의 개별 수정 {details.Count}개(값 {modified.Count}·추가 {added.Count + addedComponents.Count}·삭제 {removed.Count + removedComponents.Count})를 지우고 프리팹(DesignScene)과 똑같이 맞췄습니다:\n- " + string.Join("\n- ", details)
+                : "[VillagePrefab] MainScene 마을은 이미 프리팹(DesignScene)과 같습니다.");
+        }
+
+        private static string Describe(Object obj)
+        {
+            if (obj == null) return "(없음)";
+            var go = obj as GameObject ?? (obj as Component)?.gameObject;
+            if (go == null) return obj.name;
+            string path = go.name;
+            for (var t = go.transform.parent; t != null && t.parent != null; t = t.parent) path = t.name + "/" + path;
+            return obj is Component c ? $"{path} ({c.GetType().Name})" : path;
+        }
+
+        /// <summary>
+        /// "(현재 씬)" 도구를 MainScene에서 실행하면 Village 인스턴스에 MainScene 전용 수정이 생겨 DesignScene 변경을 가린다.
+        /// MainScene이면 안내창을 띄우고 true(실행 안 함).
+        /// </summary>
+        public static bool RefuseInMainScene(string toolName)
+        {
+            if (SceneManager.GetActiveScene().path != MainScenePath) return false;
+            EditorUtility.DisplayDialog(toolName,
+                "MainScene에서는 실행하지 않습니다.\n\n마을은 DesignScene에서 고친 뒤 'GN3/Village/마을 프리팹 만들기 → MainScene 배치'로 옮기세요. " +
+                "MainScene에서 직접 고친 내용은 그 메뉴를 누를 때 지워집니다.", "확인");
+            return true;
         }
 
         /// <summary>씬 최상위 오브젝트 중 Village·제외 목록이 아닌 것을 Village 아래로 옮긴다(월드 위치 유지). 옮긴 이름 목록.</summary>

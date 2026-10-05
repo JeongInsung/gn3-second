@@ -38,10 +38,23 @@ namespace GN3.Quests
             RemainingDays = durationDays;
         }
 
+        /// <summary>저장 파일에서 불러올 때 남은 일수를 되돌린다.</summary>
+        public void SetRemainingDays(int days) => RemainingDays = System.Math.Max(0, days);
+
         public void AdvanceDay()
         {
             if (RemainingDays > 0)
                 RemainingDays--;
+        }
+
+        /// <summary>테스트·디버그용(게임 상태 조정 창). 바로 도착한 것으로 만든다.</summary>
+        public void ArriveNow() => RemainingDays = 0;
+
+        /// <summary>전투력이 넉넉해 빨리 도착할 때 남은 일수를 줄인다(최소 1일).</summary>
+        public void Shorten(int days)
+        {
+            if (days > 0)
+                RemainingDays = System.Math.Max(1, RemainingDays - days);
         }
 
         /// <summary>휴식 등으로 도착이 늦어질 때 남은 일수를 늘린다.</summary>

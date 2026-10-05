@@ -24,6 +24,12 @@ namespace GN3.EditorTools
         private const float FountainLift = 0.15f; // 대야 테두리 높이
 
         [MenuItem("GN3/Shadow/그림자 만들기 (현재 씬)")]
+        private static void BuildFromMenu()
+        {
+            if (VillagePrefabBuilder.RefuseInMainScene("그림자 만들기")) return;
+            Build();
+        }
+
         public static void Build()
         {
             var material = EnsureMaterial();

@@ -29,6 +29,14 @@ namespace GN3.World
             OnTimeAdvanced?.Invoke();
         }
 
+        /// <summary>저장 파일에서 불러올 때. 일차·시각을 맞추고 OnTimeAdvanced로 화면(낮/밤·시각 표시)만 갱신한다(하루 경과 처리는 없음).</summary>
+        public static void Restore(int day, float hour)
+        {
+            CurrentDay = System.Math.Max(1, day);
+            CurrentHour = Mathf.Repeat(hour, 24f);
+            OnTimeAdvanced?.Invoke();
+        }
+
         private static void AdvanceDay()
         {
             CurrentDay++;

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using GN3.Economy;
+using GN3.Mercenaries;
 using GN3.Quests;
 using UnityEngine;
 using UnityEngine.UI;
@@ -23,8 +24,9 @@ namespace GN3.UI
 
         private void Awake()
         {
-            // QuestPanel(1200x780)에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역 (MarketPanel과 동일 레이아웃)
-            ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -70f));
+            // QuestPanel(1200x780)에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역.
+            // 새로고침 버튼 아래 끝이 위에서 약 88px이라 100px부터 시작해 첫 줄이 버튼과 겹치지 않게 한다.
+            ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -100f));
 
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             _board = new QuestBoard(boardSize, minEnemyCount, maxEnemyCount, minDifficulty, maxDifficulty);
@@ -38,12 +40,19 @@ namespace GN3.UI
             RefreshBoard();
         }
 
+        /// <summary>불러오기 직후처럼 밖에서 게시판을 새로 뽑을 때.</summary>
+        public void RefreshFromOutside()
+        {
+            if (_board != null) RefreshBoard(); // 아직 한 번도 안 열려 Awake 전이면 열 때 Start에서 뽑는다
+        }
+
         private void RefreshBoard()
         {
             foreach (var row in _cardRows)
                 Destroy(row);
             _cardRows.Clear();
 
+            _board.MaxGrade = Guild.Current.MaxQuestGrade; // 길드 단계에 따라 높은 등급 퀘스트가 열린다
             foreach (var quest in _board.Refresh())
                 _cardRows.Add(CreateCard(quest));
 
@@ -70,11 +79,20 @@ namespace GN3.UI
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
-            string info = $"{quest.Title}    난이도 {quest.Difficulty}    예상 소요 {quest.DurationDays}일    보상 {Pricing.QuestReward(quest)}G";
-            var infoText = CreateText(row.transform, info, 20, TextAnchor.MiddleLeft);
-            var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
-            infoLayout.flexibleWidth = 1;
-            infoLayout.minWidth = 100;
+            // 줄에는 [등급] 이름 · 보상만. 지역·적·권장 전투력·판정·소요 일수는 줄을 클릭하면 열리는 상세 창에서 본다.
+            var titleText = CreateText(row.transform, QuestDifficulty.RichTitle(quest), 20, TextAnchor.MiddleLeft);
+            titleText.fontStyle = FontStyle.Bold;
+            titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            titleText.gameObject.AddComponent<LayoutElement>().minWidth = 520;
+
+            var rewardText = CreateText(row.transform, $"보상 {Pricing.QuestReward(quest)}G", 18, TextAnchor.MiddleLeft);
+            rewardText.color = UITheme.TitleText;
+            rewardText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var rewardLayout = rewardText.gameObject.AddComponent<LayoutElement>();
+            rewardLayout.minWidth = 120;
+            rewardLayout.flexibleWidth = 1; // 남는 폭을 차지해 수락 버튼을 오른쪽 끝으로 민다
+
+            RowClickHandler.Attach(row, () => QuestInfoPanel.ShowGlobal(quest, () => Accept(quest, row)));
 
             var acceptButtonGO = new GameObject("AcceptButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             acceptButtonGO.transform.SetParent(row.transform, false);
@@ -91,17 +109,21 @@ namespace GN3.UI
             acceptTextRect.offsetMin = Vector2.zero;
             acceptTextRect.offsetMax = Vector2.zero;
 
-            acceptButtonGO.GetComponent<Button>().onClick.AddListener(() =>
-            {
-                GetComponent<PartyUI>()?.BeginDispatch(quest);
-                if (partyPanel != null)
-                    PanelActivator.Open(partyPanel);
-
-                _cardRows.Remove(row);
-                Destroy(row);
-            });
+            acceptButtonGO.GetComponent<Button>().onClick.AddListener(() => Accept(quest, row));
 
             return row;
+        }
+
+        /// <summary>수락: 파견 편성을 시작하고 파티 패널을 연 뒤 게시판에서 그 줄을 지운다(줄 버튼·상세 창 버튼 공용).</summary>
+        private void Accept(Quest quest, GameObject row)
+        {
+            if (row == null) return; // 이미 수락된 줄
+            GetComponent<PartyUI>()?.BeginDispatch(quest);
+            if (partyPanel != null)
+                PanelActivator.Open(partyPanel);
+
+            _cardRows.Remove(row);
+            Destroy(row);
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

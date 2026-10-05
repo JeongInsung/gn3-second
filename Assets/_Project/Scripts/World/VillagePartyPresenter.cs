@@ -14,8 +14,9 @@ namespace GN3.World
     /// <summary>
     /// 파티(PlayerParty)에 있는 용병들을 마을(Village 프리팹) 바닥 위에 VillageWanderer로 내보낸다.
     /// 파견 중이거나 죽은 용병은 마을에 없고, 고용·해고·파견·귀환 때마다 목록을 다시 맞춘다.
-    /// 마을에 여관이 있으면 용병들은 여관에서 쉬다가 낮 동안 무작위로 문에서 나와 돌아다니고, 또 무작위로 들어간다
-    /// (늘 일부는 안에서 쉰다). 저녁·밤에도 자정까지는 돌아다니고, 자정~아침(어두운 동안)에는 모두 안에서 잔다.
+    /// 마을에 여관이 있으면 용병들은 아침(6~9시)에는 여관에서 쉬다가 무작위로 문에서 나와 돌아다니고 또 무작위로 들어간다.
+    /// 9시가 되면 안에 있던 용병이 모두 문에서 차례로 나오고, 자정까지는 아무도 들어가지 않는다.
+    /// 자정~아침(어두운 동안)에는 모두 안에서 잔다.
     /// 여관이 없으면 밝을 때 전원이 숨기 전 자리에서 나타난다.
     /// MainMenuBootstrapper가 MainScene에서 만든다.
     /// </summary>
@@ -37,7 +38,8 @@ namespace GN3.World
         private const float OutsideWanderMax = 45f;
         private const float GoInChance = 0.3f;
         private const float DoorGap = 0.6f; // 문에서 두 사람이 겹쳐 나오지 않게
-        private const float ShuffleOutsideChance = 0.3f; // 진행으로 시간이 건너뛸 때 밖에 나와 있을 확률
+        private const float ShuffleOutsideChance = 0.3f; // 진행으로 시간이 건너뛸 때 밖에 나와 있을 확률(9시 전)
+        private const float AllOutHour = 9f;              // 이 시각부터 자정까지는 전원 여관 밖
 
         private readonly Dictionary<string, VillageWanderer> _wanderers = new Dictionary<string, VillageWanderer>();
         private readonly Dictionary<string, Mercenary> _mercById = new Dictionary<string, Mercenary>();
@@ -139,7 +141,11 @@ namespace GN3.World
                 }
             }
 
-            if (!_hidden && _hasInn) UpdateInnVisits();
+            if (!_hidden && _hasInn)
+            {
+                if (IsAllOutTime()) BringEveryoneOut();
+                else UpdateInnVisits();
+            }
 
             UpdateHoverAndClick();
             CloseInfoIfGone();
@@ -165,6 +171,24 @@ namespace GN3.World
         /// 낮 동안 용병마다 정해진 시각이 되면 주사위를 굴린다: 안에 있으면 나올지, 밖에 있으면 들어갈지.
         /// 안 = GameObject 꺼짐. 들어가는 중인 용병은 건드리지 않는다.
         /// </summary>
+        /// <summary>9시~자정: 전원 밖. 게임 시계 기준이라 "진행" 전환이 끝나 9시가 된 뒤에 나온다(새벽은 _hidden이 먼저 처리).</summary>
+        private static bool IsAllOutTime() => GameClock.CurrentHour >= AllOutHour;
+
+        /// <summary>여관 안에 있는 용병을 문에서 DoorGap초 간격으로 한 명씩 내보낸다. 들어가는 중인 용병은 다 들어간 뒤 나온다.</summary>
+        private void BringEveryoneOut()
+        {
+            float now = Time.time;
+            if (now < _doorFreeAt) return;
+            foreach (var wanderer in _wanderers.Values)
+            {
+                if (wanderer == null || wanderer.IsEntering || wanderer.gameObject.activeSelf) continue;
+                wanderer.gameObject.SetActive(true);
+                wanderer.ExitBuilding(_innDoor, _innExit);
+                _doorFreeAt = now + DoorGap;
+                return; // 한 번에 한 명
+            }
+        }
+
         private void UpdateInnVisits()
         {
             float now = Time.time;
@@ -246,7 +270,7 @@ namespace GN3.World
 
             if (_hovered != null && mouse.leftButton.wasPressedThisFrame
                 && _hovered.OwnerId != null && _mercById.TryGetValue(_hovered.OwnerId, out var merc))
-                _infoPanel.Show(merc);
+                _infoPanel.Show(merc, fromVillage: true);
         }
 
         /// <summary>보던 용병이 마을에서 사라지면(파견·해고·사망·밤) 창을 닫는다.</summary>
@@ -254,6 +278,8 @@ namespace GN3.World
         {
             var shown = _infoPanel.Shown;
             if (shown == null) return;
+            // 시장·파티 패널에서 연 창은 여관 안·파견 중 용병도 볼 수 있어야 하므로 닫지 않는다.
+            if (!_infoPanel.OpenedFromVillage) return;
             if (!_wanderers.TryGetValue(shown.Id, out var wanderer) || wanderer == null || !wanderer.gameObject.activeInHierarchy)
                 _infoPanel.Hide();
         }
@@ -289,7 +315,7 @@ namespace GN3.World
             {
                 var wanderer = pair.Value;
                 if (wanderer == null) continue;
-                bool outside = !_hasInn || _rng.NextDouble() < ShuffleOutsideChance;
+                bool outside = !_hasInn || IsAllOutTime() || _rng.NextDouble() < ShuffleOutsideChance;
                 if (outside)
                 {
                     wanderer.gameObject.SetActive(true);
@@ -361,7 +387,7 @@ namespace GN3.World
                     go.SetActive(!_hidden && !_hasInn);
                     _nextDecision[merc.Id] = Time.time + RandomRange(1f, 4f);
                 }
-                VillageNameTag.Create(_tagLayer, go.transform, merc.Name); // Wanderer가 사라지면 스스로 지워진다
+                VillageNameTag.Create(_tagLayer, go.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}"); // Wanderer가 사라지면 스스로 지워진다
                 _wanderers[merc.Id] = wanderer;
             }
         }

@@ -1,3 +1,5 @@
+using System.Linq;
+using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.Traits;
@@ -16,7 +18,7 @@ namespace GN3.UI
     {
         private const float RefreshInterval = 0.5f;
         private const float PanelWidth = 400f;
-        private const float PanelHeight = 300f;
+        private const float PanelHeight = 326f; // 아래 30px은 테스트 버튼 자리(개발 빌드)
         private const int PortraitSize = 110;
 
         private GameObject _panel;
@@ -26,14 +28,29 @@ namespace GN3.UI
         private Text _statusText;
         private Image _healthFill;
         private Text _healthText;
+        private Image _xpFill;
+        private Text _xpText;
         private Text _statsText;
+        private Text _weaponText;
         private Text _personalityText;
         private Text _passiveText;
+        private TooltipTrigger _weaponTip;
+        private TooltipTrigger _personalityTip;
+        private TooltipTrigger _passiveTip;
 
         private Mercenary _shown;
+        private GameObject _debugButton;
         private float _refreshTimer;
 
         public Mercenary Shown => _shown;
+
+        /// <summary>마지막으로 만든 창(MainScene에 하나). 시장 줄 클릭 등 어디서든 연다.</summary>
+        public static MercenaryInfoPanel Instance { get; private set; }
+
+        public static void ShowGlobal(Mercenary mercenary)
+        {
+            if (Instance != null && mercenary != null) Instance.Show(mercenary);
+        }
 
         public static MercenaryInfoPanel Create(Transform parent)
         {
@@ -48,6 +65,7 @@ namespace GN3.UI
 
             var panel = go.GetComponent<MercenaryInfoPanel>();
             panel.Build();
+            Instance = panel;
             return panel;
         }
 
@@ -60,6 +78,7 @@ namespace GN3.UI
             rect.anchoredPosition = new Vector2(-16f, -16f);
             rect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
             _panel.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.13f, 0.92f);
+            DraggablePanel.Attach(rect); // 잡고 끌어 옮길 수 있다
 
             // 왼쪽: 전신 초상 칸
             var slot = new GameObject("Portrait", typeof(RectTransform));
@@ -78,12 +97,41 @@ namespace GN3.UI
             _statusText = CreateText("Status", 14, FontStyle.Normal, new Vector2(infoX, -64f), new Vector2(infoWidth, 20f));
 
             // 체력 막대
-            var barBack = new GameObject("HealthBar", typeof(RectTransform), typeof(Image));
+            _healthFill = CreateBar("HealthBar", new Vector2(infoX, -92f), new Vector2(infoWidth + 30f, 12f));
+            _healthText = CreateText("Health", 13, FontStyle.Normal, new Vector2(infoX, -106f), new Vector2(infoWidth + 30f, 18f));
+
+            // 경험치 막대(파랑)
+            _xpFill = CreateBar("XpBar", new Vector2(infoX, -128f), new Vector2(infoWidth + 30f, 8f));
+            _xpFill.color = new Color(0.35f, 0.6f, 0.95f);
+            _xpText = CreateText("Xp", 13, FontStyle.Normal, new Vector2(infoX, -138f), new Vector2(infoWidth + 30f, 18f));
+
+            // 아래: 능력치·성격·패시브 (전체 폭)
+            float bottomWidth = PanelWidth - 28f;
+            _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -162f), new Vector2(bottomWidth, 22f));
+            // 무기·성격·패시브는 이름만 쓰고, 마우스를 올리면 설명이 툴팁으로 뜬다.
+            _weaponText = CreateText("Weapon", 15, FontStyle.Normal, new Vector2(14f, -190f), new Vector2(bottomWidth, 22f));
+            _personalityText = CreateText("Personality", 15, FontStyle.Normal, new Vector2(14f, -218f), new Vector2(bottomWidth, 22f));
+            _passiveText = CreateText("Passive", 15, FontStyle.Normal, new Vector2(14f, -246f), new Vector2(bottomWidth, 22f));
+            _weaponTip = AddTooltip(_weaponText);
+            _personalityTip = AddTooltip(_personalityText);
+            _passiveTip = AddTooltip(_passiveText);
+
+            CreateCloseButton();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+            CreateDebugDamageButton();
+#endif
+            _panel.SetActive(false);
+        }
+
+        /// <summary>어두운 바탕 + 가로로 채워지는 막대. 채움 Image를 돌려준다.</summary>
+        private Image CreateBar(string name, Vector2 topLeft, Vector2 size)
+        {
+            var barBack = new GameObject(name, typeof(RectTransform), typeof(Image));
             barBack.transform.SetParent(_panel.transform, false);
             var barRect = barBack.GetComponent<RectTransform>();
             barRect.anchorMin = barRect.anchorMax = barRect.pivot = new Vector2(0f, 1f);
-            barRect.anchoredPosition = new Vector2(infoX, -92f);
-            barRect.sizeDelta = new Vector2(infoWidth + 30f, 12f);
+            barRect.anchoredPosition = topLeft;
+            barRect.sizeDelta = size;
             barBack.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.6f);
 
             var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
@@ -92,22 +140,11 @@ namespace GN3.UI
             fillRect.anchorMin = Vector2.zero;
             fillRect.anchorMax = Vector2.one;
             fillRect.offsetMin = fillRect.offsetMax = Vector2.zero;
-            _healthFill = fill.GetComponent<Image>();
-            _healthFill.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
-            _healthFill.type = Image.Type.Filled;
-            _healthFill.fillMethod = Image.FillMethod.Horizontal;
-
-            _healthText = CreateText("Health", 13, FontStyle.Normal, new Vector2(infoX, -106f), new Vector2(infoWidth + 30f, 18f));
-
-            // 아래: 능력치·성격·패시브 (전체 폭)
-            float bottomWidth = PanelWidth - 28f;
-            _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -136f), new Vector2(bottomWidth, 22f));
-            _personalityText = CreateText("Personality", 14, FontStyle.Normal, new Vector2(14f, -164f), new Vector2(bottomWidth, 52f));
-            _passiveText = CreateText("Passive", 14, FontStyle.Normal, new Vector2(14f, -220f), new Vector2(bottomWidth, 66f));
-            _personalityText.verticalOverflow = _passiveText.verticalOverflow = VerticalWrapMode.Truncate;
-
-            CreateCloseButton();
-            _panel.SetActive(false);
+            var image = fill.GetComponent<Image>();
+            image.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+            image.type = Image.Type.Filled;
+            image.fillMethod = Image.FillMethod.Horizontal;
+            return image;
         }
 
         private Text CreateText(string name, int size, FontStyle style, Vector2 topLeft, Vector2 boxSize)
@@ -128,6 +165,40 @@ namespace GN3.UI
             text.supportRichText = false; // 패시브 이름의 "<...>"가 태그로 읽히지 않게
             text.raycastTarget = false;
             return text;
+        }
+
+        /// <summary>[테스트] 보고 있는 용병 체력 -30%. 치료 아이템 시험용(에디터·개발 빌드에서만).</summary>
+        private void CreateDebugDamageButton()
+        {
+            var go = new GameObject("DebugDamageButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(_panel.transform, false);
+            _debugButton = go;
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0f);
+            rect.anchoredPosition = new Vector2(-10f, 8f);
+            rect.sizeDelta = new Vector2(150f, 24f);
+            go.GetComponent<Image>().color = new Color(0.45f, 0.45f, 0.45f, 1f);
+            go.GetComponent<Button>().onClick.AddListener(() =>
+            {
+                if (_shown == null) return;
+                int lost = DebugHotkeys.Damage(_shown);
+                ToastLog.Show($"[테스트] {_shown.Name} 체력 -{lost}");
+                Refresh();
+            });
+
+            var label = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            label.transform.SetParent(go.transform, false);
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+            var text = label.GetComponent<Text>();
+            text.text = "[테스트] 체력 -30%";
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = 13;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.white;
+            text.raycastTarget = false;
         }
 
         private void CreateCloseButton()
@@ -156,8 +227,12 @@ namespace GN3.UI
             text.raycastTarget = false;
         }
 
-        public void Show(Mercenary mercenary)
+        /// <summary>마을에서 캐릭터를 클릭해 연 창인지. 그 캐릭터가 마을에서 사라지면(여관·파견·밤) 이런 창만 자동으로 닫는다.</summary>
+        public bool OpenedFromVillage { get; private set; }
+
+        public void Show(Mercenary mercenary, bool fromVillage = false)
         {
+            OpenedFromVillage = fromVillage;
             if (_shown != mercenary)
             {
                 foreach (Transform child in _portraitSlot) Destroy(child.gameObject);
@@ -175,6 +250,7 @@ namespace GN3.UI
         public void Hide()
         {
             _shown = null;
+            OpenedFromVillage = false;
             _panel.SetActive(false);
         }
 
@@ -198,11 +274,16 @@ namespace GN3.UI
             var merc = _shown;
             var stats = merc.CurrentStats;
 
-            _nameText.text = merc.Name;
+            _nameText.supportRichText = true; // 등급 글자 색
+            _nameText.text = $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}";
             _classText.text = $"{merc.Class.ClassName}  Lv.{merc.Level}";
 
             bool wounded = merc.CurrentHealth < stats.MaxHealth;
-            if (ExpeditionLog.Instance.IsOnExpedition(merc))
+            bool hired = PlayerParty.Instance.Members.Contains(merc);
+            if (_debugButton != null) _debugButton.SetActive(hired); // 고용 전 용병은 테스트로 다치게 하지 않는다
+            if (!hired)
+                _statusText.text = $"상태: 고용 전 · 고용비 {Pricing.HireCost(merc)}G";
+            else if (ExpeditionLog.Instance.IsOnExpedition(merc))
                 _statusText.text = $"상태: 파견 중 ({ExpeditionLog.Instance.FindQuest(merc)?.Title})";
             else
                 _statusText.text = wounded ? "상태: 부상 (마을에서 쉬는 중)" : "상태: 마을에서 쉬는 중";
@@ -212,21 +293,51 @@ namespace GN3.UI
             _healthFill.color = Color.Lerp(new Color(0.85f, 0.25f, 0.2f), new Color(0.3f, 0.8f, 0.35f), ratio);
             _healthText.text = $"체력 {merc.CurrentHealth} / {stats.MaxHealth}";
 
-            _statsText.text = $"공격 {stats.Attack}  ·  방어 {stats.Defense}  ·  속도 {stats.MoveSpeed}";
-
-            var personality = PersonalityTable.Get(merc.Personality);
-            _personalityText.text = $"성격 [{personality.Label}]  {personality.Description}";
-
-            var passives = ClassPassiveFactory.Create(merc.Class.Kind, merc.HasRarePassive);
-            if (passives.Count > 0)
+            if (merc.Level >= Mercenary.MaxLevel)
             {
-                string rare = merc.HasRarePassive ? " (레어)" : "";
-                _passiveText.text = $"패시브 <{passives[0].Name}{rare}>  {passives[0].Description}";
+                _xpFill.fillAmount = 1f;
+                _xpText.text = "경험치 최대 레벨";
             }
             else
             {
-                _passiveText.text = "";
+                _xpFill.fillAmount = (float)merc.Experience / merc.XpToNext;
+                _xpText.text = $"경험치 {merc.Experience} / {merc.XpToNext}";
             }
+
+            _statsText.text = $"공격 {stats.Attack}  ·  방어 {stats.Defense}  ·  속도 {stats.MoveSpeed}  ·  전투력 {merc.CombatPower}";
+            if (merc.Weapon != null)
+                SetTipLine(_weaponText, _weaponTip, $"무기: {merc.Weapon.Name}", merc.Weapon.DescribeFor(merc.Class.Kind));
+            else
+                SetTipLine(_weaponText, _weaponTip, "무기: 맨손", null);
+
+            var personality = PersonalityTable.Get(merc.Personality);
+            SetTipLine(_personalityText, _personalityTip, $"성격 [{personality.Label}]", personality.Description);
+
+            var passives = ClassPassiveFactory.Create(merc.Class.Kind, merc.HasRarePassive);
+            _passiveText.gameObject.SetActive(passives.Count > 0);
+            if (passives.Count > 0)
+            {
+                string rare = merc.HasRarePassive ? " (레어)" : "";
+                SetTipLine(_passiveText, _passiveTip, $"패시브 <{passives[0].Name}>{rare}", passives[0].Description);
+            }
+        }
+
+        private static TooltipTrigger AddTooltip(Text text)
+        {
+            text.raycastTarget = true; // 마우스를 받아야 툴팁이 뜬다
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            return text.gameObject.AddComponent<TooltipTrigger>();
+        }
+
+        /// <summary>이름만 쓰고, 설명은 툴팁으로. 마우스 판정이 글자 위에서만 되도록 칸 폭을 글자 폭에 맞춘다.</summary>
+        private static void SetTipLine(Text text, TooltipTrigger tip, string label, string tooltip)
+        {
+            text.text = label;
+            var rect = text.rectTransform;
+            rect.sizeDelta = new Vector2(text.preferredWidth + 4f, rect.sizeDelta.y);
+            tip.Text = tooltip;
+            tip.enabled = !string.IsNullOrEmpty(tooltip);
+            text.raycastTarget = tip.enabled;
         }
     }
 }

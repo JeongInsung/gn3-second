@@ -28,7 +28,9 @@ namespace GN3.Mercenaries
                 merc.SetHealth(merc.CurrentHealth + Mathf.CeilToInt(max * HealRatio));
                 healed++;
             }
-            if (healed > 0) ToastLog.Show($"여관에서 하룻밤 쉬어 체력을 회복했다 ({healed}명)");
+            if (healed == 0) return;
+            ToastLog.Show($"여관에서 하룻밤 쉬어 체력을 회복했다 ({healed}명)");
+            DailyLog.Add($"여관에서 쉬어 {healed}명이 체력을 회복했다.");
         }
     }
 }

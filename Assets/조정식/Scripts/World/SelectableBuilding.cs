@@ -37,6 +37,13 @@ namespace GN3.World
 
         public void SetOutline(SpriteRenderer renderer) => outline = renderer;
 
+        /// <summary>실행 중에 붙인 건물(VillageProps.EnsureClickable)의 이름·설명을 정한다(기본값은 "의약품 상점").</summary>
+        public void SetInfo(string newDisplayName, string newDescription)
+        {
+            displayName = newDisplayName;
+            description = newDescription;
+        }
+
         public void SetOutlineGroup(GameObject group)
         {
             outlineGroup = group;
