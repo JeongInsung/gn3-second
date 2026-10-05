@@ -62,8 +62,11 @@ namespace GN3.World
             _block ??= new MaterialPropertyBlock();
             // 이름으로 고정 시드: 건물마다 깜빡임 위상이 다르고, 다시 열어도 같다.
             _seed = Mathf.Abs((transform.parent != null ? transform.parent.name : name).GetHashCode() % 1000) * 0.137f;
+            DayNightCycle.Applied += Apply; // 시간이 바뀌면 에디터에서도 바로 켜고 끈다
             Apply();
         }
+
+        private void OnDisable() => DayNightCycle.Applied -= Apply;
 
         private void LateUpdate() => Apply();
 

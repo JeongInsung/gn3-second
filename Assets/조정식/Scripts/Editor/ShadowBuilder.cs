@@ -9,9 +9,9 @@ namespace GN3.EditorTools
 {
     /// <summary>
     /// 건물·장식마다 자식 "Shadow"(ProjectedShadow)를 붙여, 시간에 따라 길이·방향이 바뀌는 그림자를 만든다.
-    /// 대상은 기존 2D 조명 그림자를 쓰던 오브젝트(ShadowCaster2D가 있는 것)와 이미 Shadow 자식이 있는 것.
-    /// 2D 조명 그림자는 끝없이 늘어나 길이를 못 정해서, ShadowCaster2D는 지운다. 다시 실행하면 갱신만 한다.
-    /// 새 건물·장식을 놓은 뒤 그림자가 필요하면 ShadowCaster2D를 하나 붙이고 이 메뉴를 다시 누르면 된다.
+    /// 대상은 Buildings/Decorations 그림(원본 또는 PixelBaker가 구운 것)을 쓰는 오브젝트, ShadowCaster2D가 있는 것,
+    /// 이미 Shadow 자식이 있는 것. 2D 조명 그림자는 끝없이 늘어나 길이를 못 정해서, ShadowCaster2D는 지운다.
+    /// 다시 실행하면 갱신만 한다. 새 건물·장식은 놓고 이 메뉴(또는 "마을 프리팹 만들기")만 누르면 된다.
     /// </summary>
     public static class ShadowBuilder
     {
@@ -36,7 +36,9 @@ namespace GN3.EditorTools
                 if (renderer.GetComponent<ProjectedShadow>() != null) continue; // 그림자 자신
                 var caster = renderer.GetComponent<ShadowCaster2D>();
                 var existing = renderer.transform.Find(ShadowChildName);
-                if (caster == null && existing == null) continue;
+                // Buildings/Decorations 그림(원본 또는 구운 것)이면 ShadowCaster2D 없이도 그림자를 만든다(새로 놓은 건물 자동 처리).
+                bool isProp = PixelBaker.FindSourcePath(renderer.sprite) != null;
+                if (caster == null && existing == null && !isProp) continue;
 
                 BuildShadow(renderer, existing, material);
                 if (caster != null) Undo.DestroyObjectImmediate(caster);

@@ -19,6 +19,12 @@ namespace GN3.World
         /// <summary>밤 조명(가로등·창문 불빛)이 켜진 정도 0~1. 해가 지기 조금 전부터 켜져 밤에 1.</summary>
         public static float NightLightFactor { get; private set; }
 
+        /// <summary>
+        /// 시간이 바뀌어 조명을 다시 계산할 때마다 불린다. 창문 불빛·화덕처럼 NightLightFactor를 읽는 것들이 구독한다
+        /// (에디터에선 LateUpdate가 씬 변경 때만 돌아, 슬라이더를 밤으로 옮겨도 꺼진 채 남는 일이 있었다).
+        /// </summary>
+        public static event System.Action Applied;
+
         [Header("시간")]
         [Range(0f, 24f)] [SerializeField] private float timeOfDay = 10f;
         [Tooltip("켜면 Play 중 시간이 저절로 흐른다. 끄면 슬라이더로만 조종.")]
@@ -291,6 +297,7 @@ namespace GN3.World
             SetLampIntensity(lampLights, lampIntensity * lamp);
             SetLampIntensity(lampGlows, lampGlowIntensity * lamp);
             ApplyPostProcessing(altitudeDeg, night);
+            Applied?.Invoke();
         }
 
         /// <summary>

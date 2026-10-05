@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Traits;
 using UnityEngine;
@@ -96,11 +97,12 @@ namespace GN3.UI
             hireButtonGO.transform.SetParent(row.transform, false);
             hireButtonGO.GetComponent<Image>().color = new Color(0.25f, 0.55f, 0.35f, 1f);
             var hireLayout = hireButtonGO.GetComponent<LayoutElement>();
-            hireLayout.minWidth = 90;
+            hireLayout.minWidth = 130;
             hireLayout.minHeight = 40;
             hireLayout.flexibleWidth = 0;
 
-            var hireText = CreateText(hireButtonGO.transform, "고용", 18, TextAnchor.MiddleCenter);
+            int cost = Pricing.HireCost(merc);
+            var hireText = CreateText(hireButtonGO.transform, $"고용 ({cost}G)", 18, TextAnchor.MiddleCenter);
             var hireTextRect = hireText.GetComponent<RectTransform>();
             hireTextRect.anchorMin = Vector2.zero;
             hireTextRect.anchorMax = Vector2.one;
@@ -109,11 +111,23 @@ namespace GN3.UI
 
             hireButtonGO.GetComponent<Button>().onClick.AddListener(() =>
             {
-                if (!PlayerParty.Instance.TryAdd(merc))
+                var party = PlayerParty.Instance;
+                if (party.Members.Count >= party.MaxSize)
                 {
-                    Debug.Log($"{merc.Name} 고용 실패: 파티 정원이 가득 찼습니다.");
+                    ToastLog.Show($"파티 정원({party.MaxSize}명)이 가득 찼습니다.");
                     return;
                 }
+                if (!Wallet.TrySpend(cost))
+                {
+                    ToastLog.Show($"골드가 부족합니다 (필요 {cost}G, 보유 {Wallet.Gold}G)");
+                    return;
+                }
+                if (!party.TryAdd(merc))
+                {
+                    Wallet.Add(cost); // 이미 고용된 용병 등으로 실패하면 돌려준다
+                    return;
+                }
+                ToastLog.Show($"{merc.Name} 고용 (-{cost}G)");
 
                 Debug.Log($"{merc.Name} 고용됨 ({merc.Class.ClassName} Lv.{merc.Level})");
                 _cardRows.Remove(row);

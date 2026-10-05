@@ -44,8 +44,11 @@ namespace GN3.World
         {
             _renderer = GetComponent<SpriteRenderer>();
             _block ??= new MaterialPropertyBlock();
+            DayNightCycle.Applied += Apply; // 시간이 바뀌면 에디터에서도 바로 밝기를 바꾼다
             Apply();
         }
+
+        private void OnDisable() => DayNightCycle.Applied -= Apply;
 
         private void LateUpdate() => Apply();
 

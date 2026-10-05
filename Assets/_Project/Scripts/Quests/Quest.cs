@@ -13,7 +13,7 @@ namespace GN3.Quests
         public int EnemyCount { get; }
         public int Difficulty { get; }
 
-        /// <summary>게임 내 임무 소요 일수. "하루 지나기"로 줄어드는 RemainingDays의 초기값.</summary>
+        /// <summary>게임 내 임무 소요 일수. 하루가 지날 때마다(자정) 줄어드는 RemainingDays의 초기값.</summary>
         public int DurationDays { get; }
         public int RemainingDays { get; private set; }
         public bool IsReady => RemainingDays <= 0;

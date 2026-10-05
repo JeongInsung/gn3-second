@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GN3.Economy;
 using GN3.Quests;
 using UnityEngine;
 using UnityEngine.UI;
@@ -69,7 +70,7 @@ namespace GN3.UI
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
-            string info = $"{quest.Title}    난이도 {quest.Difficulty}    예상 소요 {quest.DurationDays}일";
+            string info = $"{quest.Title}    난이도 {quest.Difficulty}    예상 소요 {quest.DurationDays}일    보상 {Pricing.QuestReward(quest)}G";
             var infoText = CreateText(row.transform, info, 20, TextAnchor.MiddleLeft);
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
             infoLayout.flexibleWidth = 1;

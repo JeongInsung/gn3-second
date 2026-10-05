@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using GN3.Combat;
+using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.Traits;
@@ -393,7 +394,21 @@ namespace GN3.UI
                 yield return new WaitForSeconds(delayPerEvent);
             }
 
-            string questOutcome = result.Outcome == BattleOutcome.TeamAVictory ? "임무 완료" : "임무 실패";
+            bool victory = result.Outcome == BattleOutcome.TeamAVictory;
+            string questOutcome = victory ? "임무 완료" : "임무 실패";
+            string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
+            if (victory)
+            {
+                int reward = Pricing.QuestReward(expedition.Quest);
+                Wallet.Add(reward);
+                questOutcome += $" — 보상 +{reward}G";
+                ToastLog.Show($"[{expedition.Quest.Title}] 임무 완료! 보상 +{reward}G");
+            }
+            else
+            {
+                ToastLog.Show($"[{expedition.Quest.Title}] 임무 실패...");
+            }
+            if (survivors.Length > 0) ToastLog.Show($"파견대 귀환: {survivors}");
             SetResultText($"{questOutcome}\n{BuildResultSummary(result)}");
 
             _battlePlayback = null;

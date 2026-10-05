@@ -113,3 +113,46 @@ MonoBehaviour:
       width: 0.1
       height: 0.063
     forgeIndices: 03000000
+  - sourceName: "\uC5EC\uAD00"
+    windows:
+    - serializedVersion: 2
+      x: 0.0977
+      y: 0.5078
+      width: 0.0820
+      height: 0.0742
+    - serializedVersion: 2
+      x: 0.3750
+      y: 0.5195
+      width: 0.0781
+      height: 0.0664
+    - serializedVersion: 2
+      x: 0.6133
+      y: 0.6484
+      width: 0.0371
+      height: 0.0527
+    - serializedVersion: 2
+      x: 0.7949
+      y: 0.6465
+      width: 0.0391
+      height: 0.0547
+    - serializedVersion: 2
+      x: 0.6348
+      y: 0.4492
+      width: 0.0449
+      height: 0.0664
+    - serializedVersion: 2
+      x: 0.8066
+      y: 0.4492
+      width: 0.0469
+      height: 0.0664
+    - serializedVersion: 2
+      x: 0.2617
+      y: 0.2266
+      width: 0.0918
+      height: 0.0625
+    - serializedVersion: 2
+      x: 0.6836
+      y: 0.2188
+      width: 0.1641
+      height: 0.0586
+    forgeIndices: 

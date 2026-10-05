@@ -21,6 +21,10 @@ namespace GN3.World
         [Range(0f, 1f)] public float heightScale = 0.8f;
         [Tooltip("납작한 물체(Height Scale 0)의 실제 높이(월드 유닛). 그림자가 기울지 않고 모양 그대로 이만큼×cot(고도) 옆에 떨어진다.")]
         [Min(0f)] public float liftHeight;
+        [Tooltip("비워 두면 부모 그림을 따라간다. 지정하면 이 렌더러의 그림·위치·크기·켜짐을 따라간다(파츠 조합 캐릭터처럼 그림자를 그룹 밖에 둘 때).")]
+        public SpriteRenderer sourceOverride;
+        [Tooltip("비워 두면 그림의 보이는 맨 아래가 기준선. 지정하면 이 위치의 y(발밑)를 기준선으로 쓴다(여러 파츠가 같은 기준선을 쓰게).")]
+        public Transform groundAnchor;
         private float _lastHeightScale = float.NaN;
         private float _lastLift = float.NaN;
         private static readonly int LiftId = Shader.PropertyToID("_Lift");
@@ -49,9 +53,18 @@ namespace GN3.World
         private void Sync()
         {
             if (_shadow == null) _shadow = GetComponent<SpriteRenderer>();
-            if (_source == null && transform.parent != null) _source = transform.parent.GetComponent<SpriteRenderer>();
+            if (sourceOverride != null) _source = sourceOverride;
+            else if (_source == null && transform.parent != null) _source = transform.parent.GetComponent<SpriteRenderer>();
             _block ??= new MaterialPropertyBlock();
-            if (_shadow == null || _source == null || _source.sprite == null) return;
+            if (_shadow == null || _source == null) return;
+
+            if (sourceOverride != null)
+            {
+                transform.SetPositionAndRotation(_source.transform.position, _source.transform.rotation);
+                transform.localScale = _source.transform.lossyScale;
+                _shadow.enabled = _source.enabled;
+            }
+            if (_source.sprite == null) return;
 
             if (_shadow.sprite != _source.sprite) _shadow.sprite = _source.sprite;
             _shadow.flipX = _source.flipX;
@@ -59,7 +72,7 @@ namespace GN3.World
             _shadow.sortingLayerID = _source.sortingLayerID;
             _shadow.sortingOrder = ShadowSortingOrder;
 
-            float baseY = VisibleBottomY(_source);
+            float baseY = groundAnchor != null ? groundAnchor.position.y : VisibleBottomY(_source);
             if (Mathf.Approximately(baseY, _lastBaseY) && Mathf.Approximately(heightScale, _lastHeightScale)
                 && Mathf.Approximately(liftHeight, _lastLift)) return;
             _lastBaseY = baseY;
