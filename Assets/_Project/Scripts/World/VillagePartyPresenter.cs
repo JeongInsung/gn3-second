@@ -23,6 +23,10 @@ namespace GN3.World
     public class VillagePartyPresenter : MonoBehaviour
     {
         private const float AreaMargin = 0.4f;
+        // 화면 가장자리에서 발 위치까지의 여백(유닛). 위쪽은 몸(약 0.6) + 이름표만큼 넉넉히.
+        private const float ScreenMarginSide = 0.3f;
+        private const float ScreenMarginBottom = 0.15f;
+        private const float ScreenMarginTop = 0.8f;
         private const float HideNightLightFactor = 0.5f;
 
         // 용병들이 드나드는 여관 문(여관 그림 기준 비율, 왼쪽 아래 0). 512px 원본에서 아치문 중심 x≈206px, 디딤돌 y≈450px.
@@ -58,6 +62,7 @@ namespace GN3.World
         private Vector2 _villageExit;                                 // 파견대가 드나드는 마을 출구(화면 아래쪽 가운데)
         private readonly HashSet<string> _awayIds = new HashSet<string>(); // 파견 나가 있는 용병(돌아오면 출구에서 걸어 들어온다)
         private const float MarchGap = 0.4f;                          // 파견대가 한 줄로 나가는 간격
+        private const float ReturnSpacing = 2f;                       // 귀환대 간격 = MarchGap × 이 값(유닛, 성문 밖에서 한 명씩 더 뒤에서 출발)
         private readonly Dictionary<string, float> _nextDecision = new Dictionary<string, float>();
         private float _doorFreeAt;
 
@@ -75,6 +80,7 @@ namespace GN3.World
             Vector3 min = floor.transform.TransformPoint(local.min);
             Vector3 max = floor.transform.TransformPoint(local.max);
             _area = Rect.MinMaxRect(min.x + AreaMargin, min.y + AreaMargin, max.x - AreaMargin, max.y - AreaMargin);
+            ClampAreaToScreen();
 
             // 그림자 머티리얼은 Resources 밖에 있어 마을 건물에 이미 붙은 그림자의 것을 같이 쓴다.
             var anyShadow = FindFirstObjectByType<ProjectedShadow>();
@@ -93,6 +99,24 @@ namespace GN3.World
             TimeAdvanceController.Midpoint += ShuffleAfterTimeSkip;
             _subscribed = true;
             Refresh();
+        }
+
+        /// <summary>
+        /// 바닥 타일은 화면보다 넓게 깔려 있어 그대로 쓰면 용병이 화면 밖으로 걸어 나갔다. 시작 화면(= CameraZoom이 가두는
+        /// 가장 넓은 화면)과 겹치는 부분으로 줄이고, 몸·이름표가 잘리지 않게 발 위치 기준으로 안쪽 여백을 둔다.
+        /// 목적지·경로·마을 출구가 모두 이 영역에서 정해지므로 여기만 줄이면 된다.
+        /// </summary>
+        private void ClampAreaToScreen()
+        {
+            var cam = Camera.main;
+            if (cam == null || !cam.orthographic) return;
+            float halfHeight = cam.orthographicSize, halfWidth = halfHeight * cam.aspect;
+            Vector3 center = cam.transform.position;
+            float xMin = Mathf.Max(_area.xMin, center.x - halfWidth + ScreenMarginSide);
+            float xMax = Mathf.Min(_area.xMax, center.x + halfWidth - ScreenMarginSide);
+            float yMin = Mathf.Max(_area.yMin, center.y - halfHeight + ScreenMarginBottom);
+            float yMax = Mathf.Min(_area.yMax, center.y + halfHeight - ScreenMarginTop);
+            if (xMin < xMax && yMin < yMax) _area = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
         }
 
         /// <summary>
@@ -224,6 +248,7 @@ namespace GN3.World
 
         /// <summary>
         /// 파견대가 한 명씩 MarchGap초 간격으로 마을 출구까지 걸어 나가 사라진다. 여관 안에 있던 사람은 문에서 나와 출발한다.
+        /// 성벽 성문(CastleGate.Expedition)이 있으면 출구에서 멈추지 않고 성문을 지나 성벽 밖까지 걸어 나간 뒤 사라진다.
         /// 모두 자는 시간(자정~아침)이면 그냥 사라진다.
         /// </summary>
         private System.Collections.IEnumerator MarchOut(List<VillageWanderer> party)
@@ -242,7 +267,11 @@ namespace GN3.World
                     if (_hasInn) wanderer.PlaceAt(_innDoor); // 문간에서 출발 → 가장 가까운 바깥 칸으로 먼저 나온다
                 }
                 var leaving = wanderer;
-                wanderer.WalkAndVanish(_villageExit, () => { if (leaving != null) Destroy(leaving.gameObject); });
+                var gate = CastleGate.Expedition;
+                // 성문이 있으면 출구를 지나 성문으로 성벽 밖까지 걸어 나간다(가까이 가면 성문이 열린다).
+                wanderer.WalkAndVanish(_villageExit, () => { if (leaving != null) Destroy(leaving.gameObject); },
+                    gate != null ? gate.OutwardSteps : null);
+                if (gate != null) gate.Pass(wanderer.transform);
                 yield return new WaitForSeconds(MarchGap);
             }
         }
@@ -364,6 +393,7 @@ namespace GN3.World
                 StartCoroutine(MarchOut(departing));
             }
 
+            int returning = 0;
             foreach (var merc in present)
             {
                 if (_wanderers.ContainsKey(merc.Id)) continue;
@@ -379,7 +409,20 @@ namespace GN3.World
                 {
                     // 파견에서 돌아온 용병: 마을 출구에서 걸어 들어온다.
                     go.SetActive(true);
-                    wanderer.WalkInFrom(_villageExit, _grid.RandomWalkablePoint(_rng));
+                    var gate = CastleGate.Expedition;
+                    if (gate != null)
+                    {
+                        // 성벽 밖에서 성문으로 들어와 마을 출구를 거쳐 들어온다.
+                        // 함께 돌아온 사람은 한 명씩 더 바깥에서 출발해 겹치지 않고 한 줄로 들어온다.
+                        var approach = new List<Vector2>(gate.InwardSteps) { _villageExit };
+                        approach.Insert(0, approach[0] + Vector2.down * (MarchGap * ReturnSpacing * returning++));
+                        wanderer.WalkInFrom(approach, _grid.RandomWalkablePoint(_rng));
+                        gate.Pass(wanderer.transform);
+                    }
+                    else
+                    {
+                        wanderer.WalkInFrom(_villageExit, _grid.RandomWalkablePoint(_rng));
+                    }
                     _nextDecision[merc.Id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
                 }
                 else

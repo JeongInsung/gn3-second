@@ -332,15 +332,17 @@ namespace GN3.World
         /// (부른 쪽이 캐릭터를 끈다). 길이 없으면 바로 onEntered.
         /// </summary>
         public void ReturnInto(Vector2 outside, Vector2 door, System.Action onEntered) =>
-            WalkThenCall(outside, door, onEntered);
+            WalkThenCall(outside, new[] { door }, onEntered);
 
         /// <summary>
         /// target(예: 마을 출구)까지 길을 찾아 걸어간 뒤 onArrived를 부른다(부른 쪽이 캐릭터를 지우거나 끈다).
         /// 막힌 칸(여관 문간 등)에 서 있으면 가장 가까운 바깥 칸으로 먼저 걸어 나온다. 걷는 동안은 마우스로 고를 수 없다.
+        /// extraSteps가 있으면 target 다음에 길찾기 없이 그 지점들을 차례로 곧장 걷는다(성문을 지나 성벽 밖 등 걷기 격자 밖).
         /// </summary>
-        public void WalkAndVanish(Vector2 target, System.Action onArrived) => WalkThenCall(target, null, onArrived);
+        public void WalkAndVanish(Vector2 target, System.Action onArrived, IList<Vector2> extraSteps = null) =>
+            WalkThenCall(target, extraSteps, onArrived);
 
-        private void WalkThenCall(Vector2 target, Vector2? finalStep, System.Action onArrived)
+        private void WalkThenCall(Vector2 target, IList<Vector2> extraSteps, System.Action onArrived)
         {
             Vector2 here = transform.position;
             Vector2 start = _grid.NearestWalkable(here);
@@ -350,7 +352,7 @@ namespace GN3.World
                 return;
             }
             if (start != here) _path.Insert(0, start);
-            if (finalStep.HasValue) _path.Add(finalStep.Value);
+            if (extraSteps != null) _path.AddRange(extraSteps);
             _pathIndex = 0;
             _entering = true;
             _onEntered = onArrived;
@@ -360,16 +362,24 @@ namespace GN3.World
         }
 
         /// <summary>from(예: 마을 출구)에 나타나 to까지 걸어 들어온 뒤 평소처럼 돌아다닌다.</summary>
-        public void WalkInFrom(Vector2 from, Vector2 to)
+        public void WalkInFrom(Vector2 from, Vector2 to) => WalkInFrom(new[] { from }, to);
+
+        /// <summary>
+        /// approach[0](예: 성벽 밖)에 나타나 나머지 지점을 길찾기 없이 곧장 걸어 들어온 뒤(성문 → 마을 출구),
+        /// 마지막 지점에서 to까지 길을 찾아 걷고 평소처럼 돌아다닌다.
+        /// </summary>
+        public void WalkInFrom(IList<Vector2> approach, Vector2 to)
         {
             _entering = false;
             _onEntered = null;
+            Vector2 from = approach[0], entry = approach[approach.Count - 1];
             transform.position = new Vector3(from.x, from.y, transform.position.z);
-            if (!_grid.TryFindPath(_grid.NearestWalkable(from), to, _path))
+            if (!_grid.TryFindPath(_grid.NearestWalkable(entry), to, _path))
             {
                 _path.Clear();
                 _path.Add(to);
             }
+            for (int i = approach.Count - 1; i >= 1; i--) _path.Insert(0, approach[i]);
             _pathIndex = 0;
             FaceTowards(_path[0]);
             _walking = true;

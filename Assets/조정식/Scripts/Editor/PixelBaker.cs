@@ -20,7 +20,7 @@ namespace GN3.EditorTools
     public static class PixelBaker
     {
         internal const string BakedFolder = "Assets/조정식/Baked";
-        private static readonly string[] SourceFolders = { "Assets/조정식/Buildings/", "Assets/조정식/Decorations/" };
+        private static readonly string[] SourceFolders = { "Assets/조정식/Buildings/", "Assets/조정식/Decorations/", "Assets/조정식/성벽/" };
         internal const int ReferenceScreenHeight = 1080;
         private const float SharpenAmount = 0.6f;
 
@@ -72,7 +72,7 @@ namespace GN3.EditorTools
             return null;
         }
 
-        private static void Bake(SpriteRenderer renderer, string sourcePath, float screenPixelsPerUnit)
+        internal static void Bake(SpriteRenderer renderer, string sourcePath, float screenPixelsPerUnit)
         {
             var source = new Texture2D(2, 2);
             source.LoadImage(File.ReadAllBytes(sourcePath));

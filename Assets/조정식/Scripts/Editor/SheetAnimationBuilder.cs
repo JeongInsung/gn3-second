@@ -37,6 +37,8 @@ namespace GN3.EditorTools
         public float AlignBottomRatio = 1f;
         /// <summary>구운 프레임(화면 크기)을 받아 고정할 부분을 고치는 후처리. null이면 그대로.</summary>
         public System.Action<Color[][], int, int> PostProcess;
+        /// <summary>true면 키워드에 맞는 모든 오브젝트에 적용(화분처럼 같은 그림이 여러 개). false면 처음 찾은 하나만.</summary>
+        public bool ApplyToAll;
     }
 
     /// <summary>
@@ -61,15 +63,57 @@ namespace GN3.EditorTools
                 Debug.LogError($"[{settings.LogTag}] 직교(Orthographic) Main Camera가 필요합니다.");
                 return;
             }
-            var target = FindTarget(settings.TargetKeyword);
+            var targets = FindTargets(settings.TargetKeyword);
+            var target = targets.FirstOrDefault();
             if (target == null)
             {
                 Debug.LogError($"[{settings.LogTag}] 이름에 '{settings.TargetKeyword}'가 들어간 SpriteRenderer를 씬에서 찾지 못했습니다.");
                 return;
             }
 
+            var sprites = BakeFrames(settings, target, out Vector2 anchorPoint);
+            var controller = CreateAnimation(settings, sprites);
+            ApplyToScene(target, sprites[0], controller, anchorPoint);
+
+            int applied = 1;
+            if (settings.ApplyToAll)
+            {
+                foreach (var other in targets.Skip(1))
+                {
+                    // 이미 애니메이션이면 스프라이트 피벗이 곧 기준점이라 지금 위치를 그대로 쓴다(다시 재면 조금씩 밀린다).
+                    Vector2 otherAnchor = other.transform.position;
+                    if (!AssetDatabase.GetAssetPath(other.sprite).StartsWith(BakedAnimatedFolder + "/"))
+                        MeasureOpaqueArea(other, settings.Anchor, out otherAnchor, out _);
+                    ApplyToScene(other, sprites[0], controller, otherAnchor);
+                    applied++;
+                }
+            }
+
+            var rect = sprites[0].rect;
+            Debug.Log($"[{settings.LogTag}] {sprites.Length}프레임 {rect.width}x{rect.height}px, {settings.FramesPerSecond}fps 루프를 '{target.name}' 등 {applied}개에 적용했습니다.");
+        }
+
+        /// <summary>이미 구워 둔 "{outputName}@WxH.png" 스트립의 프레임들(순서대로). 없으면 null.</summary>
+        internal static Sprite[] LoadBakedFrames(string outputName)
+        {
+            if (!AssetDatabase.IsValidFolder(BakedAnimatedFolder)) return null;
+            var path = Directory.GetFiles(BakedAnimatedFolder, outputName + "@*.png").FirstOrDefault();
+            if (path == null) return null;
+            var sprites = AssetDatabase.LoadAllAssetsAtPath(path.Replace('\\', '/')).OfType<Sprite>()
+                .OrderBy(s => int.Parse(s.name.Substring(s.name.LastIndexOf('_') + 1)))
+                .ToArray();
+            return sprites.Length > 0 ? sprites : null;
+        }
+
+        /// <summary>
+        /// 시트를 잘라 정렬하고 target 그림의 자리·크기에 맞춰 1080p 크기로 구운 뒤 프레임 스프라이트들을 돌려준다(애니메이션·씬 적용은 안 함).
+        /// anchorPoint = 첫 프레임을 놓을 월드 기준점(스프라이트 피벗이 이 점에 오게 놓으면 기존 그림과 겹친다).
+        /// </summary>
+        internal static Sprite[] BakeFrames(SheetAnimationSettings settings, SpriteRenderer target, out Vector2 anchorPoint)
+        {
+            var cam = Camera.main;
             float screenPixelsPerUnit = PixelBaker.ReferenceScreenHeight / (cam.orthographicSize * 2f);
-            GetPlacement(settings, target, out Vector2 anchorPoint, out float targetWidth);
+            GetPlacement(settings, target, out anchorPoint, out float targetWidth);
 
             var sheet = LoadReadable(settings.SheetPath);
             var frames = ExtractAlignedFrames(sheet, settings, out int canvasWidth, out int canvasHeight, out int maxBboxWidth);
@@ -103,11 +147,7 @@ namespace GN3.EditorTools
             var pivot = settings.Anchor == SheetAnchor.Center
                 ? new Vector2(0.5f, 0.5f)
                 : new Vector2(0.5f, (float)CanvasMargin / canvasHeight);
-            var sprites = ImportStrip(stripPath, settings.OutputName, frameWidth, frameHeight, bakedFrames.Length, screenPixelsPerUnit, pivot);
-            var controller = CreateAnimation(settings, sprites);
-            ApplyToScene(target, sprites[0], controller, anchorPoint);
-
-            Debug.Log($"[{settings.LogTag}] {sprites.Length}프레임 {frameWidth}x{frameHeight}px, {settings.FramesPerSecond}fps 루프를 '{target.name}'에 적용했습니다.");
+            return ImportStrip(stripPath, settings.OutputName, frameWidth, frameHeight, bakedFrames.Length, screenPixelsPerUnit, pivot);
         }
 
         /// <summary>8프레임의 픽셀별 중앙값. 몇 프레임에만 나타나는 변화는 빠지고 대표 모양 하나가 남는다(고정할 부분에 쓴다).</summary>
@@ -130,13 +170,14 @@ namespace GN3.EditorTools
             return result;
         }
 
-        private static SpriteRenderer FindTarget(string keyword)
+        private static List<SpriteRenderer> FindTargets(string keyword)
         {
+            var result = new List<SpriteRenderer>();
             foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
             foreach (var renderer in root.GetComponentsInChildren<SpriteRenderer>(true))
                 if (renderer.name.Contains(keyword) && renderer.GetComponent<GN3.World.ProjectedShadow>() == null)
-                    return renderer;
-            return null;
+                    result.Add(renderer);
+            return result;
         }
 
         /// <summary>
@@ -353,6 +394,8 @@ namespace GN3.EditorTools
             importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.alphaIsTransparency = true;
             importer.spritePixelsPerUnit = pixelsPerUnit;
+            // 프레임을 가로로 이어 붙여 2048px(기본 최대)을 넘으면 Unity가 텍스처를 줄여 프레임이 작아졌다(성문 2384px → 2048px).
+            importer.maxTextureSize = 8192;
 
             var factory = new SpriteDataProviderFactories();
             factory.Init();
