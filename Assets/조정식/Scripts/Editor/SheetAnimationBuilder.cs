@@ -124,13 +124,26 @@ namespace GN3.EditorTools
             int frameWidth = Mathf.Max(1, Mathf.RoundToInt(canvasWidth * scale));
             int frameHeight = Mathf.Max(1, Mathf.RoundToInt(canvasHeight * scale));
 
+            var pivot = settings.Anchor == SheetAnchor.Center
+                ? new Vector2(0.5f, 0.5f)
+                : new Vector2(0.5f, (float)CanvasMargin / canvasHeight);
+            return BakeStrip(frames, settings.OutputName, frameWidth, frameHeight, screenPixelsPerUnit, pivot, settings.PostProcess);
+        }
+
+        /// <summary>
+        /// 원본 해상도 프레임들을 화면 크기(frameWidth×frameHeight)로 축소·샤픈해 가로 스트립 하나로 굽고 프레임 스프라이트로 임포트한다.
+        /// 넘긴 프레임 텍스처는 여기서 지운다. 결과 파일은 "{outputName}@WxH.png"(LoadBakedFrames가 찾는 이름).
+        /// </summary>
+        internal static Sprite[] BakeStrip(IList<Texture2D> frames, string outputName, int frameWidth, int frameHeight,
+            float screenPixelsPerUnit, Vector2 pivot, System.Action<Color[][], int, int> postProcess = null)
+        {
             var bakedFrames = new Color[frames.Count][];
             for (int i = 0; i < frames.Count; i++)
             {
                 bakedFrames[i] = PixelBaker.Sharpen(PixelBaker.AreaDownscale(frames[i], frameWidth, frameHeight), frameWidth, frameHeight);
                 Object.DestroyImmediate(frames[i]);
             }
-            settings.PostProcess?.Invoke(bakedFrames, frameWidth, frameHeight);
+            postProcess?.Invoke(bakedFrames, frameWidth, frameHeight);
 
             var strip = new Texture2D(frameWidth * frames.Count, frameHeight, TextureFormat.RGBA32, false);
             for (int i = 0; i < bakedFrames.Length; i++)
@@ -138,16 +151,13 @@ namespace GN3.EditorTools
             strip.Apply();
 
             EnsureFolder(BakedAnimatedFolder);
-            foreach (var old in Directory.GetFiles(BakedAnimatedFolder, settings.OutputName + "@*.png"))
+            foreach (var old in Directory.GetFiles(BakedAnimatedFolder, outputName + "@*.png"))
                 AssetDatabase.DeleteAsset(old.Replace('\\', '/'));
-            string stripPath = $"{BakedAnimatedFolder}/{settings.OutputName}@{frameWidth}x{frameHeight}.png";
+            string stripPath = $"{BakedAnimatedFolder}/{outputName}@{frameWidth}x{frameHeight}.png";
             File.WriteAllBytes(stripPath, strip.EncodeToPNG());
             Object.DestroyImmediate(strip);
 
-            var pivot = settings.Anchor == SheetAnchor.Center
-                ? new Vector2(0.5f, 0.5f)
-                : new Vector2(0.5f, (float)CanvasMargin / canvasHeight);
-            return ImportStrip(stripPath, settings.OutputName, frameWidth, frameHeight, bakedFrames.Length, screenPixelsPerUnit, pivot);
+            return ImportStrip(stripPath, outputName, frameWidth, frameHeight, bakedFrames.Length, screenPixelsPerUnit, pivot);
         }
 
         /// <summary>8프레임의 픽셀별 중앙값. 몇 프레임에만 나타나는 변화는 빠지고 대표 모양 하나가 남는다(고정할 부분에 쓴다).</summary>
@@ -472,7 +482,7 @@ namespace GN3.EditorTools
             EditorSceneManager.MarkSceneDirty(target.gameObject.scene);
         }
 
-        private static Texture2D LoadReadable(string path)
+        internal static Texture2D LoadReadable(string path)
         {
             var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             texture.LoadImage(File.ReadAllBytes(path));

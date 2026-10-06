@@ -16,7 +16,7 @@ namespace GN3.EditorTools
     /// 위·아래 변 = 성문, 좌우 변 = 길 폭만큼 비우고 양옆에 탑.
     ///
     /// 조각마다 발밑(아래 가운데)에 SortingGroup 부모를 두어 그림 높이가 달라도 발밑 높이로 앞뒤가 정해지게 한다
-    /// (스프라이트 피벗이 가운데라 그대로 두면 키 큰 탑·성문이 옆 벽 뒤로 숨었다). 위 변은 탑·성문이 벽 앞, 아래 변은 벽이 모서리·성문 앞, 좌우 변은 세로벽·탑·모서리를 같은 order로 둬 발밑 높이(아래일수록 앞)로 정한다.
+    /// (스프라이트 피벗이 가운데라 그대로 두면 키 큰 탑·성문이 옆 벽 뒤로 숨었다). 위 변은 탑·성문이 벽 앞, 아래 변은 벽이 성문 앞·모서리 탑 뒤, 좌우 변은 세로벽·탑·모서리를 같은 order로 둬 발밑 높이(아래일수록 앞)로 정한다.
     /// 바닥 타일을 바꾼 뒤 다시 누르면 새 가장자리에 맞춰 다시 놓는다. 마지막에 성벽 조각만 1080p 크기로 구워 선명하게 한다.
     /// 그룹은 Village 아래에 만들고 그 부분만 Village 프리팹에 Apply해 MainScene에도 나온다. 아래 성문에는 구워 둔 열림 프레임(CastleGate)을 붙인다.
     /// </summary>
@@ -27,7 +27,8 @@ namespace GN3.EditorTools
         private const string VillageName = "Village";
         private const int WallOrder = 1;
         private const int FeatureOrder = 2;    // 탑·성문·모서리·좌우 세로벽(같은 order끼리는 발밑이 낮을수록 앞)
-        private const int BottomWallOrder = 3; // 아래 변은 벽이 모서리·성문 위로(위 변은 기둥이 벽 위로)
+        private const int BottomWallOrder = 3; // 아래 변은 벽이 성문 위로(위 변은 기둥이 벽 위로)
+        private const int BottomCornerOrder = 4; // 아래 변 모서리 탑은 가로벽 앞
         private const float TowerFootOverlap = 0.3f; // 아래에서 올라와 탑에 닿는 세로벽이 탑 발밑(받침)을 덮는 높이
 
         // 조각 그림에서 잰 값(원본 px). 원본 PPU로 나눠 월드 크기로 쓴다.
@@ -74,8 +75,8 @@ namespace GN3.EditorTools
             float arm = CornerArmPx / ppu;
             float cornerLeftX = floor.xMin - arm + cornerWidth * 0.5f;
             float cornerRightX = floor.xMax + arm - cornerWidth * 0.5f;
-            placed.Add(Place(group, pieces.CornerBottomLeft, cornerLeftX, bottomBase, FeatureOrder));
-            placed.Add(Place(group, pieces.CornerBottomRight, cornerRightX, bottomBase, FeatureOrder));
+            placed.Add(Place(group, pieces.CornerBottomLeft, cornerLeftX, bottomBase, BottomCornerOrder));
+            placed.Add(Place(group, pieces.CornerBottomRight, cornerRightX, bottomBase, BottomCornerOrder));
             float cornerTop = bottomBase + pieces.CornerBottomLeft.bounds.size.y;
 
             // 위 모서리: 탑을 좌우 벽 줄 가운데에
