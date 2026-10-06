@@ -1,5 +1,6 @@
 using System.Collections;
 using GN3.Economy;
+using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.Save;
 using GN3.World;
@@ -39,6 +40,7 @@ namespace GN3.UI
             ConnectBuildings(canvas.transform, partyPanel, questPanel);
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
+            new GameObject("TrainingHallUI", typeof(TrainingHallUI)); // 훈련소 패널에 훈련 중·맡길 용병 목록
             QuestInfoPanel.Create();                              // 퀘스트 줄 클릭 → 상세 창
             GuildPanel.Create();                                  // 길드 건물·길드 글자 클릭 → 티어·수용 인원 창
             ArrivalPrompt.Create(partyPanel);                     // 목적지 도착 → 퀘스트마다 "자동 진행 / 직접 진행"
@@ -78,6 +80,7 @@ namespace GN3.UI
         private const string QuestBoardSpritePrefix = "오크 퀘스트 게시판";
         private const string BlacksmithSpritePrefix = "대장간 연기"; // 대장간 애니메이션 프레임 "대장간 연기_N"
         private const string GuildHallSpritePrefix = "쇠락한 모험가 길드 홀"; // 구운 "…@285x285" 포함
+        private const string TrainingHallSpritePrefix = "중세 마을 훈련소 건물";
 
         /// <summary>
         /// 마을 건물 클릭 연결(클릭 기능이 없는 물체는 실행 중에 붙인다).
@@ -97,6 +100,13 @@ namespace GN3.UI
                 // 대장간 → 건물 패널(무기상점, WeaponShop이 "대장간" 이름을 보고 상품 칸을 채운다)
                 var smithy = VillageProps.EnsureClickable(blacksmith);
                 smithy.SetInfo("대장간", "무기를 사서 용병에게 쥐여 줄 수 있습니다. 맞는 클래스가 들면 공격 보너스 ×1.5.");
+            }
+            var trainingHall = VillageProps.FindRenderer(TrainingHallSpritePrefix);
+            if (trainingHall != null)
+            {
+                // 훈련소 → 건물 패널(TrainingHallUI가 "훈련소" 이름을 보고 목록을 채운다)
+                VillageProps.EnsureClickable(trainingHall)
+                    .SetInfo("훈련소", $"용병들이 가끔 스스로 찾아와 {TrainingHall.MinSessionHours:0}~{TrainingHall.MaxSessionHours:0}시간 훈련하며 경험치를 얻습니다. (최대 {TrainingHall.Capacity}명)");
             }
 
             var buildingPanel = BuildingPanel.Create(canvasTransform);
@@ -160,6 +170,9 @@ namespace GN3.UI
             controller.Init(dayText, button);
             button.onClick.AddListener(controller.RequestAdvance);
 
+            // 가만히 둬도 흐르는 시간의 속도(1배속 ↔ 2배속)
+            controller.SetSpeedButton(CreateSkipButton(barGO.transform, "1배속", controller.ToggleSpeed));
+
             // 하루·4일·일주일 건너뛰기(끝나면 그동안의 보고서가 뜬다)
             var skipDay = CreateSkipButton(barGO.transform, "하루", () => controller.RequestSkipDays(1));
             var skipFour = CreateSkipButton(barGO.transform, "4일", () => controller.RequestSkipDays(4));
@@ -169,6 +182,9 @@ namespace GN3.UI
             // 저장(자정마다 자동 저장도 된다)
             CreateSkipButton(barGO.transform, "저장", () =>
                 ToastLog.Show(SaveSystem.Save() ? $"저장했습니다 ({GameClock.CurrentDay}일차)" : "저장에 실패했습니다"));
+
+            // 지나간 알림(왼쪽 아래 토스트) 다시 보기
+            CreateSkipButton(barGO.transform, "알림 기록", ToastHistoryPanel.Toggle);
         }
 
         private static Button CreateSkipButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick)
@@ -244,7 +260,7 @@ namespace GN3.UI
         private static IEnumerator FlashGold(Text text, Color flashColor)
         {
             const float Duration = 0.4f;
-            for (float t = 0f; t < Duration && text != null; t += Time.deltaTime)
+            for (float t = 0f; t < Duration && text != null; t += Time.unscaledDeltaTime)
             {
                 text.color = Color.Lerp(flashColor, UITheme.TitleText, t / Duration);
                 yield return null;

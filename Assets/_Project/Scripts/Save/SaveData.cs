@@ -19,6 +19,7 @@ namespace GN3.Save
 
         public List<MercenarySave> party = new List<MercenarySave>();
         public List<ExpeditionSave> expeditions = new List<ExpeditionSave>();
+        public List<string> trainees = new List<string>(); // 훈련소에 맡긴 용병 id(예전 저장엔 없어 빈 목록)
     }
 
     [Serializable]
@@ -34,6 +35,8 @@ namespace GN3.Save
         public bool rarePassive;
         public int health;
         public string weapon; // 무기 이름(없으면 빈 문자열)
+        public int fatigue;
+        public int morale = 70; // 예전 저장엔 없어 기본값으로 읽힌다
 
         // 외형: 파츠 이름 ↔ 출처 캐릭터(사전은 JsonUtility가 못 써서 두 목록으로)
         public string bodyCharacter;

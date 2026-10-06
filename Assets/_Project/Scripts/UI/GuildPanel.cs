@@ -118,6 +118,7 @@ namespace GN3.UI
             var sb = new StringBuilder();
             sb.Append($"<b>수용 인원</b>   파티 {count} / {party.MaxSize}명  (마을 {total - away} · 파견 중 {away}){full}\n\n");
 
+            sb.Append($"<b>주급</b>   합계 {MercenaryCondition.TotalWeeklyWage()}G · 다음 지급 {MercenaryCondition.NextPayday}일차 자정\n\n");
             sb.Append("<b>지금 해금</b>\n");
             sb.Append($"  퀘스트 최고 {current.MaxQuestGrade}급 · 용병 최고 {current.MaxMercGrade}급\n");
             sb.Append($"  시장 Lv.{current.MarketMinLevel}~{current.MarketMaxLevel} · 파티 정원 {current.PartySize}명\n\n");

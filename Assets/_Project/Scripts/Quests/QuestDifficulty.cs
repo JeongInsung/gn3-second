@@ -79,7 +79,7 @@ namespace GN3.Quests
         /// <summary>지금 보낼 수 있는 용병(살아 있고 파견 중 아님) 중 전투력 높은 순으로 최대 파견 인원만큼 더한 값.</summary>
         public static int BestTeamPower(Quest quest) =>
             PlayerParty.Instance.Members
-                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m))
+                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m) && !m.IsExhausted)
                 .Select(m => m.CombatPower)
                 .OrderByDescending(p => p)
                 .Take(quest.MaxDispatchSize)

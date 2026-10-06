@@ -25,7 +25,7 @@ namespace GN3.Mercenaries
         /// <summary>들고 있는 무기(없으면 맨손). 대장간에서 사서 쥐여 준다.</summary>
         public WeaponItem Weapon { get; private set; }
 
-        /// <summary>클래스·레벨 → 등급 배율 → 성격 보정 → 무기 보너스(고정값) 순으로 계산한 현재 능력치.</summary>
+        /// <summary>클래스·레벨 → 등급 배율 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어만) 순으로 계산한 현재 능력치.</summary>
         public CombatStats CurrentStats
         {
             get
@@ -38,8 +38,51 @@ namespace GN3.Mercenaries
                     stats.Defense += Weapon.Defense;
                     stats.MoveSpeed = Math.Max(0, stats.MoveSpeed + Weapon.Speed);
                 }
+                // 지치거나 사기가 낮으면 공격·방어가 깎인다(최대 체력은 그대로라 체력 계산이 꼬이지 않는다).
+                float condition = ConditionMultiplier;
+                if (condition < 1f)
+                {
+                    stats.Attack = (int)Math.Round(stats.Attack * condition);
+                    stats.Defense = (int)Math.Round(stats.Defense * condition);
+                }
                 return stats;
             }
+        }
+
+        // ---------- 피로·사기 (규칙·수치는 MercenaryCondition) ----------
+
+        public const int MaxCondition = 100;
+        public const int StartingMorale = 70;
+        public const int TiredFatigue = 50;      // 이상이면 공격·방어 -10%
+        public const int ExhaustedFatigue = 80;  // 이상이면 -25%, 파견·훈련 불가
+        public const int LowMorale = 30;         // 미만이면 공격·방어 -10%
+
+        /// <summary>피로 0~100. 파견·전투·훈련으로 오르고 마을에서 자면 내린다.</summary>
+        public int Fatigue { get; private set; }
+        /// <summary>사기 0~100. 승리·급여로 오르고 패배·동료 전사·미지급으로 내린다. 0이면 길드를 떠난다.</summary>
+        public int Morale { get; private set; } = StartingMorale;
+
+        public bool IsExhausted => Fatigue >= ExhaustedFatigue;
+
+        /// <summary>피로·사기에 따른 공격·방어 배율(1 = 정상).</summary>
+        public float ConditionMultiplier
+        {
+            get
+            {
+                float m = Fatigue >= ExhaustedFatigue ? 0.75f : Fatigue >= TiredFatigue ? 0.9f : 1f;
+                if (Morale < LowMorale) m *= 0.9f;
+                return m;
+            }
+        }
+
+        public void AddFatigue(int amount) => Fatigue = Math.Clamp(Fatigue + amount, 0, MaxCondition);
+        public void AddMorale(int amount) => Morale = Math.Clamp(Morale + amount, 0, MaxCondition);
+
+        /// <summary>저장 파일에서 불러올 때 피로·사기를 되돌린다.</summary>
+        public void RestoreCondition(int fatigue, int morale)
+        {
+            Fatigue = Math.Clamp(fatigue, 0, MaxCondition);
+            Morale = Math.Clamp(morale, 0, MaxCondition);
         }
 
         /// <summary>무기를 든다. 들고 있던 무기는 버린다(되팔기 없음).</summary>
