@@ -147,6 +147,9 @@ namespace GN3.UI
             building.SetHover(false);
             gameObject.SetActive(true);
             Opened?.Invoke(this, building);
+            // 처음 열 때 판·제목·버튼이 다음 테마 스캔까지 기본색으로 보여 한 번 반짝이지 않게, 레이아웃을 잡고 바로 테마를 입힌다.
+            LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)transform);
+            UIThemeApplier.ApplyNow(transform);
         }
 
         public void Close()

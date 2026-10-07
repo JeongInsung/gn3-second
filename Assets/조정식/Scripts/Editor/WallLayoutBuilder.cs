@@ -13,7 +13,7 @@ namespace GN3.EditorTools
     /// 성벽 조각(Assets/조정식/성벽)으로 활성 씬 바닥 타일(Floor Grid)의 가장자리를 둘러싼다.
     /// 벽은 바닥 바깥쪽에 가장자리에 딱 붙여 놓는다(위 변 = 벽 아래면이 가장자리, 아래 변 = 벽 윗면이 가장자리, 좌우 = 벽 안쪽 면이 가장자리).
     /// 아래 두 모서리는 꺾인 조각, 위 두 모서리는 탑(세트에 위쪽 꺾임이 없다), 길이 바닥 밖으로 나가는 곳은
-    /// 위·아래 변 = 성문, 좌우 변 = 길 폭만큼 비우고 양옆에 탑.
+    /// 위·아래 변 = 성문, 좌우 변 = 막힌 성벽(SideExits를 켜면 길 폭만큼 비우고 양옆에 탑).
     ///
     /// 조각마다 발밑(아래 가운데)에 SortingGroup 부모를 두어 그림 높이가 달라도 발밑 높이로 앞뒤가 정해지게 한다
     /// (스프라이트 피벗이 가운데라 그대로 두면 키 큰 탑·성문이 옆 벽 뒤로 숨었다). 위 변은 탑·성문이 벽 앞, 아래 변은 벽이 성문 앞·모서리 탑 뒤, 좌우 변은 세로벽·탑·모서리를 같은 order로 둬 발밑 높이(아래일수록 앞)로 정한다.
@@ -37,6 +37,7 @@ namespace GN3.EditorTools
         private const float CornerArmPx = 125f;        // 꺾인 모서리 조각의 세로 팔 두께(바깥 끝에서)
         private const float CornerTopPx = 130f;        // 모서리 조각 세로 팔 위쪽 중 세로벽이 겹쳐 올라탈 수 있는 부분
         private const float Gap = 0.15f;               // 길 양옆 탑과 길 사이 여유
+        private static readonly bool SideExits = false;         // 좌우 변은 길이 닿아도 출구 없이 막는다(true면 길 폭만큼 비우고 양옆에 탑)
 
         private class Pieces
         {
@@ -106,7 +107,7 @@ namespace GN3.EditorTools
             float endBelowTower = TowerFootOverlap - pieces.Vertical.bounds.size.y; // 탑 발밑 기준, 마지막 세로벽 발밑 위치
             foreach (var (x, road) in new[] { (leftColumnX, roads.Left), (rightColumnX, roads.Right) })
             {
-                if (road.HasValue)
+                if (SideExits && road.HasValue)
                 {
                     var (roadMin, roadMax) = road.Value;
                     float lowerTowerBase = roadMin - Gap - towerHeight; // 탑 꼭대기가 길 아래 가장자리 밑 → 길이 가려지지 않는다

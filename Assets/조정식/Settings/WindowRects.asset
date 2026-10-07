@@ -118,10 +118,10 @@ MonoBehaviour:
     - serializedVersion: 2
       x: 0.0977
       y: 0.5078
-      width: 0.0820
+      width: 0.082
       height: 0.0742
     - serializedVersion: 2
-      x: 0.3750
+      x: 0.375
       y: 0.5195
       width: 0.0781
       height: 0.0664
@@ -155,4 +155,116 @@ MonoBehaviour:
       y: 0.2188
       width: 0.1641
       height: 0.0586
+    forgeIndices: 
+  - sourceName: "\uC911\uC138 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC758 \uC18C\uBC15\uD55C
+      \uCD08\uAC00\uC9D1-2"
+    windows:
+    - serializedVersion: 2
+      x: 0.2813
+      y: 0.2773
+      width: 0.0313
+      height: 0.043
+    - serializedVersion: 2
+      x: 0.625
+      y: 0.2773
+      width: 0.028
+      height: 0.043
+    forgeIndices: 
+  - sourceName: "\uC5F0\uD68C\uC0C9 \uC9C0\uBD95\uC758 \uC911\uC138 \uB9C8\uC744\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.50609756
+      y: 0.5062552
+      width: 0.055640243
+      height: 0.06672227
+    - serializedVersion: 2
+      x: 0.27896342
+      y: 0.26855713
+      width: 0.057164636
+      height: 0.07005838
+    - serializedVersion: 2
+      x: 0.71875
+      y: 0.26855713
+      width: 0.057164636
+      height: 0.07005838
+    forgeIndices: 
+  - sourceName: "\uD68C\uC0C9 \uC9C0\uBD95\uC758 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.43607706
+      y: 0.5251046
+      width: 0.07530648
+      height: 0.087866105
+    - serializedVersion: 2
+      x: 0.5954466
+      y: 0.24058577
+      width: 0.06129597
+      height: 0.087866105
+    - serializedVersion: 2
+      x: 0.16112085
+      y: 0.24058577
+      width: 0.04553415
+      height: 0.06903765
+    forgeIndices: 
+  - sourceName: "\uCCAD\uB85D \uC9C0\uBD95\uC758 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.24520256
+      y: 0.48377126
+      width: 0.08315565
+      height: 0.06800618
+    - serializedVersion: 2
+      x: 0.5586354
+      y: 0.47913447
+      width: 0.09168444
+      height: 0.07264297
+    - serializedVersion: 2
+      x: 0.5948827
+      y: 0.1854714
+      width: 0.08528785
+      height: 0.064914994
+    forgeIndices: 
+  - sourceName: "\uBCF4\uB77C \uC9C0\uBD95\uC758 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.22446044
+      y: 0.21463415
+      width: 0.0705036
+      height: 0.08292683
+    - serializedVersion: 2
+      x: 0.75107914
+      y: 0.21300814
+      width: 0.05755396
+      height: 0.06666667
+    forgeIndices: 
+  - sourceName: "\uBD89\uC740 \uC9C0\uBD95\uC758 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.33520338
+      y: 0.2872807
+      width: 0.06311361
+      height: 0.08991228
+    - serializedVersion: 2
+      x: 0.7755961
+      y: 0.28289473
+      width: 0.053295933
+      height: 0.098684214
+    forgeIndices: 
+  - sourceName: "\uC911\uC138 \uB9C8\uC744 \uD6C8\uB828\uC18C \uAC74\uBB3C"
+    windows:
+    - serializedVersion: 2
+      x: 0.47915143
+      y: 0.5230566
+      width: 0.04023409
+      height: 0.0974967
+    - serializedVersion: 2
+      x: 0.18873446
+      y: 0.20816864
+      width: 0.042428676
+      height: 0.13570487
+    - serializedVersion: 2
+      x: 0.7776152
+      y: 0.21212122
+      width: 0.043891735
+      height: 0.13175231
     forgeIndices: 

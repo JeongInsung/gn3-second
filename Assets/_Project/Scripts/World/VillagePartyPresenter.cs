@@ -61,6 +61,18 @@ namespace GN3.World
         private Vector2 _innExit;
         private Vector2 _villageExit;                                 // 파견대가 드나드는 마을 출구(화면 아래쪽 가운데)
         private readonly HashSet<string> _awayIds = new HashSet<string>(); // 파견 나가 있는 용병(돌아오면 출구에서 걸어 들어온다)
+        private readonly HashSet<string> _trainingIds = new HashSet<string>(); // 훈련소에 들어간 용병(훈련을 끝내면 훈련소 문에서 나온다)
+        private const string TrainingHallSpritePrefix = "중세 마을 훈련소 건물";
+        private bool _hasTrainingHall;
+        private Vector2 _trainingDoor;
+        private Vector2 _trainingExit;
+        // 훈련소 스스로 가기: 밖에 나와 걷는 용병마다 TrainingRoll초마다 TrainingChance 확률로 1~3시간 훈련하러 간다(밤엔 안 감).
+        private const float TrainingRollMin = 60f;
+        private const float TrainingRollMax = 120f;
+        private const float FirstTrainingRollMin = 30f;
+        private const float FirstTrainingRollMax = 90f;
+        private const float TrainingChance = 0.15f;
+        private readonly Dictionary<string, float> _nextTrainingRoll = new Dictionary<string, float>();
         private const float MarchGap = 0.4f;                          // 파견대가 한 줄로 나가는 간격
         private const float ReturnSpacing = 2f;                       // 귀환대 간격 = MarchGap × 이 값(유닛, 성문 밖에서 한 명씩 더 뒤에서 출발)
         private readonly Dictionary<string, float> _nextDecision = new Dictionary<string, float>();
@@ -92,10 +104,12 @@ namespace GN3.World
             VillageDepthSorter.Apply(obstacles);            // 건물·장식과 캐릭터의 앞뒤를 발밑 높이로 정한다
             _tagLayer = CreateNameTagLayer();
             FindInnDoor();
+            FindTrainingHallDoor();
             _infoPanel = MercenaryInfoPanel.Create(transform);
 
             PlayerParty.Instance.OnChanged += Refresh;
             ExpeditionLog.Instance.OnChanged += Refresh;
+            TrainingHall.OnChanged += Refresh;
             TimeAdvanceController.Midpoint += ShuffleAfterTimeSkip;
             _subscribed = true;
             Refresh();
@@ -170,6 +184,7 @@ namespace GN3.World
                 if (IsAllOutTime()) BringEveryoneOut();
                 else UpdateInnVisits();
             }
+            if (!_hidden && _hasTrainingHall) UpdateTrainingVisits();
 
             UpdateHoverAndClick();
             CloseInfoIfGone();
@@ -195,6 +210,17 @@ namespace GN3.World
         /// 낮 동안 용병마다 정해진 시각이 되면 주사위를 굴린다: 안에 있으면 나올지, 밖에 있으면 들어갈지.
         /// 안 = GameObject 꺼짐. 들어가는 중인 용병은 건드리지 않는다.
         /// </summary>
+        /// <summary>훈련소 그림의 아래 가운데(발밑)를 문으로, 그 아래 처음 걸을 수 있는 지점을 문 앞으로 정한다. 없으면 훈련 드나들기 연출 없음.</summary>
+        private void FindTrainingHallDoor()
+        {
+            var renderer = VillageProps.FindRenderer(TrainingHallSpritePrefix);
+            if (renderer == null) return;
+            var bounds = renderer.bounds;
+            _trainingDoor = new Vector2(bounds.center.x, bounds.min.y + bounds.size.y * 0.08f);
+            _trainingExit = _grid.FirstWalkableBelow(_trainingDoor);
+            _hasTrainingHall = true;
+        }
+
         /// <summary>9시~자정: 전원 밖. 게임 시계 기준이라 "진행" 전환이 끝나 9시가 된 뒤에 나온다(새벽은 _hidden이 먼저 처리).</summary>
         private static bool IsAllOutTime() => GameClock.CurrentHour >= AllOutHour;
 
@@ -210,6 +236,31 @@ namespace GN3.World
                 wanderer.ExitBuilding(_innDoor, _innExit);
                 _doorFreeAt = now + DoorGap;
                 return; // 한 번에 한 명
+            }
+        }
+
+        /// <summary>
+        /// 밖에 나와 걷고 있는 용병이 가끔 스스로 훈련소에 간다. 사람마다 결정 시각이 되면 TrainingChance 확률로
+        /// TrainingHall에 1~3시간 훈련을 등록하고, 등록되면 Refresh가 훈련소 문까지 걸어 들어가게 한다. 밤·정원 초과면 TrainingHall이 거절한다.
+        /// </summary>
+        private void UpdateTrainingVisits()
+        {
+            if (GameClock.IsNight || TrainingHall.IsFull) return;
+            float now = Time.time;
+            foreach (var pair in _wanderers.ToList())
+            {
+                var wanderer = pair.Value;
+                if (wanderer == null || !wanderer.gameObject.activeSelf || wanderer.IsEntering) continue;
+                if (!_nextTrainingRoll.TryGetValue(pair.Key, out float at))
+                {
+                    _nextTrainingRoll[pair.Key] = now + RandomRange(FirstTrainingRollMin, FirstTrainingRollMax);
+                    continue;
+                }
+                if (now < at) continue;
+                _nextTrainingRoll[pair.Key] = now + RandomRange(TrainingRollMin, TrainingRollMax);
+                if (_rng.NextDouble() >= TrainingChance || !_mercById.TryGetValue(pair.Key, out var merc)) continue;
+                float hours = RandomRange(TrainingHall.MinSessionHours, TrainingHall.MaxSessionHours);
+                if (TrainingHall.TryAdd(merc, hours)) return; // 한 번에 한 명(Refresh가 _wanderers를 바꾼다)
             }
         }
 
@@ -329,6 +380,7 @@ namespace GN3.World
             if (!_subscribed) return;
             PlayerParty.Instance.OnChanged -= Refresh;
             ExpeditionLog.Instance.OnChanged -= Refresh;
+            TrainingHall.OnChanged -= Refresh;
             TimeAdvanceController.Midpoint -= ShuffleAfterTimeSkip;
         }
 
@@ -362,7 +414,7 @@ namespace GN3.World
         private void Refresh()
         {
             var present = PlayerParty.Instance.Members
-                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m))
+                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m))
                 .ToList();
 
             var departing = new List<VillageWanderer>();
@@ -377,6 +429,19 @@ namespace GN3.World
                     _awayIds.Add(id);
                     departingQuest ??= ExpeditionLog.Instance.FindQuest(merc)?.Title;
                     if (wanderer != null) departing.Add(wanderer);
+                }
+                else if (merc != null && merc.IsAlive && TrainingHall.IsTraining(merc))
+                {
+                    // 훈련 시작: 밖에 나와 있으면 훈련소 문으로 걸어 들어가 사라진다.
+                    _trainingIds.Add(id);
+                    if (wanderer != null)
+                    {
+                        var entering = wanderer;
+                        if (_hasTrainingHall && entering.gameObject.activeSelf)
+                            entering.ReturnInto(_trainingExit, _trainingDoor, () => { if (entering != null) Destroy(entering.gameObject); });
+                        else
+                            Destroy(entering.gameObject);
+                    }
                 }
                 else if (wanderer != null)
                 {
@@ -405,7 +470,14 @@ namespace GN3.World
                 wanderer.OwnerId = merc.Id;
                 _mercById[merc.Id] = merc;
                 // 여관이 있으면 새로 온 용병은 여관 안에서 시작해 곧 무작위로 나온다.
-                if (_awayIds.Remove(merc.Id) && !_hidden)
+                if (_trainingIds.Remove(merc.Id) && _hasTrainingHall && !_hidden)
+                {
+                    // 훈련을 마친 용병: 훈련소 문에서 걸어 나온다.
+                    go.SetActive(true);
+                    wanderer.ExitBuilding(_trainingDoor, _trainingExit);
+                    _nextDecision[merc.Id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
+                }
+                else if (_awayIds.Remove(merc.Id) && !_hidden)
                 {
                     // 파견에서 돌아온 용병: 마을 출구에서 걸어 들어온다.
                     go.SetActive(true);

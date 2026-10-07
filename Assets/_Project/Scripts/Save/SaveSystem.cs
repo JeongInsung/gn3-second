@@ -84,6 +84,8 @@ namespace GN3.Save
                     rarePassive = merc.HasRarePassive,
                     health = merc.CurrentHealth,
                     weapon = merc.Weapon != null ? merc.Weapon.Name : "",
+                    fatigue = merc.Fatigue,
+                    morale = merc.Morale,
                     bodyCharacter = merc.Appearance.BodyCharacter,
                 };
                 foreach (var pair in merc.Appearance.PartSources)
@@ -111,6 +113,7 @@ namespace GN3.Save
                 e.memberIds.AddRange(expedition.Members.Where(m => m.IsAlive).Select(m => m.Id));
                 data.expeditions.Add(e);
             }
+            data.trainees = TrainingHall.SaveIds();
             return data;
         }
 
@@ -157,6 +160,7 @@ namespace GN3.Save
                     (MercenaryGrade)m.grade, m.id);
                 var weapon = string.IsNullOrEmpty(m.weapon) ? null : WeaponCatalog.All.FirstOrDefault(w => w.Name == m.weapon);
                 merc.RestoreState(m.experience, m.health, weapon);
+                merc.RestoreCondition(m.fatigue, m.morale);
                 mercs.Add(merc);
             }
 
@@ -179,6 +183,7 @@ namespace GN3.Save
 
             foreach (var merc in mercs)
                 PlayerParty.Instance.RestoreAdd(merc);
+            TrainingHall.Restore(data.trainees);
 
             OnLoaded?.Invoke();
             return true;

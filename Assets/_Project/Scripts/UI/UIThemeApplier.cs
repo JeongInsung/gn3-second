@@ -21,6 +21,19 @@ namespace GN3.UI
 
         private readonly HashSet<int> _done = new HashSet<int>();
         private float _timer;
+        private static UIThemeApplier _instance;
+
+        private void Awake() => _instance = this;
+
+        /// <summary>
+        /// root 아래 UI에 지금 바로 테마를 입힌다. 막 만든 목록·처음 연 창이 다음 스캔(최대 0.2초)까지 기본색으로 보여
+        /// 한 번 반짝이던 것을 막는다. 레이아웃을 계산한 뒤에 부른다(크기 0인 칸은 다음 스캔으로 넘어간다).
+        /// </summary>
+        public static void ApplyNow(Transform root)
+        {
+            if (_instance == null || root == null) return;
+            _instance.ApplyUnder(root);
+        }
 
         private void Update()
         {
@@ -31,15 +44,20 @@ namespace GN3.UI
             foreach (var canvas in FindObjectsByType<Canvas>(FindObjectsSortMode.None))
             {
                 if (!canvas.isRootCanvas) continue;
-                foreach (var graphic in canvas.GetComponentsInChildren<Graphic>(true))
-                {
-                    int id = graphic.GetInstanceID();
-                    if (_done.Contains(id)) continue;
-                    bool finished = graphic is Image image ? ApplyImage(image)
-                        : graphic is Text text ? ApplyText(text)
-                        : true;
-                    if (finished) _done.Add(id);
-                }
+                ApplyUnder(canvas.transform);
+            }
+        }
+
+        private void ApplyUnder(Transform root)
+        {
+            foreach (var graphic in root.GetComponentsInChildren<Graphic>(true))
+            {
+                int id = graphic.GetInstanceID();
+                if (_done.Contains(id)) continue;
+                bool finished = graphic is Image image ? ApplyImage(image)
+                    : graphic is Text text ? ApplyText(text)
+                    : true;
+                if (finished) _done.Add(id);
             }
         }
 

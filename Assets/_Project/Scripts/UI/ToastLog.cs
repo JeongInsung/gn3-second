@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using GN3.World;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,12 +8,34 @@ namespace GN3.UI
 {
     /// <summary>
     /// 화면 왼쪽 아래에 잠깐 떴다 사라지는 알림(파견 출발·귀환, 보상, 회복, 습격, 골드 부족 등).
-    /// 최대 4줄을 아래에서 위로 쌓고, 각 줄은 5초 뒤 서서히 사라진다. 클릭을 막지 않는다.
+    /// 최대 4줄을 아래에서 위로 쌓고, 각 줄은 3초 뒤 서서히 사라진다. 클릭을 막지 않는다.
+    /// 띄운 알림은 History에 남아 "알림 기록" 창(ToastHistoryPanel)에서 다시 볼 수 있다(한 판 동안, 저장 안 함).
     /// </summary>
     public class ToastLog : MonoBehaviour
     {
         private const int MaxLines = 4;
-        private const float LifeSeconds = 5f;
+        private const float LifeSeconds = 3f;
+        private const int MaxHistory = 200;
+
+        public struct Entry
+        {
+            public int Day;
+            public float Hour;
+            public string Message;
+        }
+
+        private static readonly List<Entry> _history = new List<Entry>();
+        /// <summary>지금까지 띄운 알림(오래된 것부터, 최근 200개).</summary>
+        public static IReadOnlyList<Entry> History => _history;
+        public static event System.Action Added;
+
+        // Domain Reload가 꺼져 있어도 Play마다 기록을 비운다(GameClock과 같은 방식).
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlaySession()
+        {
+            _history.Clear();
+            Added = null;
+        }
         private const float FadeSeconds = 0.6f;
         private const float Width = 520f;
 
@@ -23,8 +46,11 @@ namespace GN3.UI
         public static void Show(string message)
         {
             if (string.IsNullOrEmpty(message)) return;
+            _history.Add(new Entry { Day = GameClock.CurrentDay, Hour = GameClock.CurrentHour, Message = message });
+            if (_history.Count > MaxHistory) _history.RemoveAt(0);
             if (_instance == null) _instance = Create();
             _instance.Add(message);
+            Added?.Invoke();
         }
 
         private static ToastLog Create()
@@ -96,9 +122,9 @@ namespace GN3.UI
 
         private IEnumerator Expire(GameObject line)
         {
-            yield return new WaitForSeconds(LifeSeconds);
+            yield return new WaitForSecondsRealtime(LifeSeconds); // 2배속(timeScale)이어도 알림은 같은 시간 떠 있게
             var group = line != null ? line.GetComponent<CanvasGroup>() : null;
-            for (float t = 0f; t < FadeSeconds && group != null; t += Time.deltaTime)
+            for (float t = 0f; t < FadeSeconds && group != null; t += Time.unscaledDeltaTime)
             {
                 group.alpha = 1f - t / FadeSeconds;
                 yield return null;

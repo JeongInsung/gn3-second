@@ -72,6 +72,7 @@ namespace GN3.Quests
             int xp = 40 + 20 * (int)questGrade;
             if (!battle.Victory) xp /= 2;
             var levelUps = GrantExperience(expedition.Members.Where(m => m.IsAlive), xp);
+            MercenaryCondition.AfterBattle(expedition.Members.Where(m => m.IsAlive), battle.Victory, fallen.Count); // 피로·사기
             summary += $" · 경험치 +{xp}";
 
             string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));

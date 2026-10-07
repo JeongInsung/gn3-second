@@ -49,6 +49,7 @@ namespace GN3.UI
         public static void EndList(BuildingPanel panel)
         {
             LayoutRebuilder.ForceRebuildLayoutImmediate(panel.ItemListContent);
+            UIThemeApplier.ApplyNow(panel.ItemListContent); // 기본색으로 만든 줄·버튼에 바로 테마(안 하면 한 번 반짝인다)
             var scroll = panel.ItemListContent.GetComponentInParent<ScrollRect>();
             if (scroll != null) scroll.verticalNormalizedPosition = 1f;
         }

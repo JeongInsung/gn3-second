@@ -9,6 +9,10 @@ namespace GN3.World
     {
         public const float StartHour = 6f;
         public const float HoursPerStep = 3f;
+        public const float NightStartHour = 22f; // 밤 10시 ~ 오전 5시는 출전(파견 시작) 불가
+        public const float NightEndHour = 5f;
+
+        public static bool IsNight => CurrentHour >= NightStartHour || CurrentHour < NightEndHour;
 
         public static int CurrentDay { get; private set; } = 1;
 
@@ -17,9 +21,12 @@ namespace GN3.World
 
         public static event Action OnDayAdvanced;
         public static event Action OnTimeAdvanced;
+        /// <summary>게임 시간이 흐를 때마다(저절로 흐르기·진행·건너뛰기 모두) 흐른 시간(시)으로 불린다. 훈련처럼 시간에 비례하는 것들이 구독한다.</summary>
+        public static event Action<float> OnHoursPassed;
 
         public static void AdvanceTime()
         {
+            OnHoursPassed?.Invoke(HoursPerStep);
             CurrentHour += HoursPerStep;
             if (CurrentHour >= 24f)
             {
@@ -27,6 +34,22 @@ namespace GN3.World
                 AdvanceDay();
             }
             OnTimeAdvanced?.Invoke();
+        }
+
+        /// <summary>
+        /// 시간을 조금씩 흘린다(가만히 둬도 흐르는 시간, TimeAdvanceController가 매 프레임 부른다). 자정을 넘으면 하루가 지난다.
+        /// OnTimeAdvanced는 3시간 진행 때만 부르므로 여기서는 부르지 않는다.
+        /// </summary>
+        public static void AdvanceHours(float hours)
+        {
+            if (hours <= 0f) return;
+            OnHoursPassed?.Invoke(hours);
+            CurrentHour += hours;
+            while (CurrentHour >= 24f)
+            {
+                CurrentHour -= 24f;
+                AdvanceDay();
+            }
         }
 
         /// <summary>저장 파일에서 불러올 때. 일차·시각을 맞추고 OnTimeAdvanced로 화면(낮/밤·시각 표시)만 갱신한다(하루 경과 처리는 없음).</summary>
@@ -51,6 +74,7 @@ namespace GN3.World
             CurrentHour = StartHour;
             OnDayAdvanced = null;
             OnTimeAdvanced = null;
+            OnHoursPassed = null;
         }
     }
 }

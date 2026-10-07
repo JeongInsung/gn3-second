@@ -1,4 +1,4 @@
-using GN3.Quests;
+using GN3.World;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -6,51 +6,58 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 하루(또는 건너뛴 여러 날)가 지난 뒤 날짜별로 파견 진행 상황과 있었던 일(DailyLog)을 보여 주는 보고서 창.
-    /// 화면 가운데 판(끌어 옮기기 가능), 스크롤 본문, "확인" 버튼·ESC로 닫는다. 테마는 UIThemeApplier가 입힌다.
+    /// 왼쪽 아래에 잠깐 떴다 사라진 알림(ToastLog)을 다시 보는 창. 최신이 위, "N일차 시각 · 메시지".
+    /// 상단 바의 "알림 기록" 버튼으로 열고 닫는다(닫기 버튼·ESC도 됨). 열려 있는 동안 새 알림이 오면 바로 추가된다.
+    /// 모양은 하루 보고서(DayReportPanel)와 같고 테마는 UIThemeApplier가 입힌다.
     /// </summary>
-    public class DayReportPanel : MonoBehaviour
+    public class ToastHistoryPanel : MonoBehaviour
     {
         private const float Width = 600f;
         private const float Height = 460f;
-        private static readonly Color AlertText = new Color(0.95f, 0.6f, 0.35f);
 
-        private static DayReportPanel _instance;
+        private static ToastHistoryPanel _instance;
 
         private GameObject _panel;
         private Text _title;
         private RectTransform _content;
         private Font _font;
 
-        /// <summary>보고서 창이 떠 있는 동안은 저절로 흐르는 시간을 멈춘다(TimeAdvanceController).</summary>
         public static bool IsOpen => _instance != null && _instance._panel != null && _instance._panel.activeSelf;
 
-        public static void Show(int fromDay, int toDay)
+        public static void Toggle()
         {
-            if (toDay < fromDay) return;
             if (_instance == null) _instance = Create();
-            _instance.Fill(fromDay, toDay);
+            if (_instance._panel.activeSelf) _instance.Hide();
+            else _instance.Open();
         }
 
-        private static DayReportPanel Create()
+        private static ToastHistoryPanel Create()
         {
-            var go = new GameObject("DayReport", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(DayReportPanel));
+            var go = new GameObject("ToastHistory", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(ToastHistoryPanel));
             var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 2;
             var scaler = go.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
-            var report = go.GetComponent<DayReportPanel>();
-            report.Build();
-            return report;
+            var panel = go.GetComponent<ToastHistoryPanel>();
+            panel.Build();
+            return panel;
+        }
+
+        private void OnEnable() => ToastLog.Added += HandleAdded;
+        private void OnDisable() => ToastLog.Added -= HandleAdded;
+
+        private void HandleAdded()
+        {
+            if (_panel != null && _panel.activeSelf) Fill();
         }
 
         private void Build()
         {
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
-            _panel = new GameObject("ReportPanel", typeof(RectTransform), typeof(Image));
+            _panel = new GameObject("HistoryPanel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);
             var rect = _panel.GetComponent<RectTransform>();
             rect.sizeDelta = new Vector2(Width, Height);
@@ -86,29 +93,37 @@ namespace GN3.UI
             scroll.horizontal = false;
             SmoothWheelScroll.Attach(scroll);
 
-            // 확인 버튼
-            var ok = new GameObject("ConfirmButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            ok.transform.SetParent(_panel.transform, false);
-            var okRect = ok.GetComponent<RectTransform>();
-            okRect.anchorMin = okRect.anchorMax = okRect.pivot = new Vector2(0.5f, 0f);
-            okRect.anchoredPosition = new Vector2(0f, 16f);
-            okRect.sizeDelta = new Vector2(140f, 42f);
-            ok.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f); // UIThemeApplier가 진홍 버튼으로
-            ok.GetComponent<Button>().onClick.AddListener(Hide);
-            var okText = CreateText(ok.transform, "확인", 18, TextAnchor.MiddleCenter, UITheme.BodyText);
-            okText.rectTransform.anchorMin = Vector2.zero;
-            okText.rectTransform.anchorMax = Vector2.one;
-            okText.rectTransform.offsetMin = okText.rectTransform.offsetMax = Vector2.zero;
+            // 닫기 버튼
+            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            close.transform.SetParent(_panel.transform, false);
+            var closeRect = close.GetComponent<RectTransform>();
+            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(0.5f, 0f);
+            closeRect.anchoredPosition = new Vector2(0f, 16f);
+            closeRect.sizeDelta = new Vector2(140f, 42f);
+            close.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f); // UIThemeApplier가 진홍 버튼으로
+            close.GetComponent<Button>().onClick.AddListener(Hide);
+            var closeText = CreateText(close.transform, "닫기", 18, TextAnchor.MiddleCenter, UITheme.BodyText);
+            closeText.rectTransform.anchorMin = Vector2.zero;
+            closeText.rectTransform.anchorMax = Vector2.one;
+            closeText.rectTransform.offsetMin = closeText.rectTransform.offsetMax = Vector2.zero;
 
             _panel.SetActive(false);
         }
 
-        private void Fill(int fromDay, int toDay)
+        private void Open()
         {
-            // 낮에 생겨 아직 보고하지 않은 일(이전 일차)도 함께 싣는다.
-            fromDay = System.Math.Min(fromDay, DailyLog.FirstPendingDay);
-            var pending = DailyLog.TakePending();
-            _title.text = fromDay == toDay ? $"{fromDay}일차 보고" : $"{fromDay}일차 ~ {toDay}일차 보고";
+            Fill();
+            _panel.SetActive(true);
+            _panel.transform.SetAsLastSibling();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_content);
+            var scroll = _content.GetComponentInParent<ScrollRect>();
+            if (scroll != null) scroll.verticalNormalizedPosition = 1f;
+        }
+
+        private void Fill()
+        {
+            var history = ToastLog.History;
+            _title.text = $"알림 기록 ({history.Count})";
 
             // Destroy는 프레임 끝이라 바로 레이아웃을 계산하면 옛 줄이 섞인다 → 먼저 떼어 낸다.
             var old = new System.Collections.Generic.List<Transform>();
@@ -118,27 +133,15 @@ namespace GN3.UI
                 child.SetParent(null, false);
                 Destroy(child.gameObject);
             }
-            for (int day = fromDay; day <= toDay; day++)
+
+            if (history.Count == 0)
+                CreateText(_content, "아직 알림이 없습니다.", 15, TextAnchor.UpperLeft, UITheme.MutedText);
+            for (int i = history.Count - 1; i >= 0; i--) // 최신이 위
             {
-                var header = CreateText(_content, $"■ {day}일차", 17, TextAnchor.MiddleLeft, UITheme.TitleText);
-                header.fontStyle = FontStyle.Bold;
-
-                var lines = pending.TryGetValue(day, out var dayLines) ? dayLines : new System.Collections.Generic.List<string>();
-                if (lines.Count == 0) CreateText(_content, "· " + DailyLog.QuietDay, 15, TextAnchor.UpperLeft, UITheme.MutedText);
-                foreach (var line in lines)
-                {
-                    bool alert = line.Contains("습격") || line.Contains("사망") || line.Contains("전멸");
-                    bool arrived = line.Contains("도착!");
-                    var color = alert ? AlertText : arrived ? new Color(0.6f, 0.85f, 0.45f) : UITheme.BodyText;
-                    CreateText(_content, "· " + line, 15, TextAnchor.UpperLeft, color);
-                }
+                var entry = history[i];
+                CreateText(_content, $"{entry.Day}일차 {DayNightCycle.FormatTime(entry.Hour)}  ·  {entry.Message}", 15, TextAnchor.UpperLeft, UITheme.BodyText);
             }
-
-            _panel.SetActive(true);
-            _panel.transform.SetAsLastSibling();
             LayoutRebuilder.ForceRebuildLayoutImmediate(_content);
-            var scroll = _content.GetComponentInParent<ScrollRect>();
-            if (scroll != null) scroll.verticalNormalizedPosition = 1f;
         }
 
         private void Hide() => _panel.SetActive(false);

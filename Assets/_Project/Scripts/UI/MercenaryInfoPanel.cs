@@ -285,13 +285,24 @@ namespace GN3.UI
                 _statusText.text = $"상태: 고용 전 · 고용비 {Pricing.HireCost(merc)}G";
             else if (ExpeditionLog.Instance.IsOnExpedition(merc))
                 _statusText.text = $"상태: 파견 중 ({ExpeditionLog.Instance.FindQuest(merc)?.Title})";
+            else if (TrainingHall.IsTraining(merc))
+                _statusText.text = $"상태: 훈련소에서 훈련 중 (남은 약 {TrainingHall.RemainingHours(merc):0.#}시간)";
             else
-                _statusText.text = wounded ? "상태: 부상 (마을에서 쉬는 중)" : "상태: 마을에서 쉬는 중";
+                _statusText.text = merc.IsExhausted ? "상태: 지쳐서 쉬는 중 (파견 불가)"
+                    : wounded ? "상태: 부상 (마을에서 쉬는 중)" : "상태: 마을에서 쉬는 중";
+            if (hired) _statusText.text += $" · 주급 {MercenaryCondition.WeeklyWage(merc)}G";
 
             float ratio = stats.MaxHealth > 0 ? (float)merc.CurrentHealth / stats.MaxHealth : 0f;
             _healthFill.fillAmount = ratio;
             _healthFill.color = Color.Lerp(new Color(0.85f, 0.25f, 0.2f), new Color(0.3f, 0.8f, 0.35f), ratio);
             _healthText.text = $"체력 {merc.CurrentHealth} / {stats.MaxHealth}";
+            if (hired)
+            {
+                // 피로·사기(능력치가 깎였으면 몇 %인지)
+                _healthText.text += $"  ·  피로 {merc.Fatigue} · 사기 {merc.Morale}";
+                float condition = merc.ConditionMultiplier;
+                if (condition < 1f) _healthText.text += $" (공·방 -{Mathf.RoundToInt((1f - condition) * 100f)}%)";
+            }
 
             if (merc.Level >= Mercenary.MaxLevel)
             {

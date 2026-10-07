@@ -7,6 +7,7 @@ using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.Traits;
+using GN3.World;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,6 +23,8 @@ namespace GN3.UI
         private Font _font;
         private Transform _panelTransform;
         private GameObject _dispatchButtonGO;
+        private Text _dispatchButtonText;
+        private bool _lastNight;
         private Quest _pendingQuest;
         private Expedition _battlingExpedition;
         private Coroutine _battlePlayback;
@@ -38,6 +41,7 @@ namespace GN3.UI
 
             PlayerParty.Instance.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnChanged += RefreshList;
+            TrainingHall.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnTravelEvent += HandleTravelEvent;
         }
 
@@ -45,6 +49,7 @@ namespace GN3.UI
         {
             PlayerParty.Instance.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnChanged -= RefreshList;
+            TrainingHall.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnTravelEvent -= HandleTravelEvent;
         }
 
@@ -56,6 +61,16 @@ namespace GN3.UI
         private void Start()
         {
             RefreshList();
+        }
+
+        // 시간이 저절로 흐르므로, 편성 중에 밤/낮이 바뀌면 파견 버튼을 잠그거나 푼다.
+        private void Update()
+        {
+            if (_pendingQuest == null) return;
+            bool night = GameClock.IsNight;
+            if (night == _lastNight) return;
+            _lastNight = night;
+            RefreshDispatchButton();
         }
 
         /// <summary>퀘스트 수락 시 호출됨. 이 퀘스트에 보낼 용병을 고르는 선택 모드로 전환한다.</summary>
@@ -194,7 +209,8 @@ namespace GN3.UI
 
         private GameObject CreateMemberRow(Mercenary merc)
         {
-            bool onExpedition = ExpeditionLog.Instance.IsOnExpedition(merc);
+            bool training = TrainingHall.IsTraining(merc);
+            bool onExpedition = ExpeditionLog.Instance.IsOnExpedition(merc) || training; // 훈련 중도 마을에 없음(선택·해고 불가)
             bool selected = _selectedForDispatch.Contains(merc.Id);
 
             var row = new GameObject(merc.Name, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
@@ -235,8 +251,12 @@ namespace GN3.UI
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 100;
 
-            string status = onExpedition ? "  · 파견 중"
+            string status = training ? "  · 훈련 중" : onExpedition ? "  · 파견 중"
                 : merc.CurrentHealth < stats.MaxHealth ? $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}" : "";
+            // 피로·사기: 지치면 파견 불가, 피로 50↑·사기 30↓은 능력치가 깎이니 눈에 띄게
+            if (merc.IsExhausted) status += $"  · 지침(피로 {merc.Fatigue})";
+            else if (merc.Fatigue >= Mercenary.TiredFatigue) status += $"  · 피로 {merc.Fatigue}";
+            if (merc.Morale < Mercenary.LowMorale) status += "  · 사기 낮음";
             var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
             powerText.color = onExpedition ? new Color(UITheme.TitleText.r, UITheme.TitleText.g, UITheme.TitleText.b, 0.5f) : UITheme.TitleText;
             powerText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -251,7 +271,7 @@ namespace GN3.UI
                 bool atCap = !selected && _selectedForDispatch.Count >= _pendingQuest.MaxDispatchSize;
                 CreateActionButton(row.transform, selected ? "선택됨" : "선택",
                     selected ? new Color(0.3f, 0.55f, 0.35f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
-                    () => ToggleSelection(merc), interactable: !atCap);
+                    () => ToggleSelection(merc), interactable: !atCap && (selected || !merc.IsExhausted));
             }
 
             if (!onExpedition)
@@ -293,7 +313,15 @@ namespace GN3.UI
             if (_dispatchButtonGO == null)
                 _dispatchButtonGO = CreateDispatchButton(_panelTransform);
 
-            _dispatchButtonGO.GetComponent<Button>().interactable = _selectedForDispatch.Count > 0;
+            // 밤(22시~5시)에는 출전할 수 없다. 편성(용병 고르기)은 그대로 된다.
+            bool night = GameClock.IsNight;
+            _lastNight = night;
+            _dispatchButtonGO.GetComponent<Button>().interactable = _selectedForDispatch.Count > 0 && !night;
+            if (_dispatchButtonText != null)
+            {
+                _dispatchButtonText.text = night ? "밤에는 출전 불가\n(오전 5시부터)" : "파견 시작";
+                _dispatchButtonText.fontSize = night ? 13 : 18;
+            }
         }
 
         private GameObject CreateDispatchButton(Transform parent)
@@ -311,6 +339,7 @@ namespace GN3.UI
             buttonGO.GetComponent<Image>().color = new Color(0.3f, 0.5f, 0.35f, 1f);
 
             var text = CreateText(buttonGO.transform, "파견 시작", 18, TextAnchor.MiddleCenter);
+            _dispatchButtonText = text;
             var textRect = text.GetComponent<RectTransform>();
             textRect.anchorMin = Vector2.zero;
             textRect.anchorMax = Vector2.one;
@@ -325,8 +354,19 @@ namespace GN3.UI
         {
             if (_pendingQuest == null || _selectedForDispatch.Count == 0)
                 return;
+            if (GameClock.IsNight)
+            {
+                ToastLog.Show("밤에는 출전할 수 없습니다. 오전 5시부터 가능합니다.");
+                return;
+            }
 
             var members = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id)).ToList();
+            var exhausted = members.Where(m => m.IsExhausted).Select(m => m.Name).ToList();
+            if (exhausted.Count > 0)
+            {
+                ToastLog.Show($"지친 용병은 출전할 수 없습니다: {string.Join(", ", exhausted)} (마을에서 쉬면 회복)");
+                return;
+            }
             ExpeditionLog.Instance.Dispatch(_pendingQuest, members);
 
             _pendingQuest = null;

@@ -22,6 +22,12 @@ namespace GN3.EditorTools
         private const float DecorationHeightScale = 0.8f;
         private const float BenchLift = 0.12f;    // 월드 유닛. 가로등(약 0.9) 대비 앉는 높이 정도
         private const float FountainLift = 0.15f; // 대야 테두리 높이
+        private const string WallFolder = "Assets/조정식/성벽/";
+        private const float WallLift = 0.6f;   // 성벽(가로·세로·모서리) 높이
+        private const float GateLift = 0.9f;
+        private const float TowerLift = 1.0f;
+        private const int WallSweepSteps = 3;  // 성벽 그림자를 몇 장으로 쓸어 채울지(간격 ≤ 1.0×1.5/3 < 세로벽 폭 0.69)
+        private const string SweepChildName = "Shadow Sweep";
 
         [MenuItem("GN3/Shadow/그림자 만들기 (현재 씬)")]
         private static void BuildFromMenu()
@@ -83,6 +89,44 @@ namespace GN3.EditorTools
                 Undo.RecordObject(shadow, "Shadow Height");
                 ApplyDefaults(shadow, owner);
             }
+            if (IsWallPiece(owner)) BuildWallSweep(owner, shadow.liftHeight, material);
+        }
+
+        /// <summary>
+        /// 성벽 그림자는 실루엣을 lift만큼 통째로 밀어서, 미는 거리가 조각 두께보다 크면 성벽과 그림자 사이가 떴다.
+        /// lift의 1/N … (N-1)/N만큼 민 그림자를 더 깔아 성벽 발밑부터 끝까지 쓸어 채운다
+        /// (셰이더 스텐실이 한 픽셀을 한 번만 칠해 겹쳐도 진하기는 같다). 다시 실행하면 이름으로 찾아 갱신만 한다.
+        /// </summary>
+        private static void BuildWallSweep(SpriteRenderer owner, float lift, Material material)
+        {
+            for (int k = 1; k < WallSweepSteps; k++)
+            {
+                string name = $"{SweepChildName} {k}";
+                var existing = owner.transform.Find(name);
+                GameObject sweepObject;
+                if (existing != null) sweepObject = existing.gameObject;
+                else
+                {
+                    sweepObject = new GameObject(name, typeof(SpriteRenderer), typeof(ProjectedShadow));
+                    Undo.RegisterCreatedObjectUndo(sweepObject, "Create Shadow Sweep");
+                    sweepObject.transform.SetParent(owner.transform, false);
+                }
+                var renderer = sweepObject.GetComponent<SpriteRenderer>();
+                Undo.RecordObject(renderer, "Shadow Sweep");
+                renderer.sharedMaterial = material;
+                renderer.sprite = owner.sprite;
+                var sweep = sweepObject.GetComponent<ProjectedShadow>();
+                Undo.RecordObject(sweep, "Shadow Sweep");
+                sweep.heightScale = 0f;
+                sweep.liftHeight = lift * k / WallSweepSteps;
+            }
+        }
+
+        /// <summary>성벽 조각(원본이 성벽 폴더, 또는 구운 성문 열림 프레임처럼 "성벽_…" 정렬 부모 아래 그림).</summary>
+        private static bool IsWallPiece(SpriteRenderer owner)
+        {
+            string source = PixelBaker.FindSourcePath(owner.sprite) ?? AssetDatabase.GetAssetPath(owner.sprite);
+            return source.StartsWith(WallFolder) || owner.transform.parent != null && owner.transform.parent.name.StartsWith("성벽_");
         }
 
         /// <summary>
@@ -107,6 +151,15 @@ namespace GN3.EditorTools
                 return;
             }
             string source = PixelBaker.FindSourcePath(owner.sprite) ?? AssetDatabase.GetAssetPath(owner.sprite);
+            // 성벽은 조각을 이어 붙여 쌓아서, 조각마다 자기 발밑에서 기울이면 그림자가 톱니처럼 끊긴다.
+            // 납작 모드로 모든 조각을 같은 방향·거리로 밀면 붙은 조각들 그림자가 한 띠로 이어진다.
+            // (구운 성문 열림 프레임은 Baked/Animated라 원본 경로가 없어 이름으로 본다)
+            if (IsWallPiece(owner))
+            {
+                shadow.heightScale = 0f;
+                shadow.liftHeight = owner.name.Contains("탑") ? TowerLift : owner.name.Contains("성문") ? GateLift : WallLift;
+                return;
+            }
             shadow.heightScale = source.StartsWith("Assets/조정식/Buildings/") ? BuildingHeightScale : DecorationHeightScale;
             shadow.liftHeight = 0f;
         }
