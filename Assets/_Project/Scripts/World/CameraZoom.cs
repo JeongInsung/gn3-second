@@ -9,6 +9,7 @@ namespace GN3.World
     /// 가장 멀리는 시작 화면(마을 전체), 가장 가까이는 MinSize. 시작 때 보이던 화면 사각형 밖은 보이지 않게
     /// 카메라 중심을 가두므로, 끝까지 축소하면 원래 화면 위치로 돌아온다.
     /// 마을을 두른 성벽이 있으면 시작 화면보다 더 축소해 성벽 전체(파견대가 드나드는 성문 밖 포함)까지 볼 수 있다.
+    /// WASD나 커서를 화면 가장자리에 대면 카메라가 그쪽으로 움직이고, 같은 사각형(성벽까지) 밖은 보이지 않게 가둔다.
     /// UI(상점 목록·파티 목록 등) 위에서는 휠을 목록 스크롤에 양보한다. MainMenuBootstrapper가 메인 카메라에 붙인다.
     /// </summary>
     [RequireComponent(typeof(Camera))]
@@ -17,6 +18,8 @@ namespace GN3.World
         private const float MinSize = 2f;
         private const float StepFactor = 0.85f; // 휠 한 칸마다 size ×0.85(확대) / ÷0.85(축소)
         private const float SmoothSpeed = 12f;
+        private const float PanSpeed = 1.2f;  // 초당 orthographicSize × 1.2만큼 이동
+        private const float EdgePx = 12f;     // 커서가 화면 가장자리에서 이만큼(px) 안쪽이면 그쪽으로 이동
         private const string WallGroupName = "성벽";
 
         private Camera _camera;
@@ -73,17 +76,52 @@ namespace GN3.World
                 _targetSize = Mathf.Clamp(_targetSize * step, MinSize, _maxSize);
             }
 
-            if (Mathf.Approximately(_camera.orthographicSize, _targetSize)) return;
-
-            // 커서가 가리키는 월드 지점이 줌 전후 화면의 같은 자리에 머물도록 카메라를 옮긴다.
             Vector2 screen = mouse.position.ReadValue();
-            Vector3 before = _camera.ScreenToWorldPoint(screen);
-            _camera.orthographicSize = Mathf.Lerp(_camera.orthographicSize, _targetSize, 1f - Mathf.Exp(-SmoothSpeed * Time.unscaledDeltaTime));
-            if (Mathf.Abs(_camera.orthographicSize - _targetSize) < 0.001f) _camera.orthographicSize = _targetSize;
-            Vector3 after = _camera.ScreenToWorldPoint(screen);
-            transform.position += before - after;
+            bool moved = false;
+            if (!Mathf.Approximately(_camera.orthographicSize, _targetSize))
+            {
+                // 커서가 가리키는 월드 지점이 줌 전후 화면의 같은 자리에 머물도록 카메라를 옮긴다.
+                Vector3 before = _camera.ScreenToWorldPoint(screen);
+                _camera.orthographicSize = Mathf.Lerp(_camera.orthographicSize, _targetSize, 1f - Mathf.Exp(-SmoothSpeed * Time.unscaledDeltaTime));
+                if (Mathf.Abs(_camera.orthographicSize - _targetSize) < 0.001f) _camera.orthographicSize = _targetSize;
+                Vector3 after = _camera.ScreenToWorldPoint(screen);
+                transform.position += before - after;
+                moved = true;
+            }
 
-            ClampToBounds();
+            Vector2 pan = PanInput(screen);
+            if (pan != Vector2.zero)
+            {
+                // 확대할수록 천천히, 배속·일시정지와 무관하게
+                transform.position += (Vector3)(pan * (PanSpeed * _camera.orthographicSize * Time.unscaledDeltaTime));
+                moved = true;
+            }
+
+            if (moved) ClampToBounds();
+        }
+
+        /// <summary>WASD와 화면 가장자리에 댄 커서로 정한 이동 방향(길이 최대 1). 창이 포커스를 잃었거나 커서가 창 밖이면 가장자리 이동은 하지 않는다.</summary>
+        private static Vector2 PanInput(Vector2 screen)
+        {
+            var dir = Vector2.zero;
+            var keyboard = Keyboard.current;
+            if (keyboard != null)
+            {
+                if (keyboard.wKey.isPressed) dir.y += 1f;
+                if (keyboard.sKey.isPressed) dir.y -= 1f;
+                if (keyboard.dKey.isPressed) dir.x += 1f;
+                if (keyboard.aKey.isPressed) dir.x -= 1f;
+            }
+
+            bool inWindow = screen.x >= 0f && screen.y >= 0f && screen.x <= Screen.width && screen.y <= Screen.height;
+            if (Application.isFocused && inWindow)
+            {
+                if (screen.x < EdgePx) dir.x -= 1f;
+                else if (screen.x > Screen.width - EdgePx) dir.x += 1f;
+                if (screen.y < EdgePx) dir.y -= 1f;
+                else if (screen.y > Screen.height - EdgePx) dir.y += 1f;
+            }
+            return Vector2.ClampMagnitude(dir, 1f);
         }
 
         /// <summary>지금 보이는 화면이 시작 화면 사각형 안에 들어가게 카메라 중심을 가둔다.</summary>
