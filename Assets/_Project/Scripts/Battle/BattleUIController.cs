@@ -21,8 +21,6 @@ namespace GN3.Battle
     /// </summary>
     public class BattleUIController : MonoBehaviour
     {
-        private enum PendingAction { None, Basic, Skill }
-
         private class UnitView
         {
             public Combatant Combatant;
@@ -31,6 +29,7 @@ namespace GN3.Battle
             public Image Frame;
             public Image HpFill;
             public Text HpText;
+            public Image ReadinessFill;
             public GameObject TurnMarker;
             public Button Button;
         }
@@ -40,7 +39,8 @@ namespace GN3.Battle
         private List<Mercenary> _fighters;
         private ManualBattleSession _session;
         private readonly Dictionary<Combatant, UnitView> _views = new Dictionary<Combatant, UnitView>();
-        private PendingAction _pendingAction = PendingAction.None;
+        private bool _pickingSkillTarget;
+        private Combatant _actionPanelActor; // 행동 패널을 지금 누구 기준으로 띄워뒀는지(새 대기자로 바뀔 때만 다시 그림)
         private bool _resultShown;
 
         private Transform _enemyRow;
@@ -48,8 +48,6 @@ namespace GN3.Battle
         private Text _turnLabel;
         private Text _logText;
         private readonly LinkedList<string> _logLines = new LinkedList<string>();
-        private Button _basicButton;
-        private Text _basicButtonText;
         private Button _skillButton;
         private Text _skillButtonText;
 
@@ -82,16 +80,25 @@ namespace GN3.Battle
             foreach (var enemy in enemies)
                 _views[enemy] = CreateUnitView(_enemyRow, enemy.Name, enemy, null, tier);
 
-            RefreshTurnUI();
+            HideActionPanel(); // 스킬 버튼 초기 상태(비활성)까지 맞춰둔다
         }
 
-        // ---------- 전투 진행 ----------
+        // ---------- 전투 진행(ATB - 매 프레임 게이지를 돌린다) ----------
 
-        private void RefreshTurnUI()
+        private void Update()
+        {
+            if (_session == null || _resultShown) return;
+
+            var events = _session.Tick(Time.deltaTime);
+            if (events.Count > 0) ApplyEventsVisual(events);
+
+            RefreshUI();
+        }
+
+        private void RefreshUI()
         {
             foreach (var v in _views.Values)
                 UpdateUnitView(v);
-            ClearTargetable();
 
             if (_session.IsOver)
             {
@@ -99,83 +106,91 @@ namespace GN3.Battle
                 return;
             }
 
-            if (_session.CurrentIsPlayer)
+            var waiting = _session.WaitingPlayerActor;
+            if (waiting == null)
             {
-                _pendingAction = PendingAction.None;
-                ShowActionPanel();
+                if (_actionPanelActor != null) HideActionPanel();
+                return;
             }
-            else
+
+            if (_actionPanelActor != waiting)
             {
-                _basicButton.interactable = false;
-                _skillButton.interactable = false;
-                _turnLabel.text = $"{_session.CurrentActor.Name}의 차례 (적)";
-                StartCoroutine(EnemyTurnRoutine());
+                _actionPanelActor = waiting;
+                _pickingSkillTarget = false;
+                ShowActionPanel(waiting);
             }
+            else if (!_pickingSkillTarget)
+            {
+                // 스킬을 고르지 않고 있는 동안엔 남은 자동공격 시간을 계속 갱신해서 보여준다.
+                UpdateCountdownLabel(waiting);
+            }
+
+            // 스킬 대상을 고르는 중엔 매 프레임 다시 반영(그 사이 대상이 죽었을 수 있으므로).
+            if (_pickingSkillTarget)
+                HighlightTargetable(_session.SkillOf(waiting).TargetType);
         }
 
-        private void ShowActionPanel()
+        private void HideActionPanel()
         {
-            var actor = _session.CurrentActor;
-            _turnLabel.text = $"{actor.Name}의 차례";
+            _actionPanelActor = null;
+            _pickingSkillTarget = false;
+            _session.Deciding = false;
+            _skillButton.interactable = false;
+            ClearTargetable();
+            _turnLabel.text = "전투 진행 중...";
+        }
 
-            _basicButton.interactable = true;
-            _basicButtonText.text = "기본공격";
-
+        private void ShowActionPanel(Combatant actor)
+        {
             var skill = _session.SkillOf(actor);
-            int cooldown = _session.CooldownRemaining(actor);
+            float cooldown = _session.CooldownRemaining(actor);
             if (skill == null)
             {
                 _skillButton.interactable = false;
                 _skillButtonText.text = "전투 스킬 없음";
             }
-            else if (cooldown > 0)
+            else if (cooldown > 0f)
             {
                 _skillButton.interactable = false;
-                _skillButtonText.text = $"{skill.Name} (쿨타임 {cooldown})";
+                _skillButtonText.text = $"{skill.Name} (쿨타임 {Mathf.CeilToInt(cooldown)})";
             }
             else
             {
                 _skillButton.interactable = true;
                 _skillButtonText.text = skill.Name;
             }
+
+            UpdateCountdownLabel(actor);
+            ClearTargetable();
         }
 
-        private void OnBasicClicked()
+        private void UpdateCountdownLabel(Combatant actor)
         {
-            if (!_session.CurrentIsPlayer) return;
-            _pendingAction = PendingAction.Basic;
-            HighlightTargetable(SkillTargetType.Enemy);
+            float countdown = _session.AutoAttackCountdown;
+            _turnLabel.text = countdown > 0f
+                ? $"{actor.Name}의 차례! (자동공격까지 {countdown:0.0}초 - 스킬을 쓰려면 지금)"
+                : $"{actor.Name}의 차례!";
         }
 
         private void OnSkillClicked()
         {
-            var skill = _session.SkillOf(_session.CurrentActor);
-            if (skill == null || !_session.CurrentIsPlayer) return;
-            _pendingAction = PendingAction.Skill;
-            HighlightTargetable(skill.TargetType);
+            var actor = _session.WaitingPlayerActor;
+            if (actor == null) return;
+            var skill = _session.SkillOf(actor);
+            if (skill == null || _session.CooldownRemaining(actor) > 0f) return;
+            _pickingSkillTarget = true;
+            _session.Deciding = true;
+            _turnLabel.text = $"{actor.Name} - {skill.Name} 대상을 고르세요";
         }
 
         private void OnUnitClicked(Combatant target)
         {
-            if (_pendingAction == PendingAction.None || !_session.CurrentIsPlayer) return;
-            bool useSkill = _pendingAction == PendingAction.Skill;
-            _pendingAction = PendingAction.None;
+            if (!_pickingSkillTarget || _session.WaitingPlayerActor == null || !target.IsAlive) return;
+            _pickingSkillTarget = false;
+            ClearTargetable();
 
-            var events = _session.PlayerAct(useSkill, target);
+            var events = _session.PlayerAct(true, target);
             ApplyEventsVisual(events);
-            RefreshTurnUI();
-        }
-
-        private IEnumerator EnemyTurnRoutine()
-        {
-            yield return new WaitForSeconds(0.5f);
-            if (!_session.IsOver)
-            {
-                var events = _session.EnemyAct();
-                ApplyEventsVisual(events);
-            }
-            yield return new WaitForSeconds(0.5f);
-            RefreshTurnUI();
         }
 
         private void ShowResult()
@@ -186,7 +201,7 @@ namespace GN3.Battle
             var result = new BattleResult
             {
                 Outcome = _session.Outcome,
-                Rounds = _session.Round,
+                Rounds = _session.ActionCount,
                 Log = _session.Log,
                 TeamA = _session.PlayerTeam,
                 TeamB = _session.EnemyTeam,
@@ -194,8 +209,7 @@ namespace GN3.Battle
             var battle = new ExpeditionBattle.Battle { Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam };
             string summary = ExpeditionBattle.Conclude(_expedition, battle);
 
-            _basicButton.interactable = false;
-            _skillButton.interactable = false;
+            HideActionPanel();
             bool victory = _session.Outcome == BattleOutcome.TeamAVictory;
             _turnLabel.text = victory ? "승리!" : "패배...";
             BuildResultOverlay(victory, summary);
@@ -205,7 +219,8 @@ namespace GN3.Battle
 
         private void HighlightTargetable(SkillTargetType type)
         {
-            var targets = new HashSet<Combatant>(type == SkillTargetType.Enemy ? _session.AliveEnemies : _session.AliveAllies);
+            var pool = type == SkillTargetType.Enemy ? _session.EnemyTeam : _session.PlayerTeam;
+            var targets = new HashSet<Combatant>(pool.Where(c => c.IsAlive));
             foreach (var kv in _views)
                 SetTargetable(kv.Value, targets.Contains(kv.Key));
         }
@@ -230,7 +245,8 @@ namespace GN3.Battle
             v.HpFill.fillAmount = Mathf.Clamp01(ratio);
             v.HpFill.color = ratio > 0.5f ? new Color(0.4f, 0.75f, 0.35f) : ratio > 0.25f ? new Color(0.85f, 0.7f, 0.3f) : new Color(0.75f, 0.25f, 0.2f);
             v.HpText.text = alive ? $"{v.Combatant.CurrentHealth}/{v.Combatant.Stats.MaxHealth}" : "전사";
-            v.TurnMarker.SetActive(!_session.IsOver && _session.CurrentActor == v.Combatant);
+            v.ReadinessFill.fillAmount = alive ? _session.ReadinessRatioOf(v.Combatant) : 0f;
+            v.TurnMarker.SetActive(alive && _session.WaitingPlayerActor == v.Combatant);
         }
 
         private void ApplyEventsVisual(List<BattleEvent> events)
@@ -251,9 +267,9 @@ namespace GN3.Battle
 
         private static string FormatEvent(BattleEvent evt)
         {
-            if (evt.Damage < 0) return $"[R{evt.Round}] {evt.Attacker.Name} → {evt.Target.Name} : +{-evt.Damage} 회복";
+            if (evt.Damage < 0) return $"{evt.Attacker.Name} → {evt.Target.Name} : +{-evt.Damage} 회복";
             string suffix = evt.Evaded ? " (회피)" : evt.TargetDefeated ? " (처치)" : "";
-            return $"[R{evt.Round}] {evt.Attacker.Name} → {evt.Target.Name} : {evt.Damage}{suffix}";
+            return $"{evt.Attacker.Name} → {evt.Target.Name} : {evt.Damage}{suffix}";
         }
 
         private void AppendLog(string line)
@@ -370,7 +386,7 @@ namespace GN3.Battle
             root.transform.SetParent(parent, false);
             var layout = root.GetComponent<LayoutElement>();
             layout.minWidth = layout.preferredWidth = 160f;
-            layout.minHeight = layout.preferredHeight = 180f;
+            layout.minHeight = layout.preferredHeight = 198f;
             var group = root.GetComponent<CanvasGroup>();
 
             // 하이라이트/대상 선택 테두리(평소엔 투명) + 클릭(대상 지정)
@@ -459,6 +475,33 @@ namespace GN3.Battle
             hpTextRect.anchorMax = Vector2.one;
             hpTextRect.offsetMin = hpTextRect.offsetMax = Vector2.zero;
 
+            // 준비 게이지(ATB) - 체력바 바로 아래, 다 차면 그 유닛이 행동한다.
+            var readyBg = new GameObject("ReadinessBg", typeof(RectTransform), typeof(Image));
+            readyBg.transform.SetParent(root.transform, false);
+            var readyBgRect = (RectTransform)readyBg.transform;
+            readyBgRect.anchorMin = readyBgRect.anchorMax = readyBgRect.pivot = new Vector2(0.5f, 1f);
+            readyBgRect.anchoredPosition = new Vector2(0f, -162f);
+            readyBgRect.sizeDelta = new Vector2(140f, 9f);
+            // 9px짜리 얇은 바라 9-slice(Inset)는 모서리가 두꺼워 뭉개져 보이므로 민무늬 색으로.
+            var readyBgImage = readyBg.GetComponent<Image>();
+            readyBgImage.color = new Color(0.05f, 0.05f, 0.06f, 1f);
+            readyBgImage.raycastTarget = false;
+
+            var readyFillGO = new GameObject("ReadinessFill", typeof(RectTransform), typeof(Image));
+            readyFillGO.transform.SetParent(readyBg.transform, false);
+            var readyFillRect = (RectTransform)readyFillGO.transform;
+            readyFillRect.anchorMin = Vector2.zero;
+            readyFillRect.anchorMax = Vector2.one;
+            readyFillRect.offsetMin = new Vector2(1.5f, 1.5f);
+            readyFillRect.offsetMax = new Vector2(-1.5f, -1.5f);
+            var readyFill = readyFillGO.GetComponent<Image>();
+            readyFill.color = new Color(0.35f, 0.75f, 0.9f);
+            readyFill.type = Image.Type.Filled;
+            readyFill.fillMethod = Image.FillMethod.Horizontal;
+            readyFill.fillOrigin = (int)Image.OriginHorizontal.Left;
+            readyFill.fillAmount = 0f;
+            readyFill.raycastTarget = false;
+
             var view = new UnitView
             {
                 Combatant = combatant,
@@ -467,6 +510,7 @@ namespace GN3.Battle
                 Frame = frame,
                 HpFill = hpFill,
                 HpText = hpText,
+                ReadinessFill = readyFill,
                 TurnMarker = turnMarker.gameObject,
                 Button = button,
             };
@@ -489,16 +533,16 @@ namespace GN3.Battle
             panelImage.type = Image.Type.Sliced;
             panelImage.color = new Color(1f, 1f, 1f, 0.97f);
 
-            _turnLabel = CreateText(panel.transform, "", 20, TextAnchor.MiddleLeft, UITheme.TitleText);
+            _turnLabel = CreateText(panel.transform, "", 18, TextAnchor.UpperLeft, UITheme.TitleText);
             _turnLabel.fontStyle = FontStyle.Bold;
             var turnRect = _turnLabel.rectTransform;
             turnRect.anchorMin = turnRect.anchorMax = turnRect.pivot = new Vector2(0f, 1f);
             turnRect.anchoredPosition = new Vector2(28f, -16f);
-            turnRect.sizeDelta = new Vector2(400f, 34f);
+            turnRect.sizeDelta = new Vector2(280f, 72f);
+            _turnLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
 
-            _basicButton = CreateActionButton(panel.transform, new Vector2(28f, -56f), out _basicButtonText);
-            _basicButton.onClick.AddListener(OnBasicClicked);
-            _skillButton = CreateActionButton(panel.transform, new Vector2(28f, -122f), out _skillButtonText);
+            // 기본공격은 자동(랜덤 대상)이라 버튼이 필요 없다 - 스킬 쓰고 싶을 때만 이 버튼으로 개입한다.
+            _skillButton = CreateActionButton(panel.transform, new Vector2(28f, -100f), out _skillButtonText);
             _skillButton.onClick.AddListener(OnSkillClicked);
 
             var logBg = new GameObject("LogPanel", typeof(RectTransform), typeof(Image));

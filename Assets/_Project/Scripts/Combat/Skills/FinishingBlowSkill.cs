@@ -11,7 +11,7 @@ namespace GN3.Combat
 
         public override string Name => "마무리 일격";
         public override string Description => $"체력 {ExecuteThreshold:P0} 이하인 적을 확정 처치, 그 외엔 피해 {DamageMultiplier}배";
-        public override int CooldownTurns => 3;
+        public override float CooldownSeconds => 5f;
         public override SkillTargetType TargetType => SkillTargetType.Enemy;
 
         public override List<BattleEvent> Execute(Combatant user, Combatant target, List<Combatant> allies, List<Combatant> enemies,

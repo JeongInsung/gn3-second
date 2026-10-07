@@ -7,7 +7,7 @@ namespace GN3.Combat
     {
         public override string Name => "관통 사격";
         public override string Description => "방어력을 무시하고 적 하나를 공격한다";
-        public override int CooldownTurns => 3;
+        public override float CooldownSeconds => 6f;
         public override SkillTargetType TargetType => SkillTargetType.Enemy;
 
         public override List<BattleEvent> Execute(Combatant user, Combatant target, List<Combatant> allies, List<Combatant> enemies,

@@ -18,8 +18,8 @@ namespace GN3.Combat
         public abstract string Name { get; }
         public abstract string Description { get; }
 
-        /// <summary>한 번 쓰면 다시 쓸 수 있을 때까지 걸리는 턴 수(라운드가 아니라 "이 유닛의 턴" 기준).</summary>
-        public abstract int CooldownTurns { get; }
+        /// <summary>한 번 쓰면 다시 쓸 수 있을 때까지 걸리는 실시간 초(ATB - 게이지와 별개로 실시간으로 흐른다).</summary>
+        public abstract float CooldownSeconds { get; }
 
         public abstract SkillTargetType TargetType { get; }
 

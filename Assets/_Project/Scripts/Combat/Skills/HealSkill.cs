@@ -11,7 +11,7 @@ namespace GN3.Combat
 
         public override string Name => "치유";
         public override string Description => $"아군 하나의 체력을 최대체력의 {HealRatio:P0} 회복시킨다";
-        public override int CooldownTurns => 2;
+        public override float CooldownSeconds => 4f;
         public override SkillTargetType TargetType => SkillTargetType.Ally;
 
         public override List<BattleEvent> Execute(Combatant user, Combatant target, List<Combatant> allies, List<Combatant> enemies,
