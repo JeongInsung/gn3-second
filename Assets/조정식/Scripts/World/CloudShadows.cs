@@ -61,6 +61,7 @@ namespace GN3.World
             Vector3 step = (Vector3)(VillageWind.Direction * speed * VillageWind.Gust * Time.deltaTime);
             var tint = color;
             tint.a = opacity * (1f - DayNightCycle.NightLightFactor);
+            if (Application.isPlaying) tint.a *= 1f - Weather.Overcast; // 하늘이 덮이면 개별 구름 그림자는 없다
 
             foreach (var cloud in _clouds)
             {

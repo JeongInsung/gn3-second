@@ -426,7 +426,7 @@ namespace GN3.UI
             _battlePlayback = null;
             _battlingExpedition = null;
             // 체력 반영·전사·보상·알림·귀환은 ExpeditionBattle이 맡는다(자동 진행과 같은 처리).
-            string summary = ExpeditionBattle.Conclude(expedition, battle);
+            string summary = ExpeditionBattle.Conclude(expedition, battle, alertShown: true); // 결과는 이 패널에 바로 보인다
             SetResultText($"{summary}\n{BuildResultSummary(result)}");
 
             while (_battleQueue.Count > 0)

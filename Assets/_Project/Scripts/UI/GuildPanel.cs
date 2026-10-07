@@ -4,7 +4,6 @@ using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace GN3.UI
@@ -78,12 +77,6 @@ namespace GN3.UI
             if (_panel != null && _panel.activeSelf) Refresh();
         }
 
-        private void Update()
-        {
-            if (_panel.activeSelf && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
-                Hide();
-        }
-
         private void Refresh()
         {
             var ranks = Guild.Ranks;
@@ -118,7 +111,7 @@ namespace GN3.UI
             var sb = new StringBuilder();
             sb.Append($"<b>수용 인원</b>   파티 {count} / {party.MaxSize}명  (마을 {total - away} · 파견 중 {away}){full}\n\n");
 
-            sb.Append($"<b>주급</b>   합계 {MercenaryCondition.TotalWeeklyWage()}G · 다음 지급 {MercenaryCondition.NextPayday}일차 자정\n\n");
+            sb.Append($"<b>주급</b>   합계 {MercenaryCondition.TotalWeeklyWage()}G · 다음 지급 {GN3.World.GameCalendar.Format(MercenaryCondition.NextPayday)} 자정\n\n");
             sb.Append("<b>지금 해금</b>\n");
             sb.Append($"  퀘스트 최고 {current.MaxQuestGrade}급 · 용병 최고 {current.MaxMercGrade}급\n");
             sb.Append($"  시장 Lv.{current.MarketMinLevel}~{current.MarketMaxLevel} · 파티 정원 {current.PartySize}명\n\n");
@@ -203,6 +196,7 @@ namespace GN3.UI
             x.rectTransform.offsetMin = x.rectTransform.offsetMax = Vector2.zero;
 
             _panel.SetActive(false);
+            EscapeCloser.Register(_panel, Hide);
         }
 
         private Text CreateText(string name, int size, FontStyle style, Vector2 topLeft, Vector2 boxSize, Transform parent = null)

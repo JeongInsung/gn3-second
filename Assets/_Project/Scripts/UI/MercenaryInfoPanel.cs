@@ -4,7 +4,6 @@ using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.Traits;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace GN3.UI
@@ -121,6 +120,7 @@ namespace GN3.UI
             CreateDebugDamageButton();
 #endif
             _panel.SetActive(false);
+            EscapeCloser.Register(_panel, Hide);
         }
 
         /// <summary>어두운 바탕 + 가로로 채워지는 막대. 채움 Image를 돌려준다.</summary>
@@ -257,12 +257,6 @@ namespace GN3.UI
         private void Update()
         {
             if (_shown == null) return;
-
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
-            {
-                Hide();
-                return;
-            }
 
             _refreshTimer -= Time.unscaledDeltaTime;
             if (_refreshTimer <= 0f) Refresh();

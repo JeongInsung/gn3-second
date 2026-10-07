@@ -1,6 +1,5 @@
 using GN3.World;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace GN3.UI
@@ -47,6 +46,7 @@ namespace GN3.UI
             root.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
             var panel = root.GetComponent<BuildingPanel>();
             root.GetComponent<Button>().onClick.AddListener(panel.Close);
+            EscapeCloser.Register(root, panel.Close);
 
             // 판 안 클릭이 부모(배경 닫기 버튼)로 올라가 패널이 닫히지 않게, 판에도 아무 일 안 하는 버튼을 둬 클릭을 받는다.
             var box = new GameObject("Box", typeof(RectTransform), typeof(Image), typeof(Button));
@@ -156,12 +156,6 @@ namespace GN3.UI
         {
             Current = null;
             gameObject.SetActive(false);
-        }
-
-        private void Update()
-        {
-            var keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) Close();
         }
     }
 }

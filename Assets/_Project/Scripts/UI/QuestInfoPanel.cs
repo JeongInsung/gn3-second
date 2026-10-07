@@ -2,7 +2,6 @@ using GN3.Economy;
 using GN3.Quests;
 using GN3.World;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace GN3.UI
@@ -70,11 +69,6 @@ namespace GN3.UI
         private void Update()
         {
             if (_quest == null) return;
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
-            {
-                Hide();
-                return;
-            }
             _refreshTimer -= Time.unscaledDeltaTime;
             if (_refreshTimer <= 0f) Refresh();
         }
@@ -149,6 +143,7 @@ namespace GN3.UI
             closeRect.sizeDelta = new Vector2(28f, 28f);
             close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
             close.GetComponent<Button>().onClick.AddListener(Hide);
+            EscapeCloser.Register(_panel, Hide);
             FillLabel(close.transform, "X", 16);
 
             _panel.SetActive(false);

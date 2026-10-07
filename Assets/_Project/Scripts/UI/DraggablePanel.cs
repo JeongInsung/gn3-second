@@ -5,7 +5,8 @@ namespace GN3.UI
 {
     /// <summary>
     /// 창(패널)의 빈 곳·제목을 잡고 끌어 옮긴다. 누르면 같은 Canvas 안에서 맨 앞으로 오고, 화면 밖으로는 나가지 않는다.
-    /// 목록(ScrollRect) 위에서 끌면 목록이 먼저 드래그를 받으므로 스크롤은 그대로다. 옮긴 위치는 그 Play 동안 유지된다.
+    /// 목록(ScrollRect) 위에서 끌면 목록이 먼저 드래그를 받으므로 스크롤은 그대로다.
+    /// 옮긴 창은 닫히면(OnDisable) 원래 자리로 돌아가, 다음에 열 때 기본 위치에 뜬다.
     /// </summary>
     public class DraggablePanel : MonoBehaviour, IPointerDownHandler, IBeginDragHandler, IDragHandler
     {
@@ -13,6 +14,8 @@ namespace GN3.UI
 
         private RectTransform _rect;
         private Canvas _canvas;
+        private Vector2 _home;  // 처음 끌기 직전 위치 = 코드·씬이 정해 둔 기본 위치
+        private bool _moved;
 
         public static void Attach(RectTransform panel)
         {
@@ -27,6 +30,19 @@ namespace GN3.UI
         public void OnBeginDrag(PointerEventData eventData)
         {
             _canvas = GetComponentInParent<Canvas>()?.rootCanvas;
+            if (!_moved)
+            {
+                _home = _rect.anchoredPosition;
+                _moved = true;
+            }
+        }
+
+        // 닫는 방법(닫기 버튼·ESC·부모 끄기)과 상관없이 꺼질 때 원래 자리로
+        private void OnDisable()
+        {
+            if (!_moved) return;
+            _rect.anchoredPosition = _home;
+            _moved = false;
         }
 
         public void OnDrag(PointerEventData eventData)

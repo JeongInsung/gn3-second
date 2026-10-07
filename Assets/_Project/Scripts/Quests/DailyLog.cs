@@ -6,7 +6,7 @@ using UnityEngine;
 namespace GN3.Quests
 {
     /// <summary>
-    /// 날짜별로 있었던 일을 모아 둔다(하루 보고서 DayReportPanel이 읽는다).
+    /// 날짜별로 있었던 일을 모아 둔다(하루 보고서 편지 Mailbox.PostReport가 읽는다).
     /// - 이동 중 습격·휴식·사망·전멸: ExpeditionLog.OnTravelEvent를 그 일차에 기록
     /// - 자정마다 진행 중인 파견의 진행 상황(남은 일수 / 막 도착 / 전투 대기)
     /// - 여관 회복 등 다른 곳에서 Add로 남기는 줄

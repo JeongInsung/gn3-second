@@ -91,8 +91,17 @@ namespace GN3.Mercenaries
 
             string line = $"주급 지급: {paid}명 -{spent}G";
             if (unpaid.Count > 0) line += $" (골드 부족으로 {unpaid.Count}명 미지급: {string.Join(", ", unpaid)} · 사기 -{UnpaidMorale})";
-            ToastLog.Show(line);
             DailyLog.Add(line);
+            if (unpaid.Count == 0)
+            {
+                ToastLog.Show(line);
+                return;
+            }
+            // 미지급은 중요: 게임을 멈추고 알림창
+            ToastLog.Show(line, false);
+            Mailbox.Post(MailKind.Alert, "주급을 다 주지 못했습니다",
+                $"골드가 부족해 {unpaid.Count}명에게 주급을 주지 못했습니다.\n미지급: {string.Join(", ", unpaid)}\n사기 -{UnpaidMorale}\n\n" +
+                $"지급: {paid}명 -{spent}G", important: true);
         }
 
         /// <summary>마을에 있는 사기 0 용병은 길드를 떠난다(파견 중이면 돌아온 뒤 다음 자정에).</summary>
