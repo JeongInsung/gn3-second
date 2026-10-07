@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
+using GN3.Battle;
 using GN3.Quests;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace GN3.UI
@@ -9,7 +11,7 @@ namespace GN3.UI
     /// <summary>
     /// 파견대가 목적지에 도착하면 퀘스트마다 "자동 진행 / 직접 진행"을 고르게 하는 알림창(반드시 고른다).
     /// - 자동 진행: 재생 없이 바로 결과(ExpeditionBattle) → 창이 결과 화면으로 바뀜
-    /// - 직접 진행: 직접 전투는 아직 준비 중이라, 지금은 파티 패널을 열고 전투 기록을 재생(PartyUI.StartBattle)
+    /// - 직접 진행: BattleSceneContext에 파견대를 담아 BattleScene으로 전환, 플레이어가 매 턴 직접 싸운다
     /// 여러 파견이 한꺼번에 도착하면 대기열로 하나씩 묻는다.
     /// </summary>
     public class ArrivalPrompt : MonoBehaviour
@@ -19,14 +21,12 @@ namespace GN3.UI
 
         private readonly Queue<Expedition> _queue = new Queue<Expedition>();
         private Expedition _current;
-        private GameObject _partyPanel;
 
         private GameObject _panel;
         private Text _title;
         private Text _body;
         private GameObject _choiceRow;
         private GameObject _confirmButton;
-        private GameObject _manualNote;
         private Font _font;
 
         public static ArrivalPrompt Create(GameObject partyPanel)
@@ -40,7 +40,6 @@ namespace GN3.UI
             scaler.referenceResolution = new Vector2(1920f, 1080f);
 
             var prompt = go.GetComponent<ArrivalPrompt>();
-            prompt._partyPanel = partyPanel;
             prompt.Build();
             ExpeditionLog.Instance.OnArrived += prompt.Enqueue;
             return prompt;
@@ -82,19 +81,17 @@ namespace GN3.UI
                          $"{QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(members))}\n\n" +
                          "전투를 진행하시겠습니까?";
             _choiceRow.SetActive(true);
-            _manualNote.SetActive(true);
             _confirmButton.SetActive(false);
             _panel.SetActive(true);
             _panel.transform.SetAsLastSibling();
         }
 
+        /// <summary>직접 진행: 파견대를 BattleSceneContext에 담고 BattleScene으로 전환한다.
+        /// 이 알림창은 MainScene과 함께 사라지므로 큐에 남은 나머지는 MainScene에 돌아왔을 때 다시 뜬다.</summary>
         private void Fight()
         {
-            var expedition = _current;
-            if (_partyPanel != null) PanelActivator.Open(_partyPanel);
-            var party = Object.FindFirstObjectByType<PartyUI>(FindObjectsInactive.Include);
-            if (party != null) party.StartBattle(expedition);
-            ShowNext();
+            BattleSceneContext.Pending = _current;
+            SceneManager.LoadScene("BattleScene");
         }
 
         private void AutoFight()
@@ -109,7 +106,6 @@ namespace GN3.UI
             _title.text = "전투 결과";
             _body.text = summary.Replace(" · ", "\n");
             _choiceRow.SetActive(false);
-            _manualNote.SetActive(false);
             _confirmButton.SetActive(true);
         }
 
@@ -158,15 +154,6 @@ namespace GN3.UI
             okRect.anchoredPosition = new Vector2(0f, 52f);
             okRect.sizeDelta = new Vector2(160f, 44f);
             _confirmButton.SetActive(false);
-
-            // 직접 진행 안내(직접 전투 화면이 생기면 지운다)
-            var note = CreateText(_panel.transform, "직접 전투는 준비 중 — 지금은 파티 패널에서 전투 기록을 재생합니다", 13,
-                TextAnchor.MiddleCenter, UITheme.MutedText);
-            var noteRect = note.rectTransform;
-            noteRect.anchorMin = noteRect.anchorMax = noteRect.pivot = new Vector2(0.5f, 0f);
-            noteRect.anchoredPosition = new Vector2(0f, 18f);
-            noteRect.sizeDelta = new Vector2(Width - 40f, 24f);
-            _manualNote = note.gameObject;
 
             _panel.SetActive(false);
         }

@@ -5,13 +5,37 @@ using GN3.Quests;
 using GN3.Save;
 using GN3.World;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace GN3.UI
 {
     public static class MainMenuBootstrapper
     {
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private const string TargetSceneName = "MainScene";
+
+        // BattleScene에 다녀오면(SceneManager.LoadScene) MainScene이 런타임에 다시 로드되는데,
+        // [RuntimeInitializeOnLoadMethod]는 Play 시작 직후 딱 한 번만 불려서 그때는 메뉴 버튼 등이
+        // 다시 안 만들어진다(BattleSceneBootstrapper와 같은 함정). SceneManager.sceneLoaded로 바꿔서
+        // MainScene이 로드될 때마다(최초 Play 진입 포함) 다시 짜 넣는다.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void Subscribe()
+        {
+            _globalHooksInstalled = false;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneLoaded += OnSceneLoaded;
+        }
+
+        private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+        {
+            if (scene.name == TargetSceneName) Bootstrap();
+        }
+
+        // Guild/SaveSystem/ExpeditionLog 같은 전역 싱글턴에 거는 구독·"이어하기" 알림은 Play 세션당 한 번만
+        // 걸어야 한다(이 싱글턴들은 MainScene을 몇 번 오가도 파괴되지 않고 그대로 유지되므로, Bootstrap이
+        // 다시 불릴 때마다 또 걸면 이벤트가 중복으로 울린다).
+        private static bool _globalHooksInstalled;
+
         private static void Bootstrap()
         {
             var marketPanel = GameObject.Find("MarketPanel");
@@ -44,7 +68,6 @@ namespace GN3.UI
             QuestInfoPanel.Create();                              // 퀘스트 줄 클릭 → 상세 창
             GuildPanel.Create();                                  // 길드 건물·길드 글자 클릭 → 티어·수용 인원 창
             ArrivalPrompt.Create(partyPanel);                     // 목적지 도착 → 퀘스트마다 "자동 진행 / 직접 진행"
-            ExpeditionLog.Instance.OnTravelEvent += ToastLog.Show; // 이동 중 습격 소식도 알림으로
             var mainCamera = Camera.main;
             if (mainCamera != null && mainCamera.GetComponent<CameraZoom>() == null)
                 mainCamera.gameObject.AddComponent<CameraZoom>(); // 마우스 휠 줌
@@ -57,24 +80,32 @@ namespace GN3.UI
             partyPanel.SetActive(false);
             questPanel.SetActive(false);
 
-            // 길드 단계 → 파티 정원. 단계가 오르면 알림·하루 보고서.
-            Guild.ApplyPartySize();
-            Guild.OnChanged += rankUp =>
-            {
-                if (!rankUp) return;
-                string line = $"길드 등급 상승! {Guild.Current.Name} — {Guild.UnlockText(Guild.Current)}";
-                ToastLog.Show(line);
-                DailyLog.Add(line);
-            };
+            Guild.ApplyPartySize(); // 길드 단계 → 파티 정원(매번 다시 맞춰도 안전)
 
-            // 불러오면 시계·낮밤·시장·게시판을 새 상태에 맞춘다.
-            SaveSystem.OnLoaded += () =>
+            if (!_globalHooksInstalled)
             {
-                Object.FindFirstObjectByType<TimeAdvanceController>()?.SyncToClock();
-                Object.FindFirstObjectByType<MercenaryMarketUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
-                Object.FindFirstObjectByType<QuestBoardUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
-            };
-            if (SaveSystem.HasSave) ContinuePrompt.Create(); // 저장이 있으면 "이어하기 / 새로 시작"
+                _globalHooksInstalled = true;
+
+                ExpeditionLog.Instance.OnTravelEvent += ToastLog.Show; // 이동 중 습격 소식도 알림으로
+
+                // 길드 단계가 오르면 알림·하루 보고서.
+                Guild.OnChanged += rankUp =>
+                {
+                    if (!rankUp) return;
+                    string line = $"길드 등급 상승! {Guild.Current.Name} — {Guild.UnlockText(Guild.Current)}";
+                    ToastLog.Show(line);
+                    DailyLog.Add(line);
+                };
+
+                // 불러오면 시계·낮밤·시장·게시판을 새 상태에 맞춘다.
+                SaveSystem.OnLoaded += () =>
+                {
+                    Object.FindFirstObjectByType<TimeAdvanceController>()?.SyncToClock();
+                    Object.FindFirstObjectByType<MercenaryMarketUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
+                    Object.FindFirstObjectByType<QuestBoardUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
+                };
+                if (SaveSystem.HasSave) ContinuePrompt.Create(); // 저장이 있으면 "이어하기 / 새로 시작"
+            }
         }
 
         private const string QuestBoardSpritePrefix = "오크 퀘스트 게시판";
