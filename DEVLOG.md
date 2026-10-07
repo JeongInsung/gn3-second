@@ -660,3 +660,36 @@ UnityMCP로 에디터 상태를 직접 읽어 확인.
 - **휠 축소**: `CameraZoom`이 `성벽` 그룹을 찾으면 시작 화면은 그대로, 최대 축소만 성벽 전체 + 성문 밖까지(최대 크기 5 → 10.6). 화면이 가둘 범위보다 넓은 축은 가운데 고정(전에는 한쪽에 붙었음)
 - 검증: 컴파일 에러 0. MainScene Play + `EditorApplication.Step()`, 테스트 용병 2~3명 파견: 출구까지 걸어가는 동안 성문 닫힘(프레임 0) → 문간 근처에서 열림(7) → 성문 통과 → y −9.95에서 사라짐 → 1초 뒤 닫힘. 귀환: 성벽 밖에서 한 줄로 → 다가오면 열림 → 마을 안으로 → 닫힘. 최대 축소 캡처로 확인. 테스트 용병·파견은 제거(저장 안 됨)
 - 남은 점: 성벽 밖은 바닥 타일이 없어 카메라 배경색(파란색)이 보인다
+
+## 2026-10-06 — 직접전투: 새 BattleScene + 플레이어가 매 턴 스킬·대상을 고르는 전투
+
+기존 "직접 진행"은 `ArrivalPrompt`에 "준비 중"이라고 써 있던 자리로, 눌러도 그냥 파티 패널에서 자동 전투 로그를 재생하는 것으로 대체되고 있었음. 요청대로 (1) 플레이어가 매 턴 기본공격/스킬과 대상을 직접 고르는 전투로, (2) 새 Scene(BattleScene)으로 전환해서 보여주도록 구현. 몬스터 그림은 아직 없어 기본 도형(원)으로 표시(나중에 그림 교체 예정).
+
+- **전투 핵심 로직을 자동/직접 전투가 공유하도록 리팩터링** (`Combat/CombatResolver.cs` 신설): 기존 `AutoBattleSimulator`에 있던 턴 순서 구성/대상 선정(도발 우선)/공격 판정(패시브 훅→회피→치명상 생존→데미지 적용→후처리→아군 사망 알림) 로직을 static 헬퍼로 뽑아냄. `AutoBattleSimulator`는 이제 이 헬퍼들을 호출하는 얇은 래퍼(동작은 그대로, RNG 소비 순서도 동일하게 유지). `ResolveAttack`에 `damageMultiplier`/`ignoreDefense` 옵션 추가(기본값은 평범한 기본 공격과 동일) — 액티브 스킬이 기본 공식을 변형할 때 씀
+- **직업별 액티브 스킬 신설** (`Combat/SkillBase.cs`, `Combat/Skills/*.cs`, `Mercenaries/ClassSkillFactory.cs`) — 패시브(자동 확률 발동)와 별개로, 플레이어가 턴마다 직접 고르는 1개짜리 행동(쿨타임 있음). 길잡이(Guide)는 기존 설계(전투 스킬 없음, 습격 회피 전담)를 그대로 따라 스킬 없음
+  - 전사 — **강타**: 적 하나에게 피해 1.8배(쿨타임 3)
+  - 궁수 — **관통 사격**: 방어력 무시(쿨타임 3)
+  - 힐러 — **치유**: 아군 하나 최대체력 35% 회복(쿨타임 2)
+  - 암살자 — **마무리 일격**: 체력 40% 이하인 적 확정 처치, 아니면 피해 1.5배(쿨타임 3) — InstakillPassive와 같은 발상(100배 데미지)으로 방어력 뚫고 확정, 회피는 그대로 가능
+- **`Combat/ManualBattleSession.cs` 신설** — 직접전투 상태 기계(Unity 타입에 의존하지 않는 순수 C#, AutoBattleSimulator와 같은 자리). CombatResolver의 턴 순서(`BuildTurnOrder`, teamA/teamB 유닛을 번갈아 끼워 넣는 기존 방식 그대로)를 그대로 써서 유닛 하나씩 진행 — 플레이어 턴은 `PlayerAct(useSkill, target)` 호출을 기다리고, 적 턴은 `EnemyAct()`로 자동(도발 중인 아군 우선 타겟팅, 기본공격만). 쿨타임은 라운드가 넘어갈 때마다 1씩 감소. 기본공격 선택 시 궁수 레어 패시브(광역 공격)가 떴으면 고른 대상 무시하고 적 전원을 침(AutoBattleSimulator와 동일한 동작)
+- **BattleScene(새 Scene)** — 씬 파일은 카메라만 두고 전부 런타임 코드로 생성(기존 DesignScene 컨벤션). `ProjectSettings/EditorBuildSettings.asset`에 등록(기존엔 MainScene만 있었음)
+  - `Battle/BattleSceneContext.cs` — MainScene → BattleScene 전환 직전 "어느 파견대로 싸울지"를 담는 static 상자(Domain Reload가 꺼져 있어 씬 전환해도 유지 — GameClock/ExpeditionLog와 같은 사정)
+  - `Battle/BattleSceneBootstrapper.cs` — DesignSceneBootstrapper와 같은 패턴(활성 씬 이름이 BattleScene일 때만 동작), Pending 파견대로 `BattleUIController`를 띄움
+  - `Battle/BattlePlaceholderSprites.cs` — 몬스터 기본 도형(원 하나를 코드로 그려 캐싱, UITheme.Make()와 같은 방식). 계층(약탈 세력/지형 동물/보스)별로 색(갈→초록→진홍)과 크기(보스만 1.35배)만 다르게 — 나중에 몬스터 그림이 생기면 `BattleUIController.CreateUnitView`의 enemy 분기만 바꾸면 됨
+  - `Battle/BattleUIController.cs` — 화면 전체(배경 하늘/땅 2단, 적·내 파티 줄, 하단 행동 패널, 결과창). 내 파티는 기존 파츠 조합 캐릭터(`CharacterPortraitUI`, FullBody 프리셋)로, 적은 기본 도형으로 표시. 유닛마다 체력바(Filled Image)·이름·현재 턴 표시(▼)·대상 선택 시 테두리 강조. 플레이어 턴엔 "기본공격"/스킬(이름+쿨타임 표시) 버튼 → 누르면 유효 대상(적/아군)만 클릭 가능하게 테두리가 밝아지고 Button.interactable이 열림 → 유닛 클릭으로 확정. 적 턴은 0.5초 뜸을 두고 자동 진행. 피해/회복/회피는 맞은 유닛 위로 떠오르는 숫자(+초록 회복/빨강 피해/흰 회피)로 표시, 전투 로그는 최근 9줄 롤링 텍스트
+  - 전투 종료 시 `ManualBattleSession`의 최종 상태로 기존 `BattleResult`/`ExpeditionBattle.Battle`을 그대로 구성해 `ExpeditionBattle.Conclude` 호출 — 보상/경험치/사망/길드 명성 처리가 자동 진행과 완전히 동일한 경로를 탐. 결과창 "돌아가기" → MainScene으로 복귀
+  - `ArrivalPrompt.Fight()`가 이제 `BattleSceneContext.Pending`에 파견대를 담고 `SceneManager.LoadScene("BattleScene")` 호출(기존엔 파티 패널 열고 로그 재생). "직접 전투는 준비 중" 안내 문구 삭제
+- (주의, DEVLOG 2026-09-17 교훈 재확인) `BattleUIController`의 유닛 줄도 `HorizontalLayoutGroup`을 쓰는데, 처음에 `childControlWidth/Height = false` + `LayoutElement`로 짰다가 똑같은 "항상 100×100으로 남는" 버그를 만들 뻔해서 `childControlWidth/Height = true`로 고쳐 작성함
+- 검증: 로컬 Roslyn 컴파일 확인은 이번엔 실패함 — 사용자 계정 경로(`정인성`)의 한글 때문에 Mono csc.exe가 "텍스트 인코딩을 결정할 수 없음"/mscorlib 경로 불일치 등으로 끝까지 안 됨(ASCII 경로로 전체 Mono 런타임을 복사해서 재시도했지만 네이티브 상호운용 오류로 최종 실패). 코드는 기존 패턴(AutoBattleSimulator 로직 추출, UITheme 스프라이트 재사용, DesignSceneBootstrapper 캔버스 패턴 등)과 1:1 대응되게 맞춰 수동으로 꼼꼼히 검토했지만, **실제 컴파일 에러 0 확인과 플레이 테스트는 에디터에서 직접 필요**(이번 세션에서 Unity MCP 서버 실행 오류도 고쳤으니 에디터 재시작 후 MCP로 바로 확인 가능)
+- **디자인 판단(사용자 확인 필요)**: (1) 스킬 쿨타임/배율 수치(강타 1.8배·관통 사격 방어무시·치유 35%·마무리일격 40%/1.5배) 전부 감으로 정함, (2) 스킬은 전투당 무제한(쿨타임만 돎, 횟수 제한 없음), (3) 적은 스킬 없이 항상 기본공격만(엄밀히 말하면 플레이어 쪽만 "직접전투"가 되는 셈), (4) 연출은 정지 초상화/도형 + 체력바·숫자 팝업 수준(캐릭터가 이미 가진 idle/slash 애니메이션 클립으로 공격 동작을 재생하는 건 다음 단계로 미룸)
+
+## 2026-10-06 — (버그 수정) BattleScene 다녀오면 콘솔 로그는 멈춰도 메뉴·버튼이 없던 문제 + 복귀 시 MainScene 캔버스가 깨지던 문제
+
+사용자 확인: "이제 돼"(BattleScene은 정상 동작) → "근데 직접전투를 끝내고 메인씬으로 돌아오면 캔버스가 이상하게 떠".
+
+- **1차 원인(BattleScene이 처음엔 텅 비었던 것)**: `[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]`는 "씬이 로드될 때마다"가 아니라 **Play(또는 빌드) 시작 직후 딱 한 번만** 실행된다. MainScene에서 Play를 시작한 뒤 "직접 진행"으로 런타임에 `SceneManager.LoadScene("BattleScene")`을 호출해도 `BattleSceneBootstrapper.Bootstrap()`은 다시 안 불려서 화면을 채우는 코드 자체가 실행되지 않았음(DesignScene은 씬을 직접 열어 Play하는 용도라 이 함정이 안 드러났던 것)
+  - 수정: `BattleSceneBootstrapper`를 `[RuntimeInitializeOnLoadMethod(SubsystemRegistration)]`에서 **`SceneManager.sceneLoaded` 이벤트 구독**으로 바꿔, 활성 씬 이름이 BattleScene일 때마다(최초든 런타임 전환이든) 감지해서 UI를 만들도록 함
+- **2차 원인(복귀한 MainScene이 깨져 보이던 것, 같은 종류의 함정)**: `MainMenuBootstrapper.Bootstrap()`도 똑같이 `[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]`였음. BattleScene → `SceneManager.LoadScene("MainScene")`으로 돌아오면 MainScene이 런타임에 다시 로드되는데, 이 메서드가 다시 안 불려서 메뉴 버튼바/닫기 버튼/하루 진행 바/마을 용병 돌아다니기/상점/퀘스트·길드 정보창/도착 알림창/카메라 줌/UI 테마 적용기까지 **아무것도 다시 안 만들어짐** → 씬 파일에 저장된 맨 Canvas/패널만 덩그러니 남아 "이상하게 뜬" 것처럼 보였음
+  - 수정: 같은 방식으로 `SceneManager.sceneLoaded`(씬 이름 MainScene) 구독으로 바꿔 매번 다시 짜 넣도록 함. 다만 `Guild.OnChanged`/`SaveSystem.OnLoaded`/`ExpeditionLog.OnTravelEvent` 구독과 "이어하기" 알림(`ContinuePrompt`)은 **Guild/SaveSystem/ExpeditionLog가 씬을 오가도 파괴되지 않는 전역 싱글턴**이라, Bootstrap이 재실행될 때마다 또 걸면 이벤트가 중복으로 울림(예: 길드 승급 알림이 두 번 뜸) → `_globalHooksInstalled` static bool로 감싸서 Play 세션당 한 번만 걸리도록 분리. 나머지(메뉴 버튼, 패널 연결, 마을 오브젝트 등)는 매 MainScene 로드마다 새로 만듦(`PanelActivator.RegisterGroup`도 매번 덮어쓰므로 안전)
+- **패턴 정리**: 이 프로젝트에서 "Play 중 런타임에 `SceneManager.LoadScene`으로 같은 씬을 다시 불러오는" 경우(BattleScene ↔ MainScene 왕복)에는 `[RuntimeInitializeOnLoadMethod]`를 쓰면 안 되고, `SceneManager.sceneLoaded` 이벤트로 감지해야 함. 기존 MainMenuBootstrapper/DesignSceneBootstrapper가 `[RuntimeInitializeOnLoadMethod(AfterSceneLoad)]`로 잘 동작했던 건 "그 씬에서 바로 Play해서 그 씬이 처음 로드되는 경우"만 다뤘기 때문 — 앞으로 씬 전환이 있는 기능을 또 만들면 이 패턴부터 의심할 것
+- 검증: 사용자가 플레이로 확인("이제 돼"), 복귀 버그는 이번 수정 적용 후 재확인 필요(에디터에서 MainScene Play → 파견 도착 → 직접 진행 → 전투 종료 → 돌아가기 → 메뉴바/하루 진행 바 등이 정상 재생성되는지)
