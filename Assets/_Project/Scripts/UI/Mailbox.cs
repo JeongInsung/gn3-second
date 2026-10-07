@@ -28,6 +28,8 @@ namespace GN3.UI
             public int Day;
             public float Hour;
             public string Title;
+            /// <summary>목록에 보이는 짧은 제목("용병 고용", "임무 완료!"). 누르면 Title·Body 전체가 펼쳐진다.</summary>
+            public string ShortTitle;
             public string Body;
             public bool Read;
             public bool Important;
@@ -70,7 +72,8 @@ namespace GN3.UI
             ExpeditionLog.Instance.OnArrived += PostArrival;
         }
 
-        public static Mail Post(MailKind kind, string title, string body = "", bool important = false)
+        /// <summary>편지를 넣는다. shortTitle을 안 주면 종류·제목으로 짧은 제목을 만든다(ShortTitleFor).</summary>
+        public static Mail Post(MailKind kind, string title, string body = "", bool important = false, string shortTitle = null)
         {
             var mail = new Mail
             {
@@ -79,6 +82,7 @@ namespace GN3.UI
                 Day = GameClock.CurrentDay,
                 Hour = GameClock.CurrentHour,
                 Title = title,
+                ShortTitle = string.IsNullOrEmpty(shortTitle) ? ShortTitleFor(kind, title) : shortTitle,
                 Body = body ?? "",
                 Important = important,
             };
@@ -188,6 +192,62 @@ namespace GN3.UI
                 return mail;
             }
             return null;
+        }
+
+        // 일반 알림(토스트 문장 전체가 제목)의 짧은 제목: 위에서부터 처음 맞는 낱말.
+        private static readonly (string[] Keys, string Short)[] NoticeTitles =
+        {
+            (new[] { "[테스트]" }, "테스트"),
+            (new[] { "관계:" }, "관계 변화"),
+            (new[] { "같이 훈련" }, "같이 훈련"),
+            (new[] { "훈련을 마쳤다" }, "훈련 완료"),
+            (new[] { "레벨 업", "달성" }, "레벨 업"),
+            (new[] { "파견대 출발" }, "파견대 출발"),
+            (new[] { "습격" }, "습격"),
+            (new[] { "도착" }, "도착"),
+            (new[] { "고용 (" }, "용병 고용"),
+            (new[] { "골드가 부족" }, "골드 부족"),
+            (new[] { "가득 찼" }, "파티 정원 초과"),
+            (new[] { "주급" }, "주급"),
+            (new[] { "길드를 떠났" }, "용병 이탈"),
+            (new[] { "출전할 수 없" }, "출전 불가"),
+            (new[] { "장착" }, "무기 장착"),
+            (new[] { "여관" }, "여관 휴식"),
+            (new[] { "체력", "회복", "다친" }, "치료"),
+            (new[] { "불러" }, "불러오기"),       // "저장된 게임을 불러왔습니다"가 "저장"에 걸리지 않게 먼저
+            (new[] { "새로 시작" }, "새 게임"),
+            (new[] { "저장" }, "저장"),
+        };
+
+        private const int ShortTitleFallbackLength = 14;
+
+        /// <summary>
+        /// 목록용 짧은 제목. 퀘스트 결과·도착은 앞의 "[퀘스트명] "을 떼고, 일반 알림은 낱말 표(NoticeTitles)로,
+        /// 맞는 게 없으면 앞 14자 + "…". 보고·중요 소식은 이미 짧아 그대로.
+        /// </summary>
+        public static string ShortTitleFor(MailKind kind, string title)
+        {
+            if (string.IsNullOrEmpty(title)) return "";
+            switch (kind)
+            {
+                case MailKind.QuestResult:
+                case MailKind.Arrival:
+                    int close = title.StartsWith("[") ? title.IndexOf("] ", System.StringComparison.Ordinal) : -1;
+                    return close >= 0 ? title.Substring(close + 2) : title;
+                case MailKind.Notice:
+                    foreach (var (keys, shortTitle) in NoticeTitles)
+                        if (keys.Any(title.Contains)) return shortTitle;
+                    return title.Length <= ShortTitleFallbackLength ? title : title.Substring(0, ShortTitleFallbackLength) + "…";
+                default:
+                    return title;
+            }
+        }
+
+        /// <summary>펼쳤을 때 보이는 내용: 짧은 제목과 다르면 원래 제목(굵게) + 본문. 본문이 없으면 제목만.</summary>
+        public static string FullText(Mail mail)
+        {
+            if (string.IsNullOrEmpty(mail.Body)) return mail.Title;
+            return mail.Title == mail.ShortTitle ? mail.Body : $"<b>{mail.Title}</b>\n{mail.Body}";
         }
 
         public static string KindTag(MailKind kind) => kind switch

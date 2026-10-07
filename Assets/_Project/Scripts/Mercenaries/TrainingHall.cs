@@ -13,6 +13,7 @@ namespace GN3.Mercenaries
     /// 훈련 중에는 1시간마다 경험치 5를 얻어 레벨이 오른다(레벨업이 곧 능력치 상승). 최대 3명, 밤(GameClock.IsNight)엔 새로 들어가지 않는다.
     /// 훈련 중에는 훈련소 안에 있어 파견·마을 산책을 하지 않는다. 시간은 GameClock.OnHoursPassed로 받는다
     /// (저절로 흐르기·진행·건너뛰기 모두). 소수점 경험치는 사람마다 쌓아 두었다가 1이 될 때 더한다.
+    /// 같은 시간에 훈련한 사람끼리는 함께 훈련한 시간만큼 친밀도가 오른다(Affinity).
     /// </summary>
     public static class TrainingHall
     {
@@ -130,6 +131,7 @@ namespace GN3.Mercenaries
         {
             Cleanup();
             var finished = new List<Mercenary>();
+            var trainedHours = new List<(Mercenary merc, float hours)>(); // 같이 훈련한 시간만큼 친밀도
             foreach (var merc in _traineeIds.Select(Find).Where(m => m != null).ToList())
             {
                 // 이번 훈련의 남은 시간만큼만 경험치를 준다(큰 건너뛰기에도 1~3시간 몫).
@@ -137,7 +139,11 @@ namespace GN3.Mercenaries
                 float trained = Mathf.Min(hours, remaining);
                 _remainingHours[merc.Id] = remaining - hours;
                 if (remaining - hours <= 0f) finished.Add(merc);
-                if (trained > 0f) merc.AddFatigue(Mathf.RoundToInt(trained * MercenaryCondition.TrainingFatiguePerHour));
+                if (trained > 0f)
+                {
+                    merc.AddFatigue(Mathf.RoundToInt(trained * MercenaryCondition.TrainingFatiguePerHour));
+                    trainedHours.Add((merc, trained));
+                }
                 if (merc.Level >= Mercenary.MaxLevel || trained <= 0f) continue;
 
                 _pendingXp.TryGetValue(merc.Id, out float pending);
@@ -154,6 +160,11 @@ namespace GN3.Mercenaries
                     DailyLog.Add($"{merc.Name}이(가) 훈련소에서 Lv {merc.Level}이(가) 되었다.");
                 }
             }
+
+            for (int i = 0; i < trainedHours.Count; i++)
+                for (int j = i + 1; j < trainedHours.Count; j++)
+                    Affinity.AddAmong(new[] { trainedHours[i].merc, trainedHours[j].merc },
+                        Mathf.Min(trainedHours[i].hours, trainedHours[j].hours) * Affinity.TrainingGainPerHour);
 
             if (finished.Count == 0) return;
             foreach (var merc in finished)

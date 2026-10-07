@@ -43,6 +43,7 @@ namespace GN3.Quests
         {
             var quest = expedition.Quest;
             var fallen = new List<string>();
+            var fallenMercs = new List<Mercenary>();
             for (int i = 0; i < battle.Fighters.Count; i++)
             {
                 var merc = battle.Fighters[i];
@@ -50,6 +51,7 @@ namespace GN3.Quests
                 if (!merc.IsAlive)
                 {
                     fallen.Add(merc.Name);
+                    fallenMercs.Add(merc);
                     PlayerParty.Instance.Remove(merc);
                 }
             }
@@ -74,7 +76,10 @@ namespace GN3.Quests
             int xp = 40 + 20 * (int)questGrade;
             if (!battle.Victory) xp /= 2;
             var levelUps = GrantExperience(expedition.Members.Where(m => m.IsAlive), xp);
-            MercenaryCondition.AfterBattle(expedition.Members.Where(m => m.IsAlive), battle.Victory, fallen.Count); // 피로·사기
+            var survivorsList = expedition.Members.Where(m => m.IsAlive).ToList();
+            MercenaryCondition.AfterBattle(survivorsList, battle.Victory, fallenMercs); // 피로·사기(친밀도 보정 포함)
+            // 함께 살아 돌아온 사람끼리 친밀도가 바뀐다(승리면 오르고, 실패면 성격이 안 맞는 사이는 내려간다).
+            Affinity.AfterExpedition(survivorsList, battle.Victory);
             summary += $" · 경험치 +{xp}";
 
             string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));

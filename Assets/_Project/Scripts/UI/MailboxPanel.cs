@@ -6,8 +6,9 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 우편함 창: 모든 편지(Mailbox)를 최신이 위로 보여 주고, 고른 편지의 본문을 아래에 띄운다.
-    /// 탭: 전체·중요·도착(선택 대기)·퀘스트·보고·알림. 선택 대기 도착은 본문 아래 [자동 진행] [직접 진행]으로 처리한다.
+    /// 우편함 창: 모든 편지(Mailbox)를 최신이 위로, 짧은 제목(Mail.ShortTitle)만 한 줄씩 보여 준다.
+    /// 줄을 누르면 그 바로 아래에 내용이 펼쳐지고(다시 누르면 접힘), 선택 대기 도착은 펼친 칸 안의 [자동 진행] [직접 진행]으로 처리한다.
+    /// 탭: 전체·중요·도착(선택 대기)·퀘스트·보고·알림.
     /// 열면 일반 알림만 읽음 처리하고, 퀘스트·보고·중요·도착은 눌러 봐야 읽음이 된다([모두 읽음]도 있다).
     /// 화면 오른쪽 아래 우편함 아이콘(MailboxButton) 바로 위에 뜨고, 아이콘·닫기·ESC로 닫는다.
     /// </summary>
@@ -15,7 +16,9 @@ namespace GN3.UI
     {
         private const float Width = 680f;
         private const float Height = 560f;
+        private const float ListTop = 94f;
         private const float RowHeight = 30f;
+        private const float WhenWidth = 170f;
         private const int MaxRows = 150;
 
         private enum Tab { All, Important, Arrival, Quest, Report, Notice }
@@ -31,16 +34,13 @@ namespace GN3.UI
         private Text _title;
         private readonly List<Text> _tabLabels = new List<Text>();
         private RectTransform _list;
-        private Text _detailTitle;
-        private Text _detailWhen;
-        private Text _detailBody;
-        private ScrollRect _detailScroll;
-        private GameObject _actionRow;
+        private ScrollRect _listScroll;
         private Font _font;
 
         private Tab _tab = Tab.All;
-        private Mailbox.Mail _selected;
+        private Mailbox.Mail _selected; // 펼친 편지(없으면 null)
         private bool _dirty;
+        private bool _scrollToSelected;
 
         public static bool IsOpen => _instance != null && _instance._panel != null && _instance._panel.activeSelf;
 
@@ -50,7 +50,7 @@ namespace GN3.UI
             else Open();
         }
 
-        /// <summary>우편함을 연다. select가 있으면 그 편지를 고른 채로(중요 알림창의 [우편함 열기]).</summary>
+        /// <summary>우편함을 연다. select가 있으면 그 편지를 펼친 채로(중요 알림창의 [우편함 열기]).</summary>
         public static void Open(Mailbox.Mail select = null)
         {
             if (_instance == null) _instance = Create();
@@ -90,6 +90,7 @@ namespace GN3.UI
                 _selected = select;
                 Mailbox.MarkRead(select);
                 if (!InTab(select, _tab)) _tab = Tab.All;
+                _scrollToSelected = true;
             }
             Mailbox.MarkAllRead(MailKind.Notice);
             _panel.SetActive(true);
@@ -100,9 +101,10 @@ namespace GN3.UI
 
         private void Hide() => _panel.SetActive(false);
 
-        private void Select(Mailbox.Mail mail)
+        /// <summary>줄을 누르면 펼치고, 펼친 줄을 다시 누르면 접는다.</summary>
+        private void ToggleExpand(Mailbox.Mail mail)
         {
-            _selected = mail;
+            _selected = _selected == mail ? null : mail;
             Mailbox.MarkRead(mail); // Changed → 다음 LateUpdate에 다시 그린다
             _dirty = true;
         }
@@ -142,31 +144,33 @@ namespace GN3.UI
                 child.SetParent(null, false);
                 Destroy(child.gameObject);
             }
+            if (_selected != null && !Mailbox.All.Contains(_selected)) _selected = null;
+
             var mails = Mailbox.All.Where(m => InTab(m, _tab)).Reverse().Take(MaxRows).ToList();
             if (mails.Count == 0) CreateEmptyRow();
-            foreach (var mail in mails) CreateRow(mail);
+            RectTransform selectedRow = null;
+            foreach (var mail in mails)
+            {
+                var row = CreateRow(mail);
+                if (mail != _selected) continue;
+                selectedRow = row;
+                CreateExpanded(mail);
+            }
             LayoutRebuilder.ForceRebuildLayoutImmediate(_list);
             UIThemeApplier.ApplyNow(_list);
 
-            ShowDetail(_selected != null && Mailbox.All.Contains(_selected) ? _selected : null);
+            if (_scrollToSelected && selectedRow != null) ScrollTo(selectedRow);
+            _scrollToSelected = false;
         }
 
-        private void ShowDetail(Mailbox.Mail mail)
+        /// <summary>row가 목록 칸 위쪽에 보이도록 스크롤한다.</summary>
+        private void ScrollTo(RectTransform row)
         {
-            if (mail == null)
-            {
-                _detailTitle.text = "편지를 고르세요";
-                _detailWhen.text = "";
-                _detailBody.text = "";
-                _actionRow.SetActive(false);
-                return;
-            }
-            _detailTitle.text = $"{Mailbox.Colored($"[{Mailbox.KindTag(mail.Kind)}]", Mailbox.KindColor(mail.Kind))} {mail.Title}";
-            _detailWhen.text = Mailbox.FormatWhen(mail);
-            _detailBody.text = string.IsNullOrEmpty(mail.Body) ? mail.Title : mail.Body;
-            _actionRow.SetActive(mail.IsPendingChoice);
-            LayoutRebuilder.ForceRebuildLayoutImmediate(_detailBody.rectTransform);
-            _detailScroll.verticalNormalizedPosition = 1f;
+            float viewHeight = ((RectTransform)_listScroll.transform).rect.height;
+            float contentHeight = _list.rect.height;
+            if (contentHeight <= viewHeight) return;
+            float top = -row.localPosition.y - row.rect.height * row.pivot.y; // 내용 위쪽에서 줄 위쪽까지
+            _listScroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(top / (contentHeight - viewHeight));
         }
 
         private void Auto()
@@ -183,27 +187,67 @@ namespace GN3.UI
 
         // ---------- 화면 ----------
 
-        private void CreateRow(Mailbox.Mail mail)
+        /// <summary>한 줄: 왼쪽 "▶ ● [태그] 짧은 제목 선택 대기", 오른쪽 날짜·시각.</summary>
+        private RectTransform CreateRow(Mailbox.Mail mail)
         {
             var go = new GameObject("MailRow", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(_list, false);
-            go.GetComponent<LayoutElement>().minHeight = RowHeight;
+            var layout = go.GetComponent<LayoutElement>();
+            layout.minHeight = layout.preferredHeight = RowHeight;
             go.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.24f, 0.9f);
-            go.GetComponent<Button>().onClick.AddListener(() => Select(mail));
+            go.GetComponent<Button>().onClick.AddListener(() => ToggleExpand(mail));
 
-            string mark = mail.Read ? "   " : "● ";
+            string arrow = mail == _selected ? "▼ " : "▶ ";
+            string mark = mail.Read ? "" : "● ";
             string tag = Mailbox.Colored($"[{Mailbox.KindTag(mail.Kind)}]", Mailbox.KindColor(mail.Kind));
-            string title = mail.Read ? mail.Title : $"<b>{mail.Title}</b>";
+            string title = mail.Read ? mail.ShortTitle : $"<b>{mail.ShortTitle}</b>";
             string pending = mail.IsPendingChoice ? " " + Mailbox.Colored("선택 대기", new Color(1f, 0.6f, 0.2f)) : "";
-            string selected = mail == _selected ? "▶ " : "";
-            var text = CreateText(go.transform, $"{selected}{mark}{tag} {title}{pending}  {Mailbox.Colored(Mailbox.FormatWhen(mail), UITheme.MutedText)}",
-                14, TextAnchor.MiddleLeft, UITheme.BodyText);
+            var text = CreateText(go.transform, $"{arrow}{mark}{tag} {title}{pending}", 14, TextAnchor.MiddleLeft, UITheme.BodyText);
             text.supportRichText = true;
-            text.verticalOverflow = VerticalWrapMode.Truncate; // 한 줄만
+            text.verticalOverflow = VerticalWrapMode.Truncate; // 한 줄만(넘치면 날짜 칸을 덮지 않고 잘린다)
             text.rectTransform.anchorMin = Vector2.zero;
             text.rectTransform.anchorMax = Vector2.one;
             text.rectTransform.offsetMin = new Vector2(10f, 0f);
-            text.rectTransform.offsetMax = new Vector2(-10f, 0f);
+            text.rectTransform.offsetMax = new Vector2(-(WhenWidth + 10f), 0f);
+
+            var when = CreateText(go.transform, Mailbox.FormatWhen(mail), 13, TextAnchor.MiddleRight, UITheme.MutedText);
+            when.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var whenRect = when.rectTransform;
+            whenRect.anchorMin = new Vector2(1f, 0f);
+            whenRect.anchorMax = Vector2.one;
+            whenRect.pivot = new Vector2(1f, 0.5f);
+            whenRect.offsetMin = new Vector2(-WhenWidth, 0f);
+            whenRect.offsetMax = new Vector2(-10f, 0f);
+            return go.GetComponent<RectTransform>();
+        }
+
+        /// <summary>펼친 편지의 내용 칸(줄 바로 아래). 높이는 내용만큼 늘어난다. 선택 대기 도착이면 [자동 진행] [직접 진행].</summary>
+        private void CreateExpanded(Mailbox.Mail mail)
+        {
+            var box = new GameObject("MailBody", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
+            box.transform.SetParent(_list, false);
+            box.GetComponent<Image>().color = new Color(0.08f, 0.08f, 0.1f, 0.9f); // UIThemeApplier가 어두운 칸으로
+            var v = box.GetComponent<VerticalLayoutGroup>();
+            v.padding = new RectOffset(16, 14, 10, 12);
+            v.spacing = 10f;
+            v.childControlWidth = v.childControlHeight = true;
+            v.childForceExpandWidth = true;
+            v.childForceExpandHeight = false;
+
+            var body = CreateText(box.transform, Mailbox.FullText(mail), 15, TextAnchor.UpperLeft, UITheme.BodyText);
+            body.supportRichText = true;
+
+            if (!mail.IsPendingChoice) return;
+            var actions = new GameObject("Actions", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            actions.transform.SetParent(box.transform, false);
+            actions.GetComponent<LayoutElement>().preferredHeight = 34f;
+            var h = actions.GetComponent<HorizontalLayoutGroup>();
+            h.spacing = 12f;
+            h.padding = new RectOffset(0, 200, 0, 0); // 버튼이 너무 넓어지지 않게 오른쪽을 비운다
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = h.childForceExpandHeight = true;
+            CreateButton(actions.transform, "자동 진행", Auto, null, null, new Color(0.25f, 0.55f, 0.35f, 1f));
+            CreateButton(actions.transform, "직접 진행", Direct, null, null);
         }
 
         private void CreateEmptyRow()
@@ -241,8 +285,8 @@ namespace GN3.UI
                 _tabLabels.Add(label);
             }
 
-            // 목록
-            _list = CreateScroll(_panel.transform, "List", new Vector2(18f, -94f), new Vector2(Width - 36f, 250f), out _);
+            // 목록(펼친 내용까지 같은 칸 안에서 스크롤)
+            _list = CreateScroll(_panel.transform, "List", new Vector2(18f, -ListTop), new Vector2(Width - 36f, Height - ListTop - 14f), out _listScroll);
             var layout = _list.gameObject.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(6, 6, 6, 6);
             layout.spacing = 3f;
@@ -250,41 +294,6 @@ namespace GN3.UI
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
             _list.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            // 본문
-            _detailTitle = CreateText(_panel.transform, "", 17, TextAnchor.MiddleLeft, UITheme.TitleText);
-            _detailTitle.fontStyle = FontStyle.Bold;
-            _detailTitle.supportRichText = true;
-            _detailTitle.verticalOverflow = VerticalWrapMode.Truncate;
-            Place(_detailTitle.rectTransform, new Vector2(20f, -352f), new Vector2(Width - 230f, 28f));
-            _detailWhen = CreateText(_panel.transform, "", 13, TextAnchor.MiddleRight, UITheme.MutedText);
-            Place(_detailWhen.rectTransform, new Vector2(Width - 210f, -352f), new Vector2(190f, 28f));
-
-            var bodyContent = CreateScroll(_panel.transform, "Detail", new Vector2(18f, -384f), new Vector2(Width - 36f, 120f), out _detailScroll);
-            _detailBody = bodyContent.gameObject.AddComponent<Text>();
-            _detailBody.font = _font;
-            _detailBody.fontSize = 15;
-            _detailBody.color = UITheme.BodyText;
-            _detailBody.supportRichText = true;
-            _detailBody.alignment = TextAnchor.UpperLeft;
-            _detailBody.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _detailBody.verticalOverflow = VerticalWrapMode.Overflow;
-            _detailBody.raycastTarget = false;
-            bodyContent.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-
-            _actionRow = new GameObject("Actions", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            _actionRow.transform.SetParent(_panel.transform, false);
-            var rowRect = _actionRow.GetComponent<RectTransform>();
-            rowRect.anchorMin = rowRect.anchorMax = rowRect.pivot = new Vector2(0.5f, 0f);
-            rowRect.anchoredPosition = new Vector2(0f, 12f);
-            rowRect.sizeDelta = new Vector2(360f, 38f);
-            var h = _actionRow.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = 12f;
-            h.childControlWidth = h.childControlHeight = true;
-            h.childForceExpandWidth = h.childForceExpandHeight = true;
-            CreateButton(_actionRow.transform, "자동 진행", Auto, null, null, new Color(0.25f, 0.55f, 0.35f, 1f));
-            CreateButton(_actionRow.transform, "직접 진행", Direct, null, null);
-            _actionRow.SetActive(false);
 
             _panel.SetActive(false);
             EscapeCloser.Register(_panel, Hide);

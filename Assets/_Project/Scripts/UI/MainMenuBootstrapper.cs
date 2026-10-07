@@ -71,6 +71,7 @@ namespace GN3.UI
             new GameObject("TrainingHallUI", typeof(TrainingHallUI)); // 훈련소 패널에 훈련 중·맡길 용병 목록
             QuestInfoPanel.Create();                              // 퀘스트 줄 클릭 → 상세 창
             GuildPanel.Create();                                  // 길드 건물·길드 글자 클릭 → 티어·수용 인원 창
+            RelationsPanel.Create();                              // 오른쪽 아래 "관계" 버튼 → 용병 친밀도 창
             ImportantAlertPanel.Create();                         // 중요 소식(도착 선택·퀘스트 결과 등) → 게임을 멈추고 알림창
             var mainCamera = Camera.main;
             if (mainCamera != null && mainCamera.GetComponent<CameraZoom>() == null)
@@ -214,24 +215,27 @@ namespace GN3.UI
 
             // 지나간 알림(왼쪽 아래 토스트) 다시 보기: 화면 오른쪽 아래 우편함 아이콘, 안 읽은 알림이 있으면 "!"
             MailboxButton.Create(canvasTransform);
+            RelationsPanel.CreateButton(canvasTransform); // 우편함 왼쪽: 용병 관계(친밀도) 창
         }
 
-        private const float SaveButtonWidth = 110f;
+        private static readonly Vector2 SmallButtonSize = new Vector2(70f, 40f); // 배속·저장 버튼(예전 바 안 크기)
         private const float TopRightSpacing = 8f;
 
-        /// <summary>저장 버튼 왼쪽, 세로 가운데를 맞춘 1배속/2배속 토글(예전 바 안 크기 70×40 그대로).</summary>
+        /// <summary>오른쪽 위 작은 버튼의 세로 위치: 진행 버튼 높이의 가운데.</summary>
+        private static float SmallButtonTop => -(AdvanceButton.Margin + (AdvanceButton.ButtonSize.y - SmallButtonSize.y) * 0.5f);
+
+        /// <summary>저장 버튼 왼쪽, 세로 가운데를 맞춘 1배속/2배속 토글.</summary>
         private static Button CreateSpeedButton(Transform canvasTransform, TimeAdvanceController controller)
         {
-            var size = new Vector2(70f, 40f);
             var go = new GameObject("SpeedButton", typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(canvasTransform, false);
             go.transform.SetAsFirstSibling();
             var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
             rect.anchoredPosition = new Vector2(
-                -(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing + SaveButtonWidth + TopRightSpacing),
-                -(AdvanceButton.Margin + (AdvanceButton.ButtonSize.y - size.y) * 0.5f));
-            rect.sizeDelta = size;
+                -(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing + SmallButtonSize.x + TopRightSpacing),
+                SmallButtonTop);
+            rect.sizeDelta = SmallButtonSize;
             go.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
             CreateFillText(go.transform, "1배속", 15);
             var button = go.GetComponent<Button>();
@@ -239,7 +243,7 @@ namespace GN3.UI
             return button;
         }
 
-        /// <summary>진행 버튼(AdvanceButton) 왼쪽에 같은 높이로 붙는 저장 버튼. 진행 버튼처럼 Canvas 맨 뒤라 창이 열리면 그 아래로 깔린다.</summary>
+        /// <summary>진행 버튼(AdvanceButton) 왼쪽, 배속 버튼과 같은 크기·세로 가운데로 붙는 저장 버튼. 진행 버튼처럼 Canvas 맨 뒤라 창이 열리면 그 아래로 깔린다.</summary>
         private static void CreateSaveButton(Transform canvasTransform)
         {
             var go = new GameObject("SaveButton", typeof(RectTransform), typeof(Image), typeof(Button));
@@ -247,10 +251,10 @@ namespace GN3.UI
             go.transform.SetAsFirstSibling();
             var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
-            rect.anchoredPosition = new Vector2(-(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing), -AdvanceButton.Margin);
-            rect.sizeDelta = new Vector2(SaveButtonWidth, AdvanceButton.ButtonSize.y);
+            rect.anchoredPosition = new Vector2(-(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing), SmallButtonTop);
+            rect.sizeDelta = SmallButtonSize;
             go.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
-            CreateFillText(go.transform, "저장", 20);
+            CreateFillText(go.transform, "저장", 15);
             go.GetComponent<Button>().onClick.AddListener(() =>
                 ToastLog.Show(SaveSystem.Save() ? $"저장했습니다 ({GameCalendar.Format(GameClock.CurrentDay)})" : "저장에 실패했습니다"));
         }

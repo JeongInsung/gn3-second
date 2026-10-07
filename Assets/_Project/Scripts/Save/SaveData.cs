@@ -20,6 +20,15 @@ namespace GN3.Save
         public List<MercenarySave> party = new List<MercenarySave>();
         public List<ExpeditionSave> expeditions = new List<ExpeditionSave>();
         public List<string> trainees = new List<string>(); // 훈련소에 맡긴 용병 id(예전 저장엔 없어 빈 목록)
+        public List<AffinitySave> affinities = new List<AffinitySave>(); // 용병 쌍 친밀도(예전 저장엔 없어 성격 궁합 기본값으로 시작)
+    }
+
+    [Serializable]
+    public class AffinitySave
+    {
+        public string a;
+        public string b;
+        public int value;
     }
 
     [Serializable]

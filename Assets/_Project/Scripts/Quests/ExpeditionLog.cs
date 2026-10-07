@@ -174,8 +174,7 @@ namespace GN3.Quests
                 }
             }
 
-            int fallenCount = aliveMembers.Count(m => !m.IsAlive);
-            MercenaryCondition.AfterAmbush(aliveMembers.Where(m => m.IsAlive), fallenCount); // 피로·사기
+            MercenaryCondition.AfterAmbush(aliveMembers.Where(m => m.IsAlive).ToList(), aliveMembers.Where(m => !m.IsAlive).ToList()); // 피로·사기
             if (expedition.Members.All(m => !m.IsAlive))
             {
                 sb.Append(" 파견대가 전멸했다...");

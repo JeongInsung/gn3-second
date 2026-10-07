@@ -114,6 +114,7 @@ namespace GN3.Save
                 data.expeditions.Add(e);
             }
             data.trainees = TrainingHall.SaveIds();
+            data.affinities = Affinity.SaveEntries();
             return data;
         }
 
@@ -184,6 +185,7 @@ namespace GN3.Save
             foreach (var merc in mercs)
                 PlayerParty.Instance.RestoreAdd(merc);
             TrainingHall.Restore(data.trainees);
+            Affinity.Restore(data.affinities);
 
             OnLoaded?.Invoke();
             return true;

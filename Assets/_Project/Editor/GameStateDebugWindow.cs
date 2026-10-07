@@ -72,6 +72,13 @@ namespace GN3.EditorTools
                 if (GUILayout.Button("명성 −100")) Guild.Add(-100);
             }
 
+            EditorGUILayout.LabelField("친밀도", EditorStyles.boldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("파티 전원 친밀도 +20")) AddPartyAffinity(20);
+                if (GUILayout.Button("−20")) AddPartyAffinity(-20);
+            }
+
             EditorGUILayout.LabelField("저장", EditorStyles.boldLabel);
             EditorGUILayout.LabelField("파일", SaveSystem.HasSave ? SaveSystem.FilePath : "(없음)");
             using (new EditorGUILayout.HorizontalScope())
@@ -83,6 +90,16 @@ namespace GN3.EditorTools
                     if (GUILayout.Button("저장 파일 삭제")) SaveSystem.Delete();
                 }
             }
+        }
+
+        /// <summary>파티 안 모든 쌍의 친밀도를 궁합 배율 없이 바꾼다(같이 다니기 확인용).</summary>
+        private static void AddPartyAffinity(int amount)
+        {
+            var members = PlayerParty.Instance.Members.Where(m => m.IsAlive).ToList();
+            for (int i = 0; i < members.Count; i++)
+                for (int j = i + 1; j < members.Count; j++)
+                    Affinity.AddRaw(members[i], members[j], amount);
+            ToastLog.Show($"[테스트] 파티 친밀도 {(amount > 0 ? "+" : "")}{amount}");
         }
 
         // ---------- 골드 ----------

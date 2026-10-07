@@ -17,7 +17,7 @@ namespace GN3.UI
     {
         private const float RefreshInterval = 0.5f;
         private const float PanelWidth = 400f;
-        private const float PanelHeight = 326f; // 아래 30px은 테스트 버튼 자리(개발 빌드)
+        private const float PanelHeight = 354f; // 아래 30px은 테스트 버튼 자리(개발 빌드)
         private const int PortraitSize = 110;
 
         private GameObject _panel;
@@ -36,6 +36,9 @@ namespace GN3.UI
         private TooltipTrigger _weaponTip;
         private TooltipTrigger _personalityTip;
         private TooltipTrigger _passiveTip;
+        private Text _friendsText;
+        private TooltipTrigger _friendsTip;
+        private GameObject _relationsButton;
 
         private Mercenary _shown;
         private GameObject _debugButton;
@@ -114,6 +117,9 @@ namespace GN3.UI
             _weaponTip = AddTooltip(_weaponText);
             _personalityTip = AddTooltip(_personalityText);
             _passiveTip = AddTooltip(_passiveText);
+            _friendsText = CreateText("Friends", 15, FontStyle.Normal, new Vector2(14f, -274f), new Vector2(bottomWidth, 22f));
+            _friendsTip = AddTooltip(_friendsText);
+            _relationsButton = CreateRelationsButton();
 
             CreateCloseButton();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -165,6 +171,37 @@ namespace GN3.UI
             text.supportRichText = false; // 패시브 이름의 "<...>"가 태그로 읽히지 않게
             text.raycastTarget = false;
             return text;
+        }
+
+        /// <summary>왼쪽 아래 "관계 보기": 이 용병을 고른 채로 관계 창(RelationsPanel)을 연다. 고용된 용병만 보인다.</summary>
+        private GameObject CreateRelationsButton()
+        {
+            var go = new GameObject("RelationsButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(_panel.transform, false);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.zero;
+            rect.anchoredPosition = new Vector2(14f, 8f);
+            rect.sizeDelta = new Vector2(100f, 24f);
+            go.GetComponent<Image>().color = new Color(0.3f, 0.35f, 0.5f, 1f);
+            go.GetComponent<Button>().onClick.AddListener(() =>
+            {
+                if (_shown != null) RelationsPanel.ShowGlobal(_shown);
+            });
+
+            var label = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            label.transform.SetParent(go.transform, false);
+            var labelRect = label.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+            var text = label.GetComponent<Text>();
+            text.text = "관계 보기";
+            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.fontSize = 13;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.white;
+            text.raycastTarget = false;
+            return go;
         }
 
         /// <summary>[테스트] 보고 있는 용병 체력 -30%. 치료 아이템 시험용(에디터·개발 빌드에서만).</summary>
@@ -324,6 +361,18 @@ namespace GN3.UI
             {
                 string rare = merc.HasRarePassive ? " (레어)" : "";
                 SetTipLine(_passiveText, _passiveTip, $"패시브 <{passives[0].Name}>{rare}", passives[0].Description);
+            }
+
+            // 친한 동료(고용된 용병만): 지인 이상 상위 3명
+            _friendsText.gameObject.SetActive(hired);
+            _relationsButton.SetActive(hired);
+            if (hired)
+            {
+                var friends = Affinity.Friends(merc, Affinity.Acquaintance.MinValue).Take(3).ToList();
+                string label = friends.Count == 0
+                    ? "친한 동료: 없음"
+                    : "친한 동료: " + string.Join(" · ", friends.Select(f => $"{f.merc.Name}({Affinity.TierLabel(f.value)} {f.value})"));
+                SetTipLine(_friendsText, _friendsTip, label, null); // 툴팁 없음(자세한 건 "관계 보기")
             }
         }
 
