@@ -42,6 +42,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnChanged += RefreshList;
             TrainingHall.OnChanged += RefreshList;
+            Hospital.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnTravelEvent += HandleTravelEvent;
         }
 
@@ -50,6 +51,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnChanged -= RefreshList;
             TrainingHall.OnChanged -= RefreshList;
+            Hospital.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnTravelEvent -= HandleTravelEvent;
         }
 
@@ -210,7 +212,8 @@ namespace GN3.UI
         private GameObject CreateMemberRow(Mercenary merc)
         {
             bool training = TrainingHall.IsTraining(merc);
-            bool onExpedition = ExpeditionLog.Instance.IsOnExpedition(merc) || training; // 훈련 중도 마을에 없음(선택·해고 불가)
+            bool hospitalized = Hospital.IsAdmitted(merc);
+            bool onExpedition = ExpeditionLog.Instance.IsOnExpedition(merc) || training || hospitalized; // 훈련·입원 중도 마을에 없음(선택·해고 불가)
             bool selected = _selectedForDispatch.Contains(merc.Id);
 
             var row = new GameObject(merc.Name, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
@@ -251,18 +254,25 @@ namespace GN3.UI
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 100;
 
-            string status = training ? "  · 훈련 중" : onExpedition ? "  · 파견 중"
+            string status = training ? "  · 훈련 중" : hospitalized ? "  · 입원 중" : onExpedition ? "  · 파견 중"
                 : merc.CurrentHealth < stats.MaxHealth ? $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}" : "";
             // 피로·사기: 지치면 파견 불가, 피로 50↑·사기 30↓은 능력치가 깎이니 눈에 띄게
             if (merc.IsExhausted) status += $"  · 지침(피로 {merc.Fatigue})";
             else if (merc.Fatigue >= Mercenary.TiredFatigue) status += $"  · 피로 {merc.Fatigue}";
             if (merc.Morale < Mercenary.LowMorale) status += "  · 사기 낮음";
+            foreach (var ailment in merc.Ailments) status += $"  · {ailment.Def.displayName}"; // 부상·질병(중하면 파견 불가)
             var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
             powerText.color = onExpedition ? new Color(UITheme.TitleText.r, UITheme.TitleText.g, UITheme.TitleText.b, 0.5f) : UITheme.TitleText;
             powerText.horizontalOverflow = HorizontalWrapMode.Overflow;
             var powerLayout = powerText.gameObject.AddComponent<LayoutElement>();
             powerLayout.minWidth = 100;
             powerLayout.flexibleWidth = 1; // 남는 폭을 차지해 버튼을 오른쪽 끝으로 민다
+            string ailmentTip = Ailments.EffectTooltip(merc); // 부상·질병: 떨어진 능력치는 마우스를 올리면
+            if (ailmentTip != null)
+            {
+                powerText.raycastTarget = true; // 클릭은 줄(RowClickHandler)로 올라간다
+                powerText.gameObject.AddComponent<TooltipTrigger>().Text = ailmentTip;
+            }
 
             RowClickHandler.Attach(row, () => MercenaryInfoPanel.ShowGlobal(merc));
 
@@ -271,7 +281,7 @@ namespace GN3.UI
                 bool atCap = !selected && _selectedForDispatch.Count >= _pendingQuest.MaxDispatchSize;
                 CreateActionButton(row.transform, selected ? "선택됨" : "선택",
                     selected ? new Color(0.3f, 0.55f, 0.35f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
-                    () => ToggleSelection(merc), interactable: !atCap && (selected || !merc.IsExhausted));
+                    () => ToggleSelection(merc), interactable: !atCap && (selected || (!merc.IsExhausted && !merc.IsSeverelyAiling)));
             }
 
             if (!onExpedition)
@@ -365,6 +375,12 @@ namespace GN3.UI
             if (exhausted.Count > 0)
             {
                 ToastLog.Show($"지친 용병은 출전할 수 없습니다: {string.Join(", ", exhausted)} (마을에서 쉬면 회복)");
+                return;
+            }
+            var ailing = members.Where(m => m.IsSeverelyAiling).Select(m => $"{m.Name}({m.AilmentSummary()})").ToList();
+            if (ailing.Count > 0)
+            {
+                ToastLog.Show($"크게 다치거나 앓는 용병은 출전할 수 없습니다: {string.Join(", ", ailing)} (병원에서 치료)");
                 return;
             }
             ExpeditionLog.Instance.Dispatch(_pendingQuest, members);

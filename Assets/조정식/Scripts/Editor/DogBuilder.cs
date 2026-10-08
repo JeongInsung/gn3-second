@@ -18,7 +18,7 @@ namespace GN3.EditorTools
         private const string GroupName = "강아지";
         private const string VillageName = "Village";
         private const string ShadowMaterialPath = "Assets/조정식/Shaders/ProjectedShadow.mat";
-        private const float DogWidth = 0.4f; // 몸 폭(월드). 캐릭터 키 약 0.6, 꽃화분 폭 0.6과 비교해 정함
+        private const float DogWidth = 0.25f; // 몸 폭(월드). 캐릭터 키 약 0.6보다 한참 작게(0.4는 너무 커 보였다)
         private const int DogCount = 2;
 
         [MenuItem("GN3/Village/강아지 만들기")]

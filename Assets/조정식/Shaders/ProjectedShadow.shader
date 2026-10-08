@@ -63,7 +63,8 @@ Shader "GN3/ProjectedShadow"
             Varyings vert (Attributes input)
             {
                 float3 world = TransformObjectToWorld(input.positionOS.xyz);
-                float above = world.y - _BaseY;
+                // 기준선 아래 픽셀은 반대쪽으로 뻗어 본체와 어긋나서, 제자리(본체 밑)에 둔다.
+                float above = max(world.y - _BaseY, 0.0);
                 float height = above * _HeightScale + _Lift;
                 world.x += height * _GN3ShadowDir.x;
                 // 선 물체(_HeightScale > 0): 발밑 선에 눕혀 높을수록 멀리 뻗는다.

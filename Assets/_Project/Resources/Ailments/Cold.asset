@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: de606f240e1bee44a9f7c98b8a0d6dda, type: 3}
+  m_Name: Cold
+  m_EditorClassIdentifier: Assembly-CSharp::GN3.Mercenaries.AilmentSO
+  displayName: "\uAC10\uAE30"
+  category: 1
+  isSevere: 0
+  color: {r: 0.45, g: 0.75, b: 0.35, a: 1}
+  attackPenalty: 0.1
+  defensePenalty: 0.1
+  moveSpeedPenalty: 0
+  triggers: 4
+  chance: 0.028
+  healthBelow: 1
+  scaleWithMissingHealth: 0
+  rainBonus: 0.042
+  snowBonus: 0.042
+  exhaustedBonus: 0.042
+  contagionPerDay: 0.15
+  hospitalSpeed: 1
+  naturalSpeed: 1
+  noNaturalRecovery: 0
+  moraleLossPerDay: 0
+  healthLossPerDay: 0
+  deathAfterDays: 0
