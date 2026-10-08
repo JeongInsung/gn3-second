@@ -65,10 +65,10 @@ namespace GN3.Mercenaries
             }
         }
 
-        /// <summary>훈련하러 갈 수 있는 사람: 살아 있고, 파견 중이 아니고, 아직 훈련 중이 아니고, 최대 레벨이 아님.</summary>
+        /// <summary>훈련하러 갈 수 있는 사람: 살아 있고, 파견 중이 아니고, 아직 훈련 중이 아니고, 최대 레벨이 아니고, 부상·질병이 없음(그러면 병원으로).</summary>
         public static bool CanTrain(Mercenary merc) =>
-            merc != null && merc.IsAlive && merc.Level < Mercenary.MaxLevel && !merc.IsExhausted
-            && !ExpeditionLog.Instance.IsOnExpedition(merc) && !IsTraining(merc);
+            merc != null && merc.IsAlive && merc.Level < Mercenary.MaxLevel && !merc.IsExhausted && !merc.HasAilment
+            && !ExpeditionLog.Instance.IsOnExpedition(merc) && !IsTraining(merc) && !Hospital.IsAdmitted(merc);
 
         /// <summary>훈련을 시작한다(hours = 이번에 훈련할 게임 시간). 밤이거나 정원이 차면 거절.</summary>
         public static bool TryAdd(Mercenary merc, float hours)

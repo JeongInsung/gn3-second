@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using GN3.Combat;
 using GN3.CharacterAnim;
 using GN3.Economy;
@@ -25,28 +26,40 @@ namespace GN3.Mercenaries
         /// <summary>들고 있는 무기(없으면 맨손). 대장간에서 사서 쥐여 준다.</summary>
         public WeaponItem Weapon { get; private set; }
 
-        /// <summary>클래스·레벨 → 등급 배율 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어만) 순으로 계산한 현재 능력치.</summary>
-        public CombatStats CurrentStats
+        /// <summary>클래스·레벨 → 등급 배율 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어만) → 부상·질병 순으로 계산한 현재 능력치.</summary>
+        public CombatStats CurrentStats => ComputeStats(_ailments);
+
+        /// <summary>부상·질병이 없었다면의 능력치(툴팁에서 "공격 24 → 18"처럼 비교할 때).</summary>
+        public CombatStats StatsWithoutAilments => ComputeStats(null);
+
+        /// <summary>이 상태이상들만 적용한 능력치(null이면 부상·질병 없이).</summary>
+        public CombatStats ComputeStats(IEnumerable<Ailment> ailments)
         {
-            get
+            var graded = GradeTable.Apply(MercenaryStatCalculator.Calculate(Class, Level), Grade);
+            var stats = PersonalityTable.Apply(graded, Personality);
+            if (Weapon != null)
             {
-                var graded = GradeTable.Apply(MercenaryStatCalculator.Calculate(Class, Level), Grade);
-                var stats = PersonalityTable.Apply(graded, Personality);
-                if (Weapon != null)
-                {
-                    stats.Attack += Weapon.AttackFor(Class.Kind);
-                    stats.Defense += Weapon.Defense;
-                    stats.MoveSpeed = Math.Max(0, stats.MoveSpeed + Weapon.Speed);
-                }
-                // 지치거나 사기가 낮으면 공격·방어가 깎인다(최대 체력은 그대로라 체력 계산이 꼬이지 않는다).
-                float condition = ConditionMultiplier;
-                if (condition < 1f)
-                {
-                    stats.Attack = (int)Math.Round(stats.Attack * condition);
-                    stats.Defense = (int)Math.Round(stats.Defense * condition);
-                }
-                return stats;
+                stats.Attack += Weapon.AttackFor(Class.Kind);
+                stats.Defense += Weapon.Defense;
+                stats.MoveSpeed = Math.Max(0, stats.MoveSpeed + Weapon.Speed);
             }
+            // 지치거나 사기가 낮으면 공격·방어가 깎인다(최대 체력은 그대로라 체력 계산이 꼬이지 않는다).
+            float condition = ConditionMultiplier;
+            if (condition < 1f)
+            {
+                stats.Attack = (int)Math.Round(stats.Attack * condition);
+                stats.Defense = (int)Math.Round(stats.Defense * condition);
+            }
+            // 부상·질병은 공격·방어·이동 속도를 깎는다(최대 체력은 그대로).
+            if (ailments == null) return stats;
+            foreach (var ailment in ailments)
+            {
+                var def = ailment.Def;
+                stats.Attack = (int)Math.Round(stats.Attack * (1f - def.attackPenalty));
+                stats.Defense = (int)Math.Round(stats.Defense * (1f - def.defensePenalty));
+                stats.MoveSpeed = (int)Math.Round(stats.MoveSpeed * (1f - def.moveSpeedPenalty));
+            }
+            return stats;
         }
 
         // ---------- 피로·사기 (규칙·수치는 MercenaryCondition) ----------
@@ -84,6 +97,32 @@ namespace GN3.Mercenaries
             Fatigue = Math.Clamp(fatigue, 0, MaxCondition);
             Morale = Math.Clamp(morale, 0, MaxCondition);
         }
+
+        // ---------- 부상·질병 (규칙·수치는 Ailments, 입원은 Hospital) ----------
+
+        private readonly List<Ailment> _ailments = new List<Ailment>();
+
+        /// <summary>지금 앓는 부상·질병(부상 하나·질병 하나까지).</summary>
+        public IReadOnlyList<Ailment> Ailments => _ailments;
+        public bool HasAilment => _ailments.Count > 0;
+        /// <summary>골절·열병처럼 중한 상태이상이 있으면 파견할 수 없다.</summary>
+        public bool IsSeverelyAiling => _ailments.Exists(a => a.Def.isSevere);
+        public bool HasInjury => _ailments.Exists(a => a.Def.IsInjury);
+        public bool HasIllness => _ailments.Exists(a => !a.Def.IsInjury);
+
+        /// <summary>같은 갈래(부상/질병)가 이미 있으면 걸리지 않는다. 걸렸으면 true.</summary>
+        public bool AddAilment(AilmentSO def, float progress = 0f, int daysUntreated = 0)
+        {
+            if (def == null || _ailments.Exists(a => a.Def.IsInjury == def.IsInjury)) return false;
+            _ailments.Add(new Ailment(def, Math.Clamp(progress, 0f, 0.99f), Math.Max(0, daysUntreated)));
+            return true;
+        }
+
+        public void RemoveAilment(Ailment ailment) => _ailments.Remove(ailment);
+
+        /// <summary>UI용: "골절 45% · 감기 10%" (없으면 빈 문자열).</summary>
+        public string AilmentSummary() =>
+            string.Join(" · ", _ailments.ConvertAll(a => $"{a.Def.displayName} {Math.Round(a.Progress * 100f)}%"));
 
         /// <summary>무기를 든다. 들고 있던 무기는 버린다(되팔기 없음).</summary>
         public void Equip(WeaponItem weapon) => Weapon = weapon;

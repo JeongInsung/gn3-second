@@ -143,6 +143,7 @@ namespace GN3.Mercenaries
                 merc.AddMorale(Mathf.Clamp(bonus, -MaxAffinityBattleMorale, MaxAffinityBattleMorale));
             }
             MournFriends(survivors, fallen);
+            Ailments.AfterFight(survivors, AilmentTrigger.AfterBattle); // 체력이 낮게 남은 사람은 다칠 수 있다(부상·질병 에셋의 발생 조건)
         }
 
         /// <summary>이동 중 습격에서 살아남았을 때: 피로 +10, 전사자 1명마다 사기 -10(전사자가 친구·절친이면 추가로 더).</summary>
@@ -154,6 +155,7 @@ namespace GN3.Mercenaries
                 if (fallen.Count > 0) merc.AddMorale(-FallenComradeMorale * fallen.Count);
             }
             MournFriends(survivors, fallen);
+            Ailments.AfterFight(survivors, AilmentTrigger.AfterAmbush);
         }
 
         /// <summary>지인 이상을 잃은 사람은 관계 단계만큼 사기가 더 떨어진다. 친밀도는 전사자가 파티에서 빠지기 전 값으로 본다.</summary>
@@ -176,6 +178,7 @@ namespace GN3.Mercenaries
             float m = merc.ConditionMultiplier;
             if (m < 1f) text += $" (공격·방어 -{Mathf.RoundToInt((1f - m) * 100f)}%)";
             if (merc.IsExhausted) text += " · 지쳐서 파견 불가";
+            if (merc.HasAilment) text += $" · {merc.AilmentSummary()}" + (merc.IsSeverelyAiling ? " (파견 불가)" : "");
             return text;
         }
     }

@@ -82,6 +82,8 @@ namespace GN3.World
         [Tooltip("이 고도(°) 아래에서는 그림자가 서서히 흐려진다(해가 낮으면 빛이 약하고 퍼진다).")]
         [SerializeField] private float shadowFadeAltitude = 12f;
         [Range(0f, 1f)] [SerializeField] private float shadowAlpha = 0.35f;
+        [Tooltip("흐린 날(햇빛이 약할 때)에도 남는 그림자 진하기 비율. 0이면 햇빛만큼 옅어지고, 1이면 날씨와 무관.")]
+        [Range(0f, 1f)] [SerializeField] private float overcastShadowFloor = 0.5f;
 
         [Header("밤")]
         [SerializeField] private Color moonColor = new Color(0.5f, 0.62f, 1f);
@@ -297,7 +299,7 @@ namespace GN3.World
                 sunLight.enabled = sunLight.intensity > 0.001f;
             }
 
-            ApplyProjectedShadows(altitudeDeg, sunGround, day * Mathf.Min(1f, sunWeather)); // 흐린 날 그림자는 옅게
+            ApplyProjectedShadows(altitudeDeg, sunGround, day * Mathf.Lerp(overcastShadowFloor, 1f, Mathf.Clamp01(sunWeather))); // 흐린 날 그림자는 옅게(아예 사라지진 않게)
 
             if (moonLight != null)
             {

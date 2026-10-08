@@ -93,6 +93,8 @@ namespace GN3.Save
                     m.partNames.Add(pair.Key);
                     m.partSources.Add(pair.Value);
                 }
+                foreach (var ailment in merc.Ailments)
+                    m.ailments.Add(new AilmentSave { id = ailment.Def.Id, progress = ailment.Progress, daysUntreated = ailment.DaysUntreated });
                 data.party.Add(m);
             }
 
@@ -114,6 +116,7 @@ namespace GN3.Save
                 data.expeditions.Add(e);
             }
             data.trainees = TrainingHall.SaveIds();
+            data.patients = Hospital.SaveIds();
             data.affinities = Affinity.SaveEntries();
             return data;
         }
@@ -162,6 +165,13 @@ namespace GN3.Save
                 var weapon = string.IsNullOrEmpty(m.weapon) ? null : WeaponCatalog.All.FirstOrDefault(w => w.Name == m.weapon);
                 merc.RestoreState(m.experience, m.health, weapon);
                 merc.RestoreCondition(m.fatigue, m.morale);
+                if (m.ailments != null)
+                    foreach (var ailment in m.ailments)
+                    {
+                        // 에셋을 지웠으면 그 상태이상은 건너뛴다.
+                        var def = string.IsNullOrEmpty(ailment.id) ? AilmentCatalog.FindLegacy(ailment.kind) : AilmentCatalog.Find(ailment.id);
+                        if (def != null) merc.AddAilment(def, ailment.progress, ailment.daysUntreated);
+                    }
                 mercs.Add(merc);
             }
 
@@ -185,6 +195,7 @@ namespace GN3.Save
             foreach (var merc in mercs)
                 PlayerParty.Instance.RestoreAdd(merc);
             TrainingHall.Restore(data.trainees);
+            Hospital.Restore(data.patients);
             Affinity.Restore(data.affinities);
 
             OnLoaded?.Invoke();

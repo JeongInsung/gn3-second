@@ -17,7 +17,7 @@ namespace GN3.UI
     {
         private const float RefreshInterval = 0.5f;
         private const float PanelWidth = 400f;
-        private const float PanelHeight = 354f; // 아래 30px은 테스트 버튼 자리(개발 빌드)
+        private const float PanelHeight = 382f; // 아래 30px은 버튼 자리(관계 보기·개발 빌드 테스트)
         private const int PortraitSize = 110;
 
         private GameObject _panel;
@@ -38,6 +38,10 @@ namespace GN3.UI
         private TooltipTrigger _passiveTip;
         private Text _friendsText;
         private TooltipTrigger _friendsTip;
+        private TooltipTrigger _statusTip;
+        private Text _healthStatusText;     // "건강: 골절 45% · 감기 10%" (고용된 용병만)
+        private TooltipTrigger _healthStatusTip; // 떨어진 능력치·입원 정보
+        private TooltipTrigger _statsTip;
         private GameObject _relationsButton;
 
         private Mercenary _shown;
@@ -114,11 +118,16 @@ namespace GN3.UI
             _weaponText = CreateText("Weapon", 15, FontStyle.Normal, new Vector2(14f, -190f), new Vector2(bottomWidth, 22f));
             _personalityText = CreateText("Personality", 15, FontStyle.Normal, new Vector2(14f, -218f), new Vector2(bottomWidth, 22f));
             _passiveText = CreateText("Passive", 15, FontStyle.Normal, new Vector2(14f, -246f), new Vector2(bottomWidth, 22f));
+            _statusTip = AddTooltip(_statusText);
+            _statsTip = AddTooltip(_statsText);
             _weaponTip = AddTooltip(_weaponText);
             _personalityTip = AddTooltip(_personalityText);
             _passiveTip = AddTooltip(_passiveText);
             _friendsText = CreateText("Friends", 15, FontStyle.Normal, new Vector2(14f, -274f), new Vector2(bottomWidth, 22f));
             _friendsTip = AddTooltip(_friendsText);
+            _healthStatusText = CreateText("HealthStatus", 15, FontStyle.Normal, new Vector2(14f, -302f), new Vector2(bottomWidth, 22f));
+            _healthStatusText.supportRichText = true; // 상태이상 이름 색(에셋 이름에는 태그가 없다)
+            _healthStatusTip = AddTooltip(_healthStatusText);
             _relationsButton = CreateRelationsButton();
 
             CreateCloseButton();
@@ -318,10 +327,16 @@ namespace GN3.UI
                 _statusText.text = $"상태: 파견 중 ({ExpeditionLog.Instance.FindQuest(merc)?.Title})";
             else if (TrainingHall.IsTraining(merc))
                 _statusText.text = $"상태: 훈련소에서 훈련 중 (남은 약 {TrainingHall.RemainingHours(merc):0.#}시간)";
+            else if (Hospital.IsAdmitted(merc))
+                _statusText.text = $"상태: 병원에서 치료 중 (남은 약 {Hospital.RemainingHours(merc):0.#}시간)";
+            else if (merc.HasAilment)
+                _statusText.text = "상태: 마을에서 쉬는 중" + (merc.IsSeverelyAiling ? " (파견 불가)" : ""); // 무엇을 앓는지는 아래 건강 줄
             else
                 _statusText.text = merc.IsExhausted ? "상태: 지쳐서 쉬는 중 (파견 불가)"
-                    : wounded ? "상태: 부상 (마을에서 쉬는 중)" : "상태: 마을에서 쉬는 중";
+                    : wounded ? "상태: 다침 (마을에서 쉬는 중)" : "상태: 마을에서 쉬는 중";
             if (hired) _statusText.text += $" · 주급 {MercenaryCondition.WeeklyWage(merc)}G";
+            string ailmentTip = Ailments.EffectTooltip(merc); // 효과는 글에 쓰지 않고 마우스를 올리면 보여 준다(건강 줄·능력치 줄)
+            SetTipLine(_statusText, _statusTip, _statusText.text, null);
 
             float ratio = stats.MaxHealth > 0 ? (float)merc.CurrentHealth / stats.MaxHealth : 0f;
             _healthFill.fillAmount = ratio;
@@ -346,7 +361,13 @@ namespace GN3.UI
                 _xpText.text = $"경험치 {merc.Experience} / {merc.XpToNext}";
             }
 
-            _statsText.text = $"공격 {stats.Attack}  ·  방어 {stats.Defense}  ·  속도 {stats.MoveSpeed}  ·  전투력 {merc.CombatPower}";
+            // 부상·질병으로 떨어진 능력치는 빨간색, 마우스를 올리면 얼마에서 떨어졌는지
+            var healthy = merc.StatsWithoutAilments;
+            string Stat(string label, int value, int normal) => value < normal ? $"{label} <color=#e06050>{value}</color>" : $"{label} {value}";
+            _statsText.supportRichText = true;
+            SetTipLine(_statsText, _statsTip,
+                $"{Stat("공격", stats.Attack, healthy.Attack)}  ·  {Stat("방어", stats.Defense, healthy.Defense)}  ·  {Stat("속도", stats.MoveSpeed, healthy.MoveSpeed)}  ·  전투력 {merc.CombatPower}",
+                ailmentTip);
             if (merc.Weapon != null)
                 SetTipLine(_weaponText, _weaponTip, $"무기: {merc.Weapon.Name}", merc.Weapon.DescribeFor(merc.Class.Kind));
             else
@@ -374,6 +395,31 @@ namespace GN3.UI
                     : "친한 동료: " + string.Join(" · ", friends.Select(f => $"{f.merc.Name}({Affinity.TierLabel(f.value)} {f.value})"));
                 SetTipLine(_friendsText, _friendsTip, label, null); // 툴팁 없음(자세한 건 "관계 보기")
             }
+
+            // 건강(고용된 용병만): 앓는 것 이름·진행도 한 줄, 마우스를 올리면 떨어진 능력치
+            _healthStatusText.gameObject.SetActive(hired);
+            if (hired) SetTipLine(_healthStatusText, _healthStatusTip, HealthLine(merc), HealthTip(merc, ailmentTip));
+        }
+
+        /// <summary>"건강: 양호" 또는 "건강: 골절 45% · 감기 10% (입원 중)". 이름은 에셋의 표시 색, 중하면 빨강.</summary>
+        private static string HealthLine(Mercenary merc)
+        {
+            if (!merc.HasAilment) return "건강: <color=#a3937c>양호</color>";
+            var parts = merc.Ailments.Select(a =>
+            {
+                string color = a.Def.isSevere ? "e06050" : ColorUtility.ToHtmlStringRGB(a.Def.color);
+                return $"<color=#{color}>{a.Def.displayName}</color> {Mathf.RoundToInt(a.Progress * 100f)}%";
+            });
+            string tail = Hospital.IsAdmitted(merc) ? " <color=#a3937c>(입원 중)</color>"
+                : merc.IsSeverelyAiling ? " <color=#a3937c>(파견 불가)</color>" : "";
+            return "건강: " + string.Join(" · ", parts) + tail;
+        }
+
+        private static string HealthTip(Mercenary merc, string effectTip)
+        {
+            if (effectTip == null) return null;
+            if (!Hospital.IsAdmitted(merc)) return effectTip;
+            return $"{effectTip}\n입원 중 · 남은 약 {Hospital.RemainingHours(merc):0.#}시간 · 쌓인 치료비 {Hospital.Fee(merc)}G";
         }
 
         private static TooltipTrigger AddTooltip(Text text)

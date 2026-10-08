@@ -67,6 +67,12 @@ namespace GN3.World
         private bool _hasTrainingHall;
         private Vector2 _trainingDoor;
         private Vector2 _trainingExit;
+        private readonly HashSet<string> _hospitalIds = new HashSet<string>(); // 병원에 입원한 용병(퇴원하면 병원 문에서 나온다)
+        private const string HospitalSpritePrefix = "십자가가 돋보이는 중세 픽셀 병원";
+        private const float HospitalDoorU = 0.43f; // 병원 그림에서 아치 문 가운데(가로 비율)
+        private bool _hasHospital;
+        private Vector2 _hospitalDoor;
+        private Vector2 _hospitalExit;
         // 훈련소 스스로 가기: 밖에 나와 걷는 용병마다 TrainingRoll초마다 TrainingChance 확률로 1~3시간 훈련하러 간다(밤엔 안 감).
         private const float TrainingRollMin = 60f;
         private const float TrainingRollMax = 120f;
@@ -129,11 +135,13 @@ namespace GN3.World
             _tagLayer = CreateNameTagLayer();
             FindInnDoor();
             FindTrainingHallDoor();
+            FindHospitalDoor();
             _infoPanel = MercenaryInfoPanel.Create(transform);
 
             PlayerParty.Instance.OnChanged += Refresh;
             ExpeditionLog.Instance.OnChanged += Refresh;
             TrainingHall.OnChanged += Refresh;
+            Hospital.OnChanged += Refresh;
             TimeAdvanceController.Midpoint += ShuffleAfterTimeSkip;
             _subscribed = true;
             Refresh();
@@ -244,6 +252,17 @@ namespace GN3.World
             _trainingDoor = new Vector2(bounds.center.x, bounds.min.y + bounds.size.y * 0.08f);
             _trainingExit = _grid.FirstWalkableBelow(_trainingDoor);
             _hasTrainingHall = true;
+        }
+
+        /// <summary>병원 그림의 아치 문(아래쪽)을 문으로, 그 아래 처음 걸을 수 있는 지점을 문 앞으로 정한다. 없으면 입·퇴원 드나들기 연출 없음.</summary>
+        private void FindHospitalDoor()
+        {
+            var renderer = VillageProps.FindRenderer(HospitalSpritePrefix);
+            if (renderer == null) return;
+            var bounds = renderer.bounds;
+            _hospitalDoor = new Vector2(Mathf.Lerp(bounds.min.x, bounds.max.x, HospitalDoorU), bounds.min.y + bounds.size.y * 0.08f);
+            _hospitalExit = _grid.FirstWalkableBelow(_hospitalDoor);
+            _hasHospital = true;
         }
 
         /// <summary>9시~자정: 전원 밖. 게임 시계 기준이라 "진행" 전환이 끝나 9시가 된 뒤에 나온다(새벽은 _hidden이 먼저 처리).</summary>
@@ -548,6 +567,7 @@ namespace GN3.World
             PlayerParty.Instance.OnChanged -= Refresh;
             ExpeditionLog.Instance.OnChanged -= Refresh;
             TrainingHall.OnChanged -= Refresh;
+            Hospital.OnChanged -= Refresh;
             TimeAdvanceController.Midpoint -= ShuffleAfterTimeSkip;
         }
 
@@ -581,7 +601,7 @@ namespace GN3.World
         private void Refresh()
         {
             var present = PlayerParty.Instance.Members
-                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m))
+                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m) && !Hospital.IsAdmitted(m))
                 .ToList();
 
             var departing = new List<VillageWanderer>();
@@ -606,6 +626,19 @@ namespace GN3.World
                         var entering = wanderer;
                         if (_hasTrainingHall && entering.gameObject.activeSelf)
                             entering.ReturnInto(_trainingExit, _trainingDoor, () => { if (entering != null) Destroy(entering.gameObject); });
+                        else
+                            Destroy(entering.gameObject);
+                    }
+                }
+                else if (merc != null && merc.IsAlive && Hospital.IsAdmitted(merc))
+                {
+                    // 입원: 밖에 나와 있으면 병원 문으로 걸어 들어가 사라진다.
+                    _hospitalIds.Add(id);
+                    if (wanderer != null)
+                    {
+                        var entering = wanderer;
+                        if (_hasHospital && entering.gameObject.activeSelf)
+                            entering.ReturnInto(_hospitalExit, _hospitalDoor, () => { if (entering != null) Destroy(entering.gameObject); });
                         else
                             Destroy(entering.gameObject);
                     }
@@ -644,6 +677,13 @@ namespace GN3.World
                     // 훈련을 마친 용병: 훈련소 문에서 걸어 나온다.
                     go.SetActive(true);
                     wanderer.ExitBuilding(_trainingDoor, _trainingExit);
+                    _nextDecision[merc.Id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
+                }
+                else if (_hospitalIds.Remove(merc.Id) && _hasHospital && !_hidden)
+                {
+                    // 퇴원한 용병: 병원 문에서 걸어 나온다.
+                    go.SetActive(true);
+                    wanderer.ExitBuilding(_hospitalDoor, _hospitalExit);
                     _nextDecision[merc.Id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
                 }
                 else if (_awayIds.Remove(merc.Id) && !_hidden)

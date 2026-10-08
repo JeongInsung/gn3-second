@@ -69,9 +69,11 @@ namespace GN3.UI
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
             new GameObject("TrainingHallUI", typeof(TrainingHallUI)); // 훈련소 패널에 훈련 중·맡길 용병 목록
+            new GameObject("HospitalUI", typeof(HospitalUI));         // 병원 패널에 입원 환자·대기 환자 목록
             QuestInfoPanel.Create();                              // 퀘스트 줄 클릭 → 상세 창
             GuildPanel.Create();                                  // 길드 건물·길드 글자 클릭 → 티어·수용 인원 창
             RelationsPanel.Create();                              // 오른쪽 아래 "관계" 버튼 → 용병 친밀도 창
+            HealthPanel.Create();                                 // 오른쪽 아래 "건강" 버튼 → 전원 체력·부상·질병·입원 표
             ImportantAlertPanel.Create();                         // 중요 소식(도착 선택·퀘스트 결과 등) → 게임을 멈추고 알림창
             var mainCamera = Camera.main;
             if (mainCamera != null && mainCamera.GetComponent<CameraZoom>() == null)
@@ -124,6 +126,7 @@ namespace GN3.UI
         private const string BlacksmithSpritePrefix = "대장간 연기"; // 대장간 애니메이션 프레임 "대장간 연기_N"
         private const string GuildHallSpritePrefix = "쇠락한 모험가 길드 홀"; // 구운 "…@285x285" 포함
         private const string TrainingHallSpritePrefix = "중세 마을 훈련소 건물";
+        private const string HospitalSpritePrefix = "십자가가 돋보이는 중세 픽셀 병원";
 
         /// <summary>
         /// 마을 건물 클릭 연결(클릭 기능이 없는 물체는 실행 중에 붙인다).
@@ -150,6 +153,15 @@ namespace GN3.UI
                 // 훈련소 → 건물 패널(TrainingHallUI가 "훈련소" 이름을 보고 목록을 채운다)
                 VillageProps.EnsureClickable(trainingHall)
                     .SetInfo("훈련소", $"용병들이 가끔 스스로 찾아와 {TrainingHall.MinSessionHours:0}~{TrainingHall.MaxSessionHours:0}시간 훈련하며 경험치를 얻습니다. (최대 {TrainingHall.Capacity}명)");
+            }
+            var hospital = VillageProps.FindRenderer(HospitalSpritePrefix);
+            Hospital.Available = hospital != null; // 병원 건물이 있어야 입원한다
+            if (hospital != null)
+            {
+                // 병원 → 건물 패널(HospitalUI가 "병원" 이름을 보고 입원 환자 목록을 채운다)
+                VillageProps.EnsureClickable(hospital).SetInfo("병원",
+                    $"다치거나 병든 용병이 스스로 입원합니다. 시간당 {Hospital.ProgressPerHour * 100f:0}%씩 나으며, 퇴원할 때 입원 시간당 {Hospital.FeePerHour}G를 냅니다. (최대 {Hospital.Capacity}명)");
+                Hospital.AdmitWaiting();
             }
 
             var buildingPanel = BuildingPanel.Create(canvasTransform);
@@ -216,6 +228,7 @@ namespace GN3.UI
             // 지나간 알림(왼쪽 아래 토스트) 다시 보기: 화면 오른쪽 아래 우편함 아이콘, 안 읽은 알림이 있으면 "!"
             MailboxButton.Create(canvasTransform);
             RelationsPanel.CreateButton(canvasTransform); // 우편함 왼쪽: 용병 관계(친밀도) 창
+            HealthPanel.CreateButton(canvasTransform);    // 관계 버튼 왼쪽: 용병 건강 창
         }
 
         private static readonly Vector2 SmallButtonSize = new Vector2(70f, 40f); // 배속·저장 버튼(예전 바 안 크기)

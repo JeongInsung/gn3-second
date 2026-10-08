@@ -24,7 +24,7 @@ namespace GN3.UI
         private const float RowGap = 4f;
         private const float BarWidth = 200f;
         private const float BarHeight = 12f;
-        private const float ButtonWidth = 80f;
+        internal const float ButtonWidth = 80f; // HealthPanel이 "건강" 버튼을 이 버튼 왼쪽에 놓을 때 쓴다
         private const float ButtonHeight = 40f;
         private const string Dim = "#a3937c";
 
@@ -214,7 +214,8 @@ namespace GN3.UI
 
             // 이름 + 상태
             string status = ExpeditionLog.Instance.IsOnExpedition(other) ? " <size=12><color=" + Dim + ">(파견 중)</color></size>"
-                : TrainingHall.IsTraining(other) ? " <size=12><color=" + Dim + ">(훈련 중)</color></size>" : "";
+                : TrainingHall.IsTraining(other) ? " <size=12><color=" + Dim + ">(훈련 중)</color></size>"
+                : Hospital.IsAdmitted(other) ? " <size=12><color=" + Dim + ">(입원 중)</color></size>" : "";
             var name = CreateText("Name", 15, row.transform, other.Name + status);
             Place(name.rectTransform, 10f, 160f);
 
