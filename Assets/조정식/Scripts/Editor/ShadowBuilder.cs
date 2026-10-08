@@ -26,7 +26,7 @@ namespace GN3.EditorTools
         private const float WallLift = 0.6f;   // 성벽(가로·세로·모서리) 높이
         private const float GateLift = 0.9f;
         private const float TowerLift = 1.0f;
-        private const int WallSweepSteps = 3;  // 성벽 그림자를 몇 장으로 쓸어 채울지(간격 ≤ 1.0×1.5/3 < 세로벽 폭 0.69)
+        private const int SweepSteps = 3;  // 납작 그림자를 몇 장으로 쓸어 채울지(간격 ≤ 1.0×1.5/3 < 세로벽 폭 0.69)
         private const string SweepChildName = "Shadow Sweep";
 
         [MenuItem("GN3/Shadow/그림자 만들기 (현재 씬)")]
@@ -89,17 +89,18 @@ namespace GN3.EditorTools
                 Undo.RecordObject(shadow, "Shadow Height");
                 ApplyDefaults(shadow, owner);
             }
-            if (IsWallPiece(owner)) BuildWallSweep(owner, shadow.liftHeight, material);
+            if (shadow.heightScale <= 0f && shadow.liftHeight > 0f) BuildSweep(owner, shadow.liftHeight, material);
+            else RemoveSweep(owner);
         }
 
         /// <summary>
-        /// 성벽 그림자는 실루엣을 lift만큼 통째로 밀어서, 미는 거리가 조각 두께보다 크면 성벽과 그림자 사이가 떴다.
-        /// lift의 1/N … (N-1)/N만큼 민 그림자를 더 깔아 성벽 발밑부터 끝까지 쓸어 채운다
+        /// 납작 그림자(성벽·벤치·분수 등)는 실루엣을 lift만큼 통째로 밀어서, 미는 거리가 물체 두께보다 크면 본체와 그림자 사이가 떴다.
+        /// lift의 1/N … (N-1)/N만큼 민 그림자를 더 깔아 발밑부터 끝까지 쓸어 채운다
         /// (셰이더 스텐실이 한 픽셀을 한 번만 칠해 겹쳐도 진하기는 같다). 다시 실행하면 이름으로 찾아 갱신만 한다.
         /// </summary>
-        private static void BuildWallSweep(SpriteRenderer owner, float lift, Material material)
+        private static void BuildSweep(SpriteRenderer owner, float lift, Material material)
         {
-            for (int k = 1; k < WallSweepSteps; k++)
+            for (int k = 1; k < SweepSteps; k++)
             {
                 string name = $"{SweepChildName} {k}";
                 var existing = owner.transform.Find(name);
@@ -118,7 +119,17 @@ namespace GN3.EditorTools
                 var sweep = sweepObject.GetComponent<ProjectedShadow>();
                 Undo.RecordObject(sweep, "Shadow Sweep");
                 sweep.heightScale = 0f;
-                sweep.liftHeight = lift * k / WallSweepSteps;
+                sweep.liftHeight = lift * k / SweepSteps;
+            }
+        }
+
+        /// <summary>납작 모드가 아니게 된 그림자에 남은 쓸기 사본을 지운다(기울인 그림자 위에 납작 사본이 겹치지 않게).</summary>
+        private static void RemoveSweep(SpriteRenderer owner)
+        {
+            for (int k = 1; k < SweepSteps; k++)
+            {
+                var existing = owner.transform.Find($"{SweepChildName} {k}");
+                if (existing != null) Undo.DestroyObjectImmediate(existing.gameObject);
             }
         }
 
