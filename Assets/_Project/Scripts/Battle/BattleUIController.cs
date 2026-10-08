@@ -25,13 +25,19 @@ namespace GN3.Battle
         {
             public Combatant Combatant;
             public GameObject Root;
+            public RectTransform AnimRoot; // 공격 동작·대기 중 흔들림을 여기에만 적용(Root 자체는 레이아웃이 관리)
             public CanvasGroup Group;
             public Image Frame;
+            public Image HitFlash;
             public Image HpFill;
             public Text HpText;
             public Image ReadinessFill;
             public GameObject TurnMarker;
             public Button Button;
+            public bool IsPlayerSide;
+            public bool IsMelee; // 근접(전사·암살자 등)만 대상 자리까지 다가가서 때린다 - 원거리는 제자리에서 공격
+            public float BobPhase;   // 대기 중 흔들림이 유닛마다 어긋나 보이도록
+            public Vector2 LungeOffset; // 공격 동작(대상 쪽으로 다가갔다 돌아옴) 중 오프셋, 코루틴이 갱신
         }
 
         private Font _font;
@@ -40,9 +46,11 @@ namespace GN3.Battle
         private ManualBattleSession _session;
         private readonly Dictionary<Combatant, UnitView> _views = new Dictionary<Combatant, UnitView>();
         private bool _pickingSkillTarget;
+        private Combatant _selectedMerc; // 플레이어가 클릭해서 고른 내 용병(다음에 적을 클릭하면 그 용병의 공격 대상이 된다)
         private Combatant _actionPanelActor; // 행동 패널을 지금 누구 기준으로 띄워뒀는지(새 대기자로 바뀔 때만 다시 그림)
         private bool _resultShown;
 
+        private Canvas _canvas;
         private Transform _enemyRow;
         private Transform _playerRow;
         private Text _turnLabel;
@@ -76,12 +84,20 @@ namespace GN3.Battle
 
             BuildUI(quest);
             for (int i = 0; i < _fighters.Count; i++)
-                _views[combatants[i]] = CreateUnitView(_playerRow, _fighters[i].Name, combatants[i], _fighters[i].Appearance, -1);
+            {
+                bool isMelee = IsMeleeClass(_fighters[i].Class.Kind);
+                _views[combatants[i]] = CreateUnitView(_playerRow, _fighters[i].Name, combatants[i], _fighters[i].Appearance, -1, isMelee);
+            }
+            // 몬스터는 아직 직업 개념이 없어 전부 근접(달려들어 때림)으로 둔다.
             foreach (var enemy in enemies)
-                _views[enemy] = CreateUnitView(_enemyRow, enemy.Name, enemy, null, tier);
+                _views[enemy] = CreateUnitView(_enemyRow, enemy.Name, enemy, null, tier, isMelee: true);
 
             HideActionPanel(); // 스킬 버튼 초기 상태(비활성)까지 맞춰둔다
         }
+
+        /// <summary>전사·암살자처럼 몸으로 부딪히는 직업만 근접(대상 자리까지 다가가 때림), 나머지는 원거리(제자리에서 공격).</summary>
+        private static bool IsMeleeClass(MercenaryClassKind kind) =>
+            kind == MercenaryClassKind.Warrior || kind == MercenaryClassKind.Assassin;
 
         // ---------- 전투 진행(ATB - 매 프레임 게이지를 돌린다) ----------
 
@@ -125,9 +141,7 @@ namespace GN3.Battle
                 UpdateCountdownLabel(waiting);
             }
 
-            // 스킬 대상을 고르는 중엔 매 프레임 다시 반영(그 사이 대상이 죽었을 수 있으므로).
-            if (_pickingSkillTarget)
-                HighlightTargetable(_session.SkillOf(waiting).TargetType);
+            RefreshInteractable();
         }
 
         private void HideActionPanel()
@@ -136,8 +150,8 @@ namespace GN3.Battle
             _pickingSkillTarget = false;
             _session.Deciding = false;
             _skillButton.interactable = false;
-            ClearTargetable();
             _turnLabel.text = "전투 진행 중...";
+            RefreshInteractable();
         }
 
         private void ShowActionPanel(Combatant actor)
@@ -161,14 +175,13 @@ namespace GN3.Battle
             }
 
             UpdateCountdownLabel(actor);
-            ClearTargetable();
         }
 
         private void UpdateCountdownLabel(Combatant actor)
         {
             float countdown = _session.AutoAttackCountdown;
             _turnLabel.text = countdown > 0f
-                ? $"{actor.Name}의 차례! (자동공격까지 {countdown:0.0}초 - 스킬을 쓰려면 지금)"
+                ? $"{actor.Name}의 차례! (자동공격 {countdown:0.0}초)"
                 : $"{actor.Name}의 차례!";
         }
 
@@ -178,19 +191,53 @@ namespace GN3.Battle
             if (actor == null) return;
             var skill = _session.SkillOf(actor);
             if (skill == null || _session.CooldownRemaining(actor) > 0f) return;
+            _selectedMerc = null;
             _pickingSkillTarget = true;
             _session.Deciding = true;
             _turnLabel.text = $"{actor.Name} - {skill.Name} 대상을 고르세요";
+            RefreshInteractable();
         }
 
-        private void OnUnitClicked(Combatant target)
+        /// <summary>
+        /// 유닛 카드 클릭. 세 가지 뜻 중 하나:
+        /// 1) 스킬 대상을 고르는 중이면 - 그 대상에게 스킬 사용(기존 동작).
+        /// 2) 내 용병을 클릭 - 그 용병을 선택(다시 클릭하면 선택 해제, 다른 용병 클릭하면 선택 바뀜).
+        /// 3) 용병을 선택해둔 채 적을 클릭 - 그 용병에게 "이 적을 공격해라" 지정. 근접이면 즉시 그 자리로 다가가고,
+        ///    마침 그 용병이 입력을 기다리던 참이면(WaitingPlayerActor) 지금 바로 공격까지 수행한다.
+        /// </summary>
+        private void OnUnitClicked(Combatant clicked)
         {
-            if (!_pickingSkillTarget || _session.WaitingPlayerActor == null || !target.IsAlive) return;
-            _pickingSkillTarget = false;
-            ClearTargetable();
+            if (_pickingSkillTarget)
+            {
+                if (_session.WaitingPlayerActor == null || !clicked.IsAlive) return;
+                _pickingSkillTarget = false;
+                var events = _session.PlayerAct(true, clicked);
+                ApplyEventsVisual(events);
+                RefreshInteractable();
+                return;
+            }
 
-            var events = _session.PlayerAct(true, target);
-            ApplyEventsVisual(events);
+            if (!clicked.IsAlive) return;
+
+            if (_session.PlayerTeam.Contains(clicked))
+            {
+                _selectedMerc = _selectedMerc == clicked ? null : clicked;
+                RefreshInteractable();
+                return;
+            }
+
+            if (_selectedMerc != null)
+            {
+                var merc = _selectedMerc;
+                _selectedMerc = null;
+                _session.SetEngagedTarget(merc, clicked);
+                if (_session.WaitingPlayerActor == merc)
+                {
+                    var events = _session.PlayerAct(false, clicked);
+                    ApplyEventsVisual(events);
+                }
+                RefreshInteractable();
+            }
         }
 
         private void ShowResult()
@@ -217,24 +264,56 @@ namespace GN3.Battle
 
         // ---------- 유닛 표시 ----------
 
-        private void HighlightTargetable(SkillTargetType type)
+        private static readonly Color TransparentFrame = new Color(0f, 0f, 0f, 0f);
+        private static readonly Color TargetableFrame = new Color(0.9f, 0.85f, 0.3f, 0.35f); // 지금 클릭하면 뜻이 있는 대상(노랑)
+        private static readonly Color SelectedFrame = new Color(0.3f, 0.7f, 1f, 0.45f);       // 내가 선택해둔 용병(파랑)
+
+        /// <summary>
+        /// 모든 유닛 카드의 "지금 클릭 가능한가/어떤 색으로 강조할까"를 한 곳에서 매 프레임 다시 계산한다.
+        /// - 스킬 대상을 고르는 중: 스킬의 TargetType에 맞는 생존 유닛만 클릭 가능(노랑)
+        /// - 그 외: 내 용병은 항상 클릭 가능(선택 중이면 파랑), 적은 용병을 선택해둔 동안에만 클릭 가능(노랑)
+        /// </summary>
+        private void RefreshInteractable()
         {
-            var pool = type == SkillTargetType.Enemy ? _session.EnemyTeam : _session.PlayerTeam;
-            var targets = new HashSet<Combatant>(pool.Where(c => c.IsAlive));
+            if (_pickingSkillTarget)
+            {
+                var waiting = _session.WaitingPlayerActor;
+                var skill = waiting != null ? _session.SkillOf(waiting) : null;
+                if (waiting == null || skill == null)
+                {
+                    _pickingSkillTarget = false;
+                }
+                else
+                {
+                    var pool = skill.TargetType == SkillTargetType.Enemy ? _session.EnemyTeam : _session.PlayerTeam;
+                    var targets = new HashSet<Combatant>(pool.Where(c => c.IsAlive));
+                    foreach (var kv in _views)
+                        SetFrame(kv.Value, targets.Contains(kv.Key), TargetableFrame);
+                    return;
+                }
+            }
+
+            if (_selectedMerc != null && !_selectedMerc.IsAlive) _selectedMerc = null;
+
             foreach (var kv in _views)
-                SetTargetable(kv.Value, targets.Contains(kv.Key));
+            {
+                bool alive = kv.Key.IsAlive;
+                if (_session.PlayerTeam.Contains(kv.Key))
+                {
+                    kv.Value.Button.interactable = alive; // 내 용병은 언제든 선택 가능
+                    kv.Value.Frame.color = kv.Key == _selectedMerc ? SelectedFrame : TransparentFrame;
+                }
+                else
+                {
+                    SetFrame(kv.Value, alive && _selectedMerc != null, TargetableFrame); // 적은 용병을 선택해둔 동안에만
+                }
+            }
         }
 
-        private void ClearTargetable()
+        private static void SetFrame(UnitView v, bool interactable, Color highlightColor)
         {
-            foreach (var v in _views.Values)
-                SetTargetable(v, false);
-        }
-
-        private void SetTargetable(UnitView v, bool targetable)
-        {
-            v.Button.interactable = targetable && v.Combatant.IsAlive;
-            v.Frame.color = targetable ? new Color(0.9f, 0.85f, 0.3f, 0.35f) : new Color(0f, 0f, 0f, 0f);
+            v.Button.interactable = interactable;
+            v.Frame.color = interactable ? highlightColor : TransparentFrame;
         }
 
         private void UpdateUnitView(UnitView v)
@@ -247,6 +326,21 @@ namespace GN3.Battle
             v.HpText.text = alive ? $"{v.Combatant.CurrentHealth}/{v.Combatant.Stats.MaxHealth}" : "전사";
             v.ReadinessFill.fillAmount = alive ? _session.ReadinessRatioOf(v.Combatant) : 0f;
             v.TurnMarker.SetActive(alive && _session.WaitingPlayerActor == v.Combatant);
+
+            // 내 쪽 근접 유닛은 "붙어서 싸우는 대상"이 살아있는 동안 계속 그 자리에 머문다(안 돌아옴) -
+            // 매 프레임 목표 오프셋으로 부드럽게 다가가고, 대상이 죽으면(또는 아직 없으면) 서서히 제자리로.
+            // 적(원거리는 아예 호출 안 되는 Lunge 코루틴)은 그대로 한 번 다가갔다 돌아오는 연출을 쓴다.
+            if (v.IsPlayerSide && v.IsMelee && alive)
+            {
+                var engaged = v.Combatant != null ? _session.EngagedTargetOf(v.Combatant) : null;
+                Vector2 goal = (engaged != null && _views.TryGetValue(engaged, out var targetView2))
+                    ? ApproachOffset(v, targetView2)
+                    : Vector2.zero;
+                v.LungeOffset = Vector2.Lerp(v.LungeOffset, goal, 1f - Mathf.Exp(-10f * Time.deltaTime));
+            }
+
+            float bob = alive ? Mathf.Sin(Time.time * 1.6f + v.BobPhase) * 3f : 0f;
+            v.AnimRoot.anchoredPosition = new Vector2(0f, bob) + v.LungeOffset;
         }
 
         private void ApplyEventsVisual(List<BattleEvent> events)
@@ -254,15 +348,76 @@ namespace GN3.Battle
             foreach (var evt in events)
             {
                 AppendLog(FormatEvent(evt));
-                if (_views.TryGetValue(evt.Target, out var view))
+
+                // 내 쪽 근접 유닛은 UpdateUnitView가 매 프레임 "붙어서 싸우는 대상" 쪽으로 자연스럽게 따라가므로
+                // 여기서 따로 움직이지 않는다 - 적 쪽 근접만 기존처럼 한 번 다가갔다 돌아오는 연출을 쓴다.
+                _views.TryGetValue(evt.Target, out var targetView);
+                if (_views.TryGetValue(evt.Attacker, out var attackerView) && attackerView.IsMelee
+                    && !attackerView.IsPlayerSide && targetView != null)
+                    StartCoroutine(Lunge(attackerView, targetView));
+
+                if (targetView != null)
                 {
-                    UpdateUnitView(view);
+                    UpdateUnitView(targetView);
                     string label = evt.Damage < 0 ? $"+{-evt.Damage}" : evt.Evaded ? "회피" : $"-{evt.Damage}";
                     Color color = evt.Damage < 0 ? new Color(0.45f, 0.9f, 0.5f)
                         : evt.Evaded ? Color.white : new Color(1f, 0.45f, 0.4f);
-                    StartCoroutine(FloatText(view, label, color));
+                    StartCoroutine(FloatText(targetView, label, color));
+                    if (evt.Damage > 0 && !evt.Evaded)
+                        StartCoroutine(HitFlash(targetView));
                 }
             }
+        }
+
+        /// <summary>대상 쪽으로 다가가는 데 필요한 AnimRoot 오프셋. Root는 Row 레이아웃이 관리하므로 그대로 두고,
+        /// 두 Root의 월드(=캔버스) 좌표 차이를 캔버스 배율로 나눠 anchoredPosition 오프셋으로 바꾼다
+        /// - 행(위/아래)이 달라도 정확한 방향·거리가 나온다. 거리의 55%까지만 다가가 대상과 완전히 겹치지 않게 한다.</summary>
+        private Vector2 ApproachOffset(UnitView attacker, UnitView target)
+        {
+            const float approachFraction = 0.55f;
+            Vector3 worldDelta = target.Root.transform.position - attacker.Root.transform.position;
+            float scale = _canvas != null && _canvas.scaleFactor > 0.01f ? _canvas.scaleFactor : 1f;
+            return (Vector2)worldDelta / scale * approachFraction;
+        }
+
+        /// <summary>근접 공격 연출(적 전용): 대상 자리까지 다가갔다가 원래 자리로 돌아온다(원거리는 아예 호출 안 됨 - 제자리).
+        /// 내 쪽 근접 유닛은 UpdateUnitView가 "붙어서 싸우는 대상" 쪽으로 계속 따라가는 방식을 쓰므로 이 코루틴을 안 쓴다.</summary>
+        private IEnumerator Lunge(UnitView attacker, UnitView target)
+        {
+            const float outDur = 0.14f, holdDur = 0.05f, backDur = 0.2f;
+            Vector2 approach = ApproachOffset(attacker, target);
+
+            float t = 0f;
+            while (t < outDur)
+            {
+                t += Time.deltaTime;
+                attacker.LungeOffset = approach * Mathf.SmoothStep(0f, 1f, t / outDur);
+                yield return null;
+            }
+            attacker.LungeOffset = approach;
+            yield return new WaitForSeconds(holdDur);
+
+            t = 0f;
+            while (t < backDur)
+            {
+                t += Time.deltaTime;
+                attacker.LungeOffset = approach * (1f - Mathf.SmoothStep(0f, 1f, t / backDur));
+                yield return null;
+            }
+            attacker.LungeOffset = Vector2.zero;
+        }
+
+        /// <summary>피격 연출: 포트레이트 위로 붉은 막이 잠깐 번쩍였다 사라진다.</summary>
+        private IEnumerator HitFlash(UnitView v)
+        {
+            const float duration = 0.3f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                if (v.HitFlash == null) yield break;
+                v.HitFlash.color = new Color(1f, 0.2f, 0.15f, 0.5f * (1f - t / duration));
+                yield return null;
+            }
+            if (v.HitFlash != null) v.HitFlash.color = new Color(1f, 0.2f, 0.15f, 0f);
         }
 
         private static string FormatEvent(BattleEvent evt)
@@ -317,6 +472,7 @@ namespace GN3.Battle
             var canvasGO = new GameObject("BattleCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             var canvas = canvasGO.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            _canvas = canvas;
             var scaler = canvasGO.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
@@ -380,7 +536,7 @@ namespace GN3.Battle
             return go.transform;
         }
 
-        private UnitView CreateUnitView(Transform parent, string displayName, Combatant combatant, ComposedCharacter appearance, int tier)
+        private UnitView CreateUnitView(Transform parent, string displayName, Combatant combatant, ComposedCharacter appearance, int tier, bool isMelee)
         {
             var root = new GameObject(displayName, typeof(RectTransform), typeof(LayoutElement), typeof(CanvasGroup));
             root.transform.SetParent(parent, false);
@@ -405,17 +561,25 @@ namespace GN3.Battle
             button.interactable = false;
             button.onClick.AddListener(() => OnUnitClicked(combatant));
 
+            // 공격 동작·대기 중 흔들림은 전부 이 안쪽 컨테이너에만 적용한다(Root 자체는 Row의 레이아웃이 관리하므로 건드리지 않음).
+            var animRootGO = new GameObject("AnimRoot", typeof(RectTransform));
+            animRootGO.transform.SetParent(root.transform, false);
+            var animRoot = (RectTransform)animRootGO.transform;
+            animRoot.anchorMin = Vector2.zero;
+            animRoot.anchorMax = Vector2.one;
+            animRoot.offsetMin = animRoot.offsetMax = Vector2.zero;
+
             // 초상화 또는 기본 도형
             GameObject portraitGO;
             if (appearance != null)
             {
-                portraitGO = CharacterPortraitUI.Create(root.transform, appearance, 110, PortraitCrop.FullBody);
+                portraitGO = CharacterPortraitUI.Create(animRoot, appearance, 110, PortraitCrop.FullBody);
                 ((RectTransform)portraitGO.transform).sizeDelta = new Vector2(110f, 110f);
             }
             else
             {
                 portraitGO = new GameObject("Placeholder", typeof(RectTransform), typeof(Image));
-                portraitGO.transform.SetParent(root.transform, false);
+                portraitGO.transform.SetParent(animRoot, false);
                 var img = portraitGO.GetComponent<Image>();
                 img.sprite = BattlePlaceholderSprites.Circle;
                 img.color = BattlePlaceholderSprites.ColorForTier(tier);
@@ -427,7 +591,7 @@ namespace GN3.Battle
             portraitRect.anchorMin = portraitRect.anchorMax = portraitRect.pivot = new Vector2(0.5f, 1f);
             portraitRect.anchoredPosition = new Vector2(0f, -8f);
 
-            var turnMarker = CreateText(root.transform, "▼", 20, TextAnchor.MiddleCenter, UITheme.TitleText);
+            var turnMarker = CreateText(animRoot, "▼", 20, TextAnchor.MiddleCenter, UITheme.TitleText);
             turnMarker.raycastTarget = false;
             var markerRect = turnMarker.rectTransform;
             markerRect.anchorMin = markerRect.anchorMax = markerRect.pivot = new Vector2(0.5f, 1f);
@@ -435,7 +599,7 @@ namespace GN3.Battle
             markerRect.sizeDelta = new Vector2(60f, 22f);
             turnMarker.gameObject.SetActive(false);
 
-            var nameText = CreateText(root.transform, displayName, 15, TextAnchor.MiddleCenter, UITheme.BodyText);
+            var nameText = CreateText(animRoot, displayName, 15, TextAnchor.MiddleCenter, UITheme.BodyText);
             nameText.raycastTarget = false;
             var nameRect = nameText.rectTransform;
             nameRect.anchorMin = nameRect.anchorMax = nameRect.pivot = new Vector2(0.5f, 1f);
@@ -443,7 +607,7 @@ namespace GN3.Battle
             nameRect.sizeDelta = new Vector2(156f, 22f);
 
             var hpBg = new GameObject("HpBg", typeof(RectTransform), typeof(Image));
-            hpBg.transform.SetParent(root.transform, false);
+            hpBg.transform.SetParent(animRoot, false);
             var hpBgRect = (RectTransform)hpBg.transform;
             hpBgRect.anchorMin = hpBgRect.anchorMax = hpBgRect.pivot = new Vector2(0.5f, 1f);
             hpBgRect.anchoredPosition = new Vector2(0f, -144f);
@@ -477,7 +641,7 @@ namespace GN3.Battle
 
             // 준비 게이지(ATB) - 체력바 바로 아래, 다 차면 그 유닛이 행동한다.
             var readyBg = new GameObject("ReadinessBg", typeof(RectTransform), typeof(Image));
-            readyBg.transform.SetParent(root.transform, false);
+            readyBg.transform.SetParent(animRoot, false);
             var readyBgRect = (RectTransform)readyBg.transform;
             readyBgRect.anchorMin = readyBgRect.anchorMax = readyBgRect.pivot = new Vector2(0.5f, 1f);
             readyBgRect.anchoredPosition = new Vector2(0f, -162f);
@@ -502,17 +666,33 @@ namespace GN3.Battle
             readyFill.fillAmount = 0f;
             readyFill.raycastTarget = false;
 
+            // 피격 막(평소엔 완전 투명) - AnimRoot보다 위에 그려야 하므로 root의 마지막 자식으로 둔다.
+            var hitFlashGO = new GameObject("HitFlash", typeof(RectTransform), typeof(Image));
+            hitFlashGO.transform.SetParent(root.transform, false);
+            var hitFlashRect = (RectTransform)hitFlashGO.transform;
+            hitFlashRect.anchorMin = Vector2.zero;
+            hitFlashRect.anchorMax = Vector2.one;
+            hitFlashRect.offsetMin = hitFlashRect.offsetMax = Vector2.zero;
+            var hitFlash = hitFlashGO.GetComponent<Image>();
+            hitFlash.color = new Color(1f, 0.2f, 0.15f, 0f);
+            hitFlash.raycastTarget = false;
+
             var view = new UnitView
             {
                 Combatant = combatant,
                 Root = root,
+                AnimRoot = animRoot,
                 Group = group,
                 Frame = frame,
+                HitFlash = hitFlash,
                 HpFill = hpFill,
                 HpText = hpText,
                 ReadinessFill = readyFill,
                 TurnMarker = turnMarker.gameObject,
                 Button = button,
+                IsPlayerSide = tier < 0,
+                IsMelee = isMelee,
+                BobPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
             };
             UpdateUnitView(view);
             return view;

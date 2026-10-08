@@ -23,7 +23,13 @@ namespace GN3.Combat
 
         // 플레이어 유닛이 준비되면 이 시간 동안 스킬을 쓸 기회를 준다 - 그 안에 스킬을 쓰지 않으면
         // 기본공격이 랜덤 대상에게 자동으로 나간다(적과 동일하게 자동, 스킬만 직접 개입).
-        private const float AutoAttackDelay = 2f;
+        // 너무 길면 "다들 기다렸다가 한꺼번에 때리는" 턴제 느낌이 나서 짧게 잡는다.
+        private const float AutoAttackDelay = 1.2f;
+
+        // 시작 게이지를 0~40%로 무작위로 흩어두고, 유닛마다 충전 속도도 ±15% 흔들어서
+        // 다들 같은 속도로 동시에 시작했을 때 생기는 "몰려서 번갈아 때리는" 패턴을 막는다.
+        private const float StartingReadinessJitter = 40f;
+        private const float SpeedJitterRange = 0.15f;
 
         public List<Combatant> PlayerTeam { get; }
         public List<Combatant> EnemyTeam { get; }
@@ -46,6 +52,12 @@ namespace GN3.Combat
         private readonly Dictionary<Combatant, SkillBase> _skills;
         private readonly Dictionary<Combatant, float> _readiness = new Dictionary<Combatant, float>();
         private readonly Dictionary<Combatant, float> _cooldowns = new Dictionary<Combatant, float>();
+        private readonly Dictionary<Combatant, float> _speedJitter = new Dictionary<Combatant, float>();
+
+        // 플레이어 유닛별 "지금 붙어서 싸우는 대상" - 한 번 기본공격을 하면 그 대상이 죽기 전까지 계속
+        // 같은 대상을 공격한다(매번 다시 랜덤으로 안 돌아가도록). 플레이어가 직접 클릭으로 지정할 수도 있다.
+        private readonly Dictionary<Combatant, Combatant> _engagedTarget = new Dictionary<Combatant, Combatant>();
+
         private readonly System.Random _rng;
         private float _elapsed;
         private float _waitTimer;
@@ -58,7 +70,10 @@ namespace GN3.Combat
             _rng = rng;
 
             foreach (var c in playerTeam.Concat(enemyTeam))
-                _readiness[c] = 0f;
+            {
+                _readiness[c] = (float)_rng.NextDouble() * StartingReadinessJitter;
+                _speedJitter[c] = 1f - SpeedJitterRange + (float)_rng.NextDouble() * (SpeedJitterRange * 2f);
+            }
             foreach (var c in playerTeam)
                 _cooldowns[c] = 0f;
 
@@ -69,6 +84,18 @@ namespace GN3.Combat
         public float CooldownRemaining(Combatant c) => _cooldowns.TryGetValue(c, out var v) ? v : 0f;
         public float ReadinessOf(Combatant c) => _readiness.TryGetValue(c, out var v) ? v : 0f;
         public float ReadinessRatioOf(Combatant c) => ReadinessOf(c) / MaxReadiness;
+
+        /// <summary>이 플레이어 유닛이 지금 붙어서 싸우는 대상(없으면 null - 아직 한 번도 공격 안 했거나 대상이 죽음).</summary>
+        public Combatant EngagedTargetOf(Combatant actor) =>
+            _engagedTarget.TryGetValue(actor, out var t) && t != null && t.IsAlive ? t : null;
+
+        /// <summary>플레이어가 직접 "이 유닛은 이 대상을 공격해라"를 지정한다(용병 클릭 → 적 클릭). 다음 기본공격부터
+        /// 바로 이 대상에게 나간다 - 이미 입력을 기다리던 참이면 UI가 이어서 PlayerAct(false, target)을 호출해 바로 공격시킨다.</summary>
+        public void SetEngagedTarget(Combatant actor, Combatant target)
+        {
+            if (actor == null || target == null) return;
+            _engagedTarget[actor] = target;
+        }
 
         /// <summary>매 프레임 호출. 게이지를 채우고 쿨타임을 줄이며, 준비된 적은 즉시 자동으로 행동시킨다.
         /// 플레이어 유닛이 새로 준비되면 WaitingPlayerActor에 채워 입력을 기다리게 한다(최대 한 명씩 순서대로).
@@ -88,7 +115,7 @@ namespace GN3.Combat
             {
                 if (!c.IsAlive) { _readiness[c] = 0f; continue; }
                 if (c == WaitingPlayerActor) continue; // 입력 대기 중엔 가득 찬 채로 고정
-                float fillPerSecond = BaseFillPerSecond + c.Stats.MoveSpeed * FillPerSpeedPerSecond;
+                float fillPerSecond = (BaseFillPerSecond + c.Stats.MoveSpeed * FillPerSpeedPerSecond) * _speedJitter[c];
                 _readiness[c] = System.Math.Min(MaxReadiness, _readiness[c] + fillPerSecond * deltaTime);
             }
 
@@ -118,7 +145,7 @@ namespace GN3.Combat
             {
                 _waitTimer -= deltaTime;
                 if (_waitTimer <= 0f)
-                    events.AddRange(PlayerAct(false, PickRandomAliveEnemy()));
+                    events.AddRange(PlayerAct(false, ChooseBasicAttackTarget(WaitingPlayerActor)));
             }
 
             return events;
@@ -129,6 +156,9 @@ namespace GN3.Combat
             var alive = EnemyTeam.Where(c => c.IsAlive).ToList();
             return alive.Count == 0 ? null : alive[_rng.Next(alive.Count)];
         }
+
+        /// <summary>기본공격 자동 대상 선정: 붙어서 싸우던 대상이 아직 살아있으면 계속 그 대상, 없으면 새로 랜덤.</summary>
+        private Combatant ChooseBasicAttackTarget(Combatant actor) => EngagedTargetOf(actor) ?? PickRandomAliveEnemy();
 
         private List<BattleEvent> ResolveReadyEnemies()
         {
@@ -177,6 +207,7 @@ namespace GN3.Combat
             else if (target != null)
             {
                 events.Add(CombatResolver.ResolveAttack(actor, target, ActionCount, EnemyTeam, _rng));
+                _engagedTarget[actor] = target; // 다음 기본공격도 이 대상이 죽기 전까지 계속 같은 대상에게.
             }
 
             Log.AddRange(events);
