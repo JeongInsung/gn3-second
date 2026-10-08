@@ -36,11 +36,14 @@ namespace GN3.Quests
         /// <summary>
         /// 전투 결과를 반영하고 파견을 끝낸다: 체력 반영(0이면 전사 → 파티에서 제거), 승리 시 보상, 알림·하루 보고서 기록,
         /// ExpeditionLog.Complete(살아남은 용병은 마을 출구에서 걸어 들어온다). 한 줄 요약을 돌려준다.
+        /// 우편함에 퀘스트 결과 편지(중요 → 게임을 멈추고 알림창)를 남기고 도착 편지를 처리 완료로 바꾼다.
+        /// alertShown: 이미 결과 화면을 보여 준 곳(직접 진행 전투 씬·파티 패널 로그 재생)은 true — 알림창을 다시 띄우지 않는다.
         /// </summary>
-        public static string Conclude(Expedition expedition, Battle battle)
+        public static string Conclude(Expedition expedition, Battle battle, bool alertShown = false)
         {
             var quest = expedition.Quest;
             var fallen = new List<string>();
+            var fallenMercs = new List<Mercenary>();
             for (int i = 0; i < battle.Fighters.Count; i++)
             {
                 var merc = battle.Fighters[i];
@@ -48,6 +51,7 @@ namespace GN3.Quests
                 if (!merc.IsAlive)
                 {
                     fallen.Add(merc.Name);
+                    fallenMercs.Add(merc);
                     PlayerParty.Instance.Remove(merc);
                 }
             }
@@ -72,20 +76,32 @@ namespace GN3.Quests
             int xp = 40 + 20 * (int)questGrade;
             if (!battle.Victory) xp /= 2;
             var levelUps = GrantExperience(expedition.Members.Where(m => m.IsAlive), xp);
-            MercenaryCondition.AfterBattle(expedition.Members.Where(m => m.IsAlive), battle.Victory, fallen.Count); // 피로·사기
+            var survivorsList = expedition.Members.Where(m => m.IsAlive).ToList();
+            MercenaryCondition.AfterBattle(survivorsList, battle.Victory, fallenMercs); // 피로·사기(친밀도 보정 포함)
+            // 함께 살아 돌아온 사람끼리 친밀도가 바뀐다(승리면 오르고, 실패면 성격이 안 맞는 사이는 내려간다).
+            Affinity.AfterExpedition(survivorsList, battle.Victory);
             summary += $" · 경험치 +{xp}";
 
             string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
             if (survivors.Length > 0) summary += $" · 귀환: {survivors}";
             if (fallen.Count > 0) summary += $" · 전사: {string.Join(", ", fallen)}";
 
-            ToastLog.Show(summary);
+            ToastLog.Show(summary, false);
             DailyLog.Add(summary);
             foreach (var line in levelUps)
             {
-                ToastLog.Show(line);
+                ToastLog.Show(line, false);
                 DailyLog.Add(line);
             }
+
+            // 우편함: 결과 편지(중요). 본문은 요약을 줄마다 나누고 레벨업을 덧붙인다.
+            string body = summary.Replace(" · ", "\n");
+            if (levelUps.Count > 0) body += "\n\n" + string.Join("\n", levelUps);
+            var mail = Mailbox.Post(MailKind.QuestResult,
+                battle.Victory ? $"[{quest.Title}] 임무 완료!" : $"[{quest.Title}] 임무 실패...", body, important: true);
+            if (alertShown) Mailbox.Acknowledge(mail);
+            Mailbox.ResolveArrival(expedition);
+
             ExpeditionLog.Instance.Complete(expedition);
             return summary;
         }

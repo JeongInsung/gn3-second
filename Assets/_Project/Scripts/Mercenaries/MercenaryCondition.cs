@@ -91,8 +91,17 @@ namespace GN3.Mercenaries
 
             string line = $"주급 지급: {paid}명 -{spent}G";
             if (unpaid.Count > 0) line += $" (골드 부족으로 {unpaid.Count}명 미지급: {string.Join(", ", unpaid)} · 사기 -{UnpaidMorale})";
-            ToastLog.Show(line);
             DailyLog.Add(line);
+            if (unpaid.Count == 0)
+            {
+                ToastLog.Show(line);
+                return;
+            }
+            // 미지급은 중요: 게임을 멈추고 알림창
+            ToastLog.Show(line, false);
+            Mailbox.Post(MailKind.Alert, "주급을 다 주지 못했습니다",
+                $"골드가 부족해 {unpaid.Count}명에게 주급을 주지 못했습니다.\n미지급: {string.Join(", ", unpaid)}\n사기 -{UnpaidMorale}\n\n" +
+                $"지급: {paid}명 -{spent}G", important: true);
         }
 
         /// <summary>마을에 있는 사기 0 용병은 길드를 떠난다(파견 중이면 돌아온 뒤 다음 자정에).</summary>
@@ -109,24 +118,55 @@ namespace GN3.Mercenaries
             }
         }
 
-        /// <summary>파견 전투가 끝났을 때(살아남은 사람만): 피로 +20, 승리 사기 +10 / 패배 -15, 전사자 1명마다 -10.</summary>
-        public static void AfterBattle(IEnumerable<Mercenary> survivors, bool victory, int fallenCount)
+        private const int MaxAffinityBattleMorale = 9; // 동료 관계로 오르내리는 사기 한도(±)
+
+        /// <summary>
+        /// 파견 전투가 끝났을 때(살아남은 사람만): 피로 +20, 승리 사기 +10 / 패배 -15, 전사자 1명마다 -10.
+        /// 친밀도 보정: 같이 싸운 동료(전사자 포함)마다 관계 단계의 사기(앙숙 -3 ~ 절친 +3)를 더해 ±9로 자르고,
+        /// 전사자와의 관계 단계에 따라 추가로 잃는다(지인 -3 · 친구 -10 · 절친 -15).
+        /// </summary>
+        public static void AfterBattle(IReadOnlyList<Mercenary> survivors, bool victory, IReadOnlyList<Mercenary> fallen)
         {
+            var fighters = survivors.Concat(fallen).ToList();
             foreach (var merc in survivors)
             {
                 merc.AddFatigue(BattleFatigue);
-                merc.AddMorale((victory ? VictoryMorale : -DefeatMorale) - FallenComradeMorale * fallenCount);
+                merc.AddMorale((victory ? VictoryMorale : -DefeatMorale) - FallenComradeMorale * fallen.Count);
+                int bonus = 0;
+                foreach (var other in fighters)
+                {
+                    if (other == merc) continue;
+                    var tier = Affinity.TierBetween(merc, other);
+                    bonus += tier.BattleMorale;
+                    if (tier == Affinity.Tiers[0]) DailyLog.Add($"{merc.Name}은(는) 앙숙 {other.Name}와(과) 같이 싸우는 게 불편했다.");
+                }
+                merc.AddMorale(Mathf.Clamp(bonus, -MaxAffinityBattleMorale, MaxAffinityBattleMorale));
             }
+            MournFriends(survivors, fallen);
         }
 
-        /// <summary>이동 중 습격에서 살아남았을 때: 피로 +10, 전사자 1명마다 사기 -10.</summary>
-        public static void AfterAmbush(IEnumerable<Mercenary> survivors, int fallenCount)
+        /// <summary>이동 중 습격에서 살아남았을 때: 피로 +10, 전사자 1명마다 사기 -10(전사자가 친구·절친이면 추가로 더).</summary>
+        public static void AfterAmbush(IReadOnlyList<Mercenary> survivors, IReadOnlyList<Mercenary> fallen)
         {
             foreach (var merc in survivors)
             {
                 merc.AddFatigue(AmbushFatigue);
-                if (fallenCount > 0) merc.AddMorale(-FallenComradeMorale * fallenCount);
+                if (fallen.Count > 0) merc.AddMorale(-FallenComradeMorale * fallen.Count);
             }
+            MournFriends(survivors, fallen);
+        }
+
+        /// <summary>지인 이상을 잃은 사람은 관계 단계만큼 사기가 더 떨어진다. 친밀도는 전사자가 파티에서 빠지기 전 값으로 본다.</summary>
+        private static void MournFriends(IReadOnlyList<Mercenary> survivors, IReadOnlyList<Mercenary> fallen)
+        {
+            foreach (var merc in survivors)
+                foreach (var dead in fallen)
+                {
+                    var tier = Affinity.TierBetween(merc, dead);
+                    if (tier.MournMorale == 0) continue;
+                    merc.AddMorale(tier.MournMorale);
+                    DailyLog.Add($"{merc.Name}이(가) {tier.Name} {dead.Name}을(를) 잃은 슬픔에 잠겼다. (사기 {tier.MournMorale})");
+                }
         }
 
         /// <summary>UI용: "피로 34 · 사기 70" + 능력치 감소가 있으면 "(공격·방어 -10%)".</summary>

@@ -254,7 +254,7 @@ namespace GN3.Battle
                 TeamB = _session.EnemyTeam,
             };
             var battle = new ExpeditionBattle.Battle { Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam };
-            string summary = ExpeditionBattle.Conclude(_expedition, battle);
+            string summary = ExpeditionBattle.Conclude(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
 
             HideActionPanel();
             bool victory = _session.Outcome == BattleOutcome.TeamAVictory;

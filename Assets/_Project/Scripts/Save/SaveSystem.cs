@@ -47,7 +47,7 @@ namespace GN3.Save
             if (HasSave) File.Delete(FilePath);
         }
 
-        /// <summary>저장 파일의 짧은 설명("12일차 · 은빛 길드 · 용병 4명"). 이어하기 창에 쓴다.</summary>
+        /// <summary>저장 파일의 짧은 설명("650년 3월 12일 · 은빛 길드 · 용병 4명"). 이어하기 창에 쓴다.</summary>
         public static string Describe()
         {
             var data = Read();
@@ -55,7 +55,7 @@ namespace GN3.Save
             int rank = 0;
             for (int i = 0; i < Guild.Ranks.Length; i++)
                 if (data.reputation >= Guild.Ranks[i].Required) rank = i;
-            return $"{data.day}일차 · {Guild.Ranks[rank].Name} · 용병 {data.party.Count}명 · {data.gold}G" +
+            return $"{GameCalendar.Format(data.day)} · {Guild.Ranks[rank].Name} · 용병 {data.party.Count}명 · {data.gold}G" +
                    (string.IsNullOrEmpty(data.savedAt) ? "" : $"\n저장: {data.savedAt}");
         }
 
@@ -114,6 +114,7 @@ namespace GN3.Save
                 data.expeditions.Add(e);
             }
             data.trainees = TrainingHall.SaveIds();
+            data.affinities = Affinity.SaveEntries();
             return data;
         }
 
@@ -184,6 +185,7 @@ namespace GN3.Save
             foreach (var merc in mercs)
                 PlayerParty.Instance.RestoreAdd(merc);
             TrainingHall.Restore(data.trainees);
+            Affinity.Restore(data.affinities);
 
             OnLoaded?.Invoke();
             return true;

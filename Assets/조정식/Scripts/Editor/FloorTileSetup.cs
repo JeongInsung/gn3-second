@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.Tilemaps;
@@ -22,6 +23,8 @@ namespace GN3.EditorTools
         private const string RootFolder = "Assets/조정식/Tiles";
         private const string TileSetName = "TILE 1";
         private const string TileSet2Name = "TILE 2";
+        private const string RoadTileSetName = "흙길";
+        private const string VillageName = "Village";
         private const string ScenePath = "Assets/조정식/DesignScene.unity";
         private const string GridObjectName = "Floor Grid";
         private const string TilemapObjectName = "Floor";
@@ -63,6 +66,10 @@ namespace GN3.EditorTools
             int rows = Mathf.Max(1, height / TileSize);
             string baseName = Path.GetFileNameWithoutExtension(assetPath);
 
+            // 마지막 줄을 다 못 채운 시트(흙길 5번째 줄 등)는 빈 칸에 스프라이트·타일을 만들지 않는다.
+            var source = new Texture2D(2, 2);
+            bool readable = source.LoadImage(File.ReadAllBytes(assetPath));
+
             var rects = new List<SpriteRect>(cols * rows);
             int index = 0;
             for (int row = 0; row < rows; row++)
@@ -70,6 +77,12 @@ namespace GN3.EditorTools
                 for (int col = 0; col < cols; col++)
                 {
                     // 텍스처 좌표는 좌하단 기준이라 위쪽 행부터 순서를 매기려면 y를 뒤집는다.
+                    // 번호는 빈 칸도 세어 위치(행×열)와 맞춘다 → 팔레트 배치·기존 타일 이름이 그대로 유지된다.
+                    if (readable && IsEmptyCell(source, col * TileSize, height - (row + 1) * TileSize))
+                    {
+                        index++;
+                        continue;
+                    }
                     rects.Add(new SpriteRect
                     {
                         name = $"{baseName}_{index:00}",
@@ -88,6 +101,16 @@ namespace GN3.EditorTools
             provider.InitSpriteEditorDataProvider();
             provider.SetSpriteRects(rects.ToArray());
             provider.Apply();
+            Object.DestroyImmediate(source);
+        }
+
+        /// <summary>칸 안 픽셀이 전부 투명이면 true.</summary>
+        private static bool IsEmptyCell(Texture2D texture, int x, int y)
+        {
+            var pixels = texture.GetPixels(x, y, TileSize, TileSize);
+            foreach (var p in pixels)
+                if (p.a > 0f) return false;
+            return true;
         }
 
         /// <summary>
@@ -200,6 +223,15 @@ namespace GN3.EditorTools
                 EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
         }
 
+        /// <summary>흙길(4x4 픽셀 마을길)은 Village/Floor Grid의 "흙길" 층에 칠하므로 타일과 팔레트만 만든다.</summary>
+        [MenuItem("GN3/Tilemap/흙길 타일·팔레트 만들기")]
+        public static void SetupRoadTileSet()
+        {
+            if (!SetupTileSet(RoadTileSetName)) return;
+            if (!Application.isBatchMode)
+                EditorApplication.ExecuteMenuItem("Window/2D/Tile Palette");
+        }
+
         /// <summary>타일셋 이미지를 다시 임포트하고 Tile 에셋과 Tile Palette를 만든다. 실패하면 false.</summary>
         private static bool SetupTileSet(string setName)
         {
@@ -214,7 +246,8 @@ namespace GN3.EditorTools
             AssetDatabase.ImportAsset(texturePath, ImportAssetOptions.ForceUpdate);
 
             var tiles = CreateTiles(setName, out int cols, out int rows);
-            if (tiles.Count == 0)
+            int tileCount = tiles.Count(t => t != null);
+            if (tileCount == 0)
             {
                 Debug.LogError($"[FloorTileSetup] {texturePath} 에서 스프라이트를 찾지 못했습니다.");
                 return false;
@@ -222,11 +255,11 @@ namespace GN3.EditorTools
 
             CreatePalette(setName, tiles, cols, rows);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[FloorTileSetup] 완료: 타일 {tiles.Count}개, 팔레트 {PalettePathOf(setName)}");
+            Debug.Log($"[FloorTileSetup] 완료: 타일 {tileCount}개, 팔레트 {PalettePathOf(setName)}");
             return true;
         }
 
-        /// <summary>스프라이트마다 Tile 에셋을 만든다(있으면 스프라이트만 갱신). 반환 순서 = 위쪽 행부터.</summary>
+        /// <summary>스프라이트마다 Tile 에셋을 만든다(있으면 스프라이트만 갱신). 반환 = 칸 위치 순서(위쪽 행부터), 빈 칸은 null.</summary>
         private static List<Tile> CreateTiles(string setName, out int cols, out int rows)
         {
             string texturePath = TexturePathOf(setName);
@@ -246,7 +279,11 @@ namespace GN3.EditorTools
             for (int i = 0; i < cols * rows; i++)
             {
                 string name = $"{setName}_{i:00}";
-                if (!sprites.TryGetValue(name, out var sprite)) continue;
+                if (!sprites.TryGetValue(name, out var sprite))
+                {
+                    tiles.Add(null); // 빈 칸 - 자리만 지켜 뒤 칸이 앞으로 밀리지 않게
+                    continue;
+                }
 
                 string tilePath = $"{tileAssetFolder}/{name}.asset";
                 var tile = AssetDatabase.LoadAssetAtPath<Tile>(tilePath);
@@ -339,7 +376,16 @@ namespace GN3.EditorTools
 
             GameObject gridObject = null;
             foreach (var go in scene.GetRootGameObjects())
+            {
                 if (go.name == GridObjectName) gridObject = go;
+                // 바닥은 이제 Village 프리팹 안에 있다. 루트에서만 찾으면 이걸 못 보고 빈 Floor를 루트에 또 만들어,
+                // 같은 order(-1)로 겹친 Tilemap이 생겨 칠한 칸이 가려지거나 프리팹 밖에 칠해졌다(2026-10-08).
+                if (go.name == VillageName && go.transform.Find(GridObjectName) != null)
+                {
+                    if (openedHere) EditorSceneManager.CloseScene(scene, true);
+                    return;
+                }
+            }
 
             bool changed = false;
             if (gridObject == null)

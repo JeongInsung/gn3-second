@@ -18,6 +18,7 @@ namespace GN3.World
     /// 9시가 되면 안에 있던 용병이 모두 문에서 차례로 나오고, 자정까지는 아무도 들어가지 않는다.
     /// 자정~아침(어두운 동안)에는 모두 안에서 잔다.
     /// 여관이 없으면 밝을 때 전원이 숨기 전 자리에서 나타난다.
+    /// 친밀도(Affinity)가 높은 용병끼리는 가끔 짝을 지어 같이 걷고, 여관·훈련소에도 같이 드나든다.
     /// MainMenuBootstrapper가 MainScene에서 만든다.
     /// </summary>
     public class VillagePartyPresenter : MonoBehaviour
@@ -78,16 +79,39 @@ namespace GN3.World
         private readonly Dictionary<string, float> _nextDecision = new Dictionary<string, float>();
         private float _doorFreeAt;
 
+        // 같이 다니기: 혼자 걷는 용병마다 CompanionRoll초마다, 밖에 있는 가장 친한 동료를 관계 단계의 FollowChance 확률로 따라간다
+        // (지인 15% · 친구 35% · 절친 60%, 낯섦 이하는 안 따라감). 서먹·앙숙인 사람이 있는 무리에는 끼지 않는다.
+        // 한 무리는 리더 포함 MaxGroupSize명, GroupDuration초가 지나면 흩어진다.
+        private const float CompanionRollMin = 20f;
+        private const float CompanionRollMax = 40f;
+        private const float FirstCompanionRollMin = 3f;
+        private const float FirstCompanionRollMax = 12f;
+        private const int MaxGroupSize = 3;
+        private const float GroupDurationMin = 60f;
+        private const float GroupDurationMax = 150f;
+        private const float FollowSide = 0.28f;   // 리더 옆으로 떨어지는 거리
+        private const float FollowBehind = 0.06f; // 조금 뒤(화면 위쪽)에 서서 리더가 앞에 그려지게
+        private readonly Dictionary<string, string> _leaderOf = new Dictionary<string, string>(); // 따라가는 사람 → 리더
+        private readonly Dictionary<string, float> _groupEndsAt = new Dictionary<string, float>();
+        private readonly Dictionary<string, float> _nextCompanionRoll = new Dictionary<string, float>();
+
         private void Start()
         {
-            var floor = FindFirstObjectByType<Tilemap>();
+            // 바닥은 바깥 바닥·광장·흙길(칠하기 층) 여러 장이라, 가장 넓은 것(바깥 바닥)을 걷기 영역으로 쓴다.
+            Tilemap floor = null;
+            float floorArea = 0f;
+            foreach (var tilemap in FindObjectsByType<Tilemap>(FindObjectsSortMode.None))
+            {
+                tilemap.CompressBounds();
+                var size = tilemap.localBounds.size;
+                if (size.x * size.y > floorArea) { floor = tilemap; floorArea = size.x * size.y; }
+            }
             if (floor == null)
             {
                 Debug.LogWarning("[VillagePartyPresenter] 마을 바닥 Tilemap을 찾지 못해 용병을 마을에 내보내지 않습니다. (Village 프리팹이 씬에 있는지 확인)");
                 return;
             }
 
-            floor.CompressBounds();
             var local = floor.localBounds;
             Vector3 min = floor.transform.TransformPoint(local.min);
             Vector3 max = floor.transform.TransformPoint(local.max);
@@ -179,6 +203,7 @@ namespace GN3.World
                 }
             }
 
+            if (!_hidden) UpdateCompanions();
             if (!_hidden && _hasInn)
             {
                 if (IsAllOutTime()) BringEveryoneOut();
@@ -260,7 +285,12 @@ namespace GN3.World
                 _nextTrainingRoll[pair.Key] = now + RandomRange(TrainingRollMin, TrainingRollMax);
                 if (_rng.NextDouble() >= TrainingChance || !_mercById.TryGetValue(pair.Key, out var merc)) continue;
                 float hours = RandomRange(TrainingHall.MinSessionHours, TrainingHall.MaxSessionHours);
-                if (TrainingHall.TryAdd(merc, hours)) return; // 한 번에 한 명(Refresh가 _wanderers를 바꾼다)
+                var buddy = ClosestOutsideFriend(merc, pair.Key); // Refresh가 _wanderers를 바꾸기 전에 고른다
+                if (!TrainingHall.TryAdd(merc, hours)) continue;
+                // 친한 동료가 밖에 있으면 관계 단계의 동행 확률로 같이 훈련하러 간다(정원·피로는 TrainingHall이 거절).
+                if (buddy.merc != null && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && TrainingHall.TryAdd(buddy.merc, hours))
+                    ToastLog.Show($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 훈련하러 간다");
+                return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
             }
         }
 
@@ -282,18 +312,155 @@ namespace GN3.World
                     wanderer.gameObject.SetActive(true);
                     wanderer.ExitBuilding(_innDoor, _innExit);
                     _doorFreeAt = now + DoorGap;
+                    BringFriendOutAfter(pair.Key);
                 }
                 else
                 {
                     _nextDecision[pair.Key] = now + RandomRange(OutsideWanderMin, OutsideWanderMax);
+                    if (_leaderOf.ContainsKey(pair.Key)) continue; // 따라가는 중이면 리더가 들어갈 때 같이 들어간다
                     if (_rng.NextDouble() >= GoInChance) continue;
-                    string id = pair.Key;
-                    wanderer.ReturnInto(_innExit, _innDoor, () =>
-                    {
-                        if (wanderer != null) wanderer.gameObject.SetActive(false);
-                        _nextDecision[id] = Time.time + RandomRange(InsideRestMin, InsideRestMax);
-                    });
+                    var followers = FollowersOf(pair.Key);
+                    GoIntoInn(pair.Key, wanderer);
+                    foreach (var followerId in followers)
+                        if (_wanderers.TryGetValue(followerId, out var follower) && IsOutside(follower))
+                            GoIntoInn(followerId, follower);
                 }
+            }
+        }
+
+        private void GoIntoInn(string id, VillageWanderer wanderer)
+        {
+            Dissolve(id);
+            wanderer.ReturnInto(_innExit, _innDoor, () =>
+            {
+                if (wanderer != null) wanderer.gameObject.SetActive(false);
+                _nextDecision[id] = Time.time + RandomRange(InsideRestMin, InsideRestMax);
+            });
+        }
+
+        /// <summary>
+        /// 여관에서 막 나온 사람의 친구 중 아직 안에 있는 가장 친한 사람이 관계 단계의 TogetherChance 확률로
+        /// DoorGap초 뒤 따라 나와 같이 걷는다(지인 20% · 친구 45% · 절친 75%).
+        /// </summary>
+        private void BringFriendOutAfter(string leaderId)
+        {
+            if (!_mercById.TryGetValue(leaderId, out var leaderMerc)) return;
+            string bestId = null;
+            int best = Affinity.Acquaintance.MinValue - 1;
+            foreach (var pair in _wanderers)
+            {
+                if (pair.Key == leaderId || pair.Value == null || pair.Value.gameObject.activeSelf || pair.Value.IsEntering) continue;
+                if (!_mercById.TryGetValue(pair.Key, out var other)) continue;
+                int value = Affinity.Get(leaderMerc, other);
+                if (value > best) { best = value; bestId = pair.Key; }
+            }
+            if (bestId == null || _rng.NextDouble() >= Affinity.TierOf(best).TogetherChance) return;
+            _doorFreeAt = Time.time + DoorGap * 2f; // 그 사이 다른 사람이 문을 쓰지 않게
+            _nextDecision[bestId] = Time.time + DoorGap * 3f;
+            StartCoroutine(ExitAndFollow(bestId, leaderId, DoorGap));
+        }
+
+        private System.Collections.IEnumerator ExitAndFollow(string id, string leaderId, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (_hidden || !_wanderers.TryGetValue(id, out var wanderer) || wanderer == null || wanderer.gameObject.activeSelf) yield break;
+            if (!_wanderers.TryGetValue(leaderId, out var leader) || !IsOutside(leader)) yield break;
+            wanderer.gameObject.SetActive(true);
+            wanderer.ExitBuilding(_innDoor, _innExit);
+            _nextDecision[id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
+            StartFollowing(id, wanderer, leaderId, leader);
+        }
+
+        // ---------- 같이 다니기 ----------
+
+        private List<string> FollowersOf(string leaderId) =>
+            _leaderOf.Where(kv => kv.Value == leaderId).Select(kv => kv.Key).ToList();
+
+        private static bool IsOutside(VillageWanderer w) => w != null && w.gameObject.activeSelf && !w.IsEntering;
+
+        /// <summary>밖에 나와 걷는 사람 중 merc와 가장 친한 동료(지인 이상). 없으면 (null, 0).</summary>
+        private (Mercenary merc, int value) ClosestOutsideFriend(Mercenary merc, string selfId)
+        {
+            Mercenary best = null;
+            int bestValue = Affinity.Acquaintance.MinValue - 1;
+            foreach (var pair in _wanderers)
+            {
+                if (pair.Key == selfId || !IsOutside(pair.Value) || !_mercById.TryGetValue(pair.Key, out var other)) continue;
+                int value = Affinity.Get(merc, other);
+                if (value > bestValue) { bestValue = value; best = other; }
+            }
+            return best != null ? (best, bestValue) : (null, 0);
+        }
+
+        private void StartFollowing(string id, VillageWanderer wanderer, string leaderId, VillageWanderer leader)
+        {
+            float side = FollowersOf(leaderId).Count % 2 == 0 ? FollowSide : -FollowSide;
+            _leaderOf[id] = leaderId;
+            _groupEndsAt[id] = Time.time + RandomRange(GroupDurationMin, GroupDurationMax);
+            wanderer.Follow(leader, new Vector2(side, FollowBehind));
+        }
+
+        /// <summary>id가 든 무리를 푼다(따라가던 사람이면 혼자 걷고, 리더면 따라오던 사람들이 흩어진다).</summary>
+        private void Dissolve(string id)
+        {
+            if (_leaderOf.Remove(id))
+            {
+                _groupEndsAt.Remove(id);
+                if (_wanderers.TryGetValue(id, out var self) && self != null) self.StopFollowing();
+            }
+            foreach (var followerId in FollowersOf(id))
+            {
+                _leaderOf.Remove(followerId);
+                _groupEndsAt.Remove(followerId);
+                if (_wanderers.TryGetValue(followerId, out var follower) && follower != null) follower.StopFollowing();
+            }
+        }
+
+        /// <summary>
+        /// 무리를 정리하고(누가 사라짐·시간이 다 됨·따라가기가 스스로 끊김), 혼자 걷는 사람은 정해진 시각마다
+        /// 가장 친한 동료를 친밀도에 비례한 확률로 따라가기 시작한다.
+        /// </summary>
+        private void UpdateCompanions()
+        {
+            float now = Time.time;
+            foreach (var pair in _leaderOf.ToList())
+            {
+                if (!_leaderOf.ContainsKey(pair.Key)) continue; // 앞에서 이미 풀림
+                _wanderers.TryGetValue(pair.Key, out var follower);
+                _wanderers.TryGetValue(pair.Value, out var leader);
+                bool ended = _groupEndsAt.TryGetValue(pair.Key, out float end) && now >= end;
+                if (ended || !IsOutside(follower) || !IsOutside(leader) || follower.Leader != leader)
+                    Dissolve(pair.Key);
+            }
+
+            foreach (var pair in _wanderers)
+            {
+                var wanderer = pair.Value;
+                if (!IsOutside(wanderer) || _leaderOf.ContainsKey(pair.Key)) continue;
+                if (!_nextCompanionRoll.TryGetValue(pair.Key, out float at))
+                {
+                    _nextCompanionRoll[pair.Key] = now + RandomRange(FirstCompanionRollMin, FirstCompanionRollMax);
+                    continue;
+                }
+                if (now < at) continue;
+                _nextCompanionRoll[pair.Key] = now + RandomRange(CompanionRollMin, CompanionRollMax);
+                if (FollowersOf(pair.Key).Count > 0 || !_mercById.TryGetValue(pair.Key, out var merc)) continue; // 리더는 남을 따라가지 않는다
+
+                // 따라갈 사람: 밖에 있고, 남을 따라가는 중이 아니고, 무리에 자리가 남았고, 무리에 서먹·앙숙이 없는 가장 친한 동료
+                string leaderId = null;
+                int best = Affinity.Acquaintance.MinValue - 1;
+                foreach (var other in _wanderers)
+                {
+                    if (other.Key == pair.Key || !IsOutside(other.Value) || _leaderOf.ContainsKey(other.Key)) continue;
+                    var followers = FollowersOf(other.Key);
+                    if (followers.Count + 1 >= MaxGroupSize || !_mercById.TryGetValue(other.Key, out var otherMerc)) continue;
+                    if (followers.Any(f => _mercById.TryGetValue(f, out var fm) && Affinity.TierBetween(merc, fm).Avoids)) continue;
+                    int value = Affinity.Get(merc, otherMerc);
+                    if (value > best) { best = value; leaderId = other.Key; }
+                }
+                if (leaderId == null || _rng.NextDouble() >= Affinity.TierOf(best).FollowChance) continue;
+                StartFollowing(pair.Key, wanderer, leaderId, _wanderers[leaderId]);
+                return; // _leaderOf가 바뀌었으니 나머지는 다음 프레임에
             }
         }
 
@@ -447,9 +614,11 @@ namespace GN3.World
                 {
                     Destroy(wanderer.gameObject); // 해고·사망
                 }
+                Dissolve(id);
                 _wanderers.Remove(id);
                 _mercById.Remove(id);
                 _nextDecision.Remove(id);
+                _nextCompanionRoll.Remove(id);
             }
             if (departing.Count > 0)
             {

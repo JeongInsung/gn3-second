@@ -59,15 +59,20 @@ namespace GN3.UI
             CreateCloseButton(marketPanel.transform, marketPanel);
             CreateCloseButton(partyPanel.transform, partyPanel);
             CreateCloseButton(questPanel.transform, questPanel);
+            // ESC로도 닫는다(닫기 버튼과 같은 동작). 위에 뜬 상세 창이 있으면 그것부터 닫힌다.
+            foreach (var p in new[] { marketPanel, partyPanel, questPanel })
+                EscapeCloser.Register(p, () => p.SetActive(false));
             CreateDayControls(canvas.transform);
             new GameObject("VillageParty", typeof(VillagePartyPresenter)); // 파티 용병들이 마을을 돌아다닌다
+            new GameObject("WeatherEffects", typeof(WeatherEffects));     // 오늘 날씨(서울 평년값): 비·눈 파티클, 흐린 날 조명
             ConnectBuildings(canvas.transform, partyPanel, questPanel);
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
             new GameObject("TrainingHallUI", typeof(TrainingHallUI)); // 훈련소 패널에 훈련 중·맡길 용병 목록
             QuestInfoPanel.Create();                              // 퀘스트 줄 클릭 → 상세 창
             GuildPanel.Create();                                  // 길드 건물·길드 글자 클릭 → 티어·수용 인원 창
-            ArrivalPrompt.Create(partyPanel);                     // 목적지 도착 → 퀘스트마다 "자동 진행 / 직접 진행"
+            RelationsPanel.Create();                              // 오른쪽 아래 "관계" 버튼 → 용병 친밀도 창
+            ImportantAlertPanel.Create();                         // 중요 소식(도착 선택·퀘스트 결과 등) → 게임을 멈추고 알림창
             var mainCamera = Camera.main;
             if (mainCamera != null && mainCamera.GetComponent<CameraZoom>() == null)
                 mainCamera.gameObject.AddComponent<CameraZoom>(); // 마우스 휠 줌
@@ -86,15 +91,22 @@ namespace GN3.UI
             {
                 _globalHooksInstalled = true;
 
-                ExpeditionLog.Instance.OnTravelEvent += ToastLog.Show; // 이동 중 습격 소식도 알림으로
+                // 이동 중 소식은 알림으로. 용병이 죽거나 전멸하면 중요(게임을 멈추고 알림창).
+                ExpeditionLog.Instance.OnTravelEvent += line =>
+                {
+                    bool deadly = line.Contains("사망") || line.Contains("전멸");
+                    ToastLog.Show(line, !deadly);
+                    if (deadly) Mailbox.Post(MailKind.Alert, line.Contains("전멸") ? "파견대 전멸" : "용병 전사", line, important: true);
+                };
 
-                // 길드 단계가 오르면 알림·하루 보고서.
+                // 길드 단계가 오르면 중요 알림·하루 보고서.
                 Guild.OnChanged += rankUp =>
                 {
                     if (!rankUp) return;
                     string line = $"길드 등급 상승! {Guild.Current.Name} — {Guild.UnlockText(Guild.Current)}";
-                    ToastLog.Show(line);
+                    ToastLog.Show(line, false);
                     DailyLog.Add(line);
+                    Mailbox.Post(MailKind.Alert, $"길드 등급 상승! {Guild.Current.Name}", Guild.UnlockText(Guild.Current), important: true);
                 };
 
                 // 불러오면 시계·낮밤·시장·게시판을 새 상태에 맞춘다.
@@ -150,7 +162,7 @@ namespace GN3.UI
             }
         }
 
-        /// <summary>일차·시각 표시 + "진행" 버튼. 누르면 GameClock을 3시간 진행시키고 마을 낮/밤도 함께 흐른다
+        /// <summary>일차·시각 표시 + 오른쪽 위 "진행" 버튼(AdvanceButton, 우클릭 → 며칠 진행). 누르면 GameClock을 3시간 진행시키고 마을 낮/밤도 함께 흐른다
         /// (TimeAdvanceController). 자정을 넘으면 하루가 지나 진행 중인 파견들의 남은 일수가 줄어든다(ExpeditionLog).
         /// MarketPanel/PartyPanel/QuestPanel은 전부 화면 우측에 붙어 있어서(우상단 anchor),
         /// 패널 안쪽 버튼(예: PartyUI의 파견 시작 버튼)과 겹치지 않도록 좌상단 메뉴 버튼바 바로 아래에 둔다.</summary>
@@ -173,49 +185,78 @@ namespace GN3.UI
             layout.childControlWidth = true;
             layout.childControlHeight = true;
 
-            var dayTextGO = new GameObject("DayText", typeof(RectTransform), typeof(Text), typeof(LayoutElement));
+            // "650년 3월 1일 · 봄 · 오전 6:00 · 맑음 8°C", 마우스를 올리면 "N일차"와 최저·최고 기온(TimeAdvanceController가 갱신)
+            var dayTextGO = new GameObject("DayText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(TooltipTrigger));
             dayTextGO.transform.SetParent(barGO.transform, false);
             var dayTextLayout = dayTextGO.GetComponent<LayoutElement>();
-            dayTextLayout.minWidth = 170f;
+            dayTextLayout.minWidth = 430f;
             dayTextLayout.minHeight = 40f;
             var dayText = dayTextGO.GetComponent<Text>();
             dayText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             dayText.fontSize = 18;
             dayText.alignment = TextAnchor.MiddleLeft;
             dayText.color = Color.white;
+            dayText.raycastTarget = true; // 툴팁용
 
             CreateGoldText(barGO.transform);
             CreateGuildText(barGO.transform);
 
-            var buttonGO = new GameObject("AdvanceDayButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-            buttonGO.transform.SetParent(barGO.transform, false);
-            buttonGO.GetComponent<Image>().color = new Color(0.25f, 0.35f, 0.5f, 0.9f);
-            var buttonLayout = buttonGO.GetComponent<LayoutElement>();
-            buttonLayout.minWidth = 120f;
-            buttonLayout.minHeight = 40f;
-            CreateFillText(buttonGO.transform, "진행", 16);
-
             // 버튼 클릭이든 스페이스바든 컨트롤러 하나가 시계 진행·낮밤 전환·텍스트 갱신을 맡는다.
+            // 진행 버튼은 화면 오른쪽 위에 크게, 우클릭하면 하루·4일·일주일 건너뛰기 메뉴(끝나면 그동안의 보고서가 뜬다).
             var controller = barGO.GetComponent<TimeAdvanceController>();
-            var button = buttonGO.GetComponent<Button>();
+            var button = AdvanceButton.Create(canvasTransform, controller);
             controller.Init(dayText, button);
-            button.onClick.AddListener(controller.RequestAdvance);
 
             // 가만히 둬도 흐르는 시간의 속도(1배속 ↔ 2배속)
-            controller.SetSpeedButton(CreateSkipButton(barGO.transform, "1배속", controller.ToggleSpeed));
+            controller.SetSpeedButton(CreateSpeedButton(canvasTransform, controller)); // 오른쪽 위 저장 버튼 왼쪽
 
-            // 하루·4일·일주일 건너뛰기(끝나면 그동안의 보고서가 뜬다)
-            var skipDay = CreateSkipButton(barGO.transform, "하루", () => controller.RequestSkipDays(1));
-            var skipFour = CreateSkipButton(barGO.transform, "4일", () => controller.RequestSkipDays(4));
-            var skipWeek = CreateSkipButton(barGO.transform, "일주일", () => controller.RequestSkipDays(7));
-            controller.SetSkipButtons(skipDay, skipFour, skipWeek);
+            // 저장(자정마다 자동 저장도 된다): 오른쪽 위 진행 버튼 바로 왼쪽
+            CreateSaveButton(canvasTransform);
 
-            // 저장(자정마다 자동 저장도 된다)
-            CreateSkipButton(barGO.transform, "저장", () =>
-                ToastLog.Show(SaveSystem.Save() ? $"저장했습니다 ({GameClock.CurrentDay}일차)" : "저장에 실패했습니다"));
+            // 지나간 알림(왼쪽 아래 토스트) 다시 보기: 화면 오른쪽 아래 우편함 아이콘, 안 읽은 알림이 있으면 "!"
+            MailboxButton.Create(canvasTransform);
+            RelationsPanel.CreateButton(canvasTransform); // 우편함 왼쪽: 용병 관계(친밀도) 창
+        }
 
-            // 지나간 알림(왼쪽 아래 토스트) 다시 보기
-            CreateSkipButton(barGO.transform, "알림 기록", ToastHistoryPanel.Toggle);
+        private static readonly Vector2 SmallButtonSize = new Vector2(70f, 40f); // 배속·저장 버튼(예전 바 안 크기)
+        private const float TopRightSpacing = 8f;
+
+        /// <summary>오른쪽 위 작은 버튼의 세로 위치: 진행 버튼 높이의 가운데.</summary>
+        private static float SmallButtonTop => -(AdvanceButton.Margin + (AdvanceButton.ButtonSize.y - SmallButtonSize.y) * 0.5f);
+
+        /// <summary>저장 버튼 왼쪽, 세로 가운데를 맞춘 1배속/2배속 토글.</summary>
+        private static Button CreateSpeedButton(Transform canvasTransform, TimeAdvanceController controller)
+        {
+            var go = new GameObject("SpeedButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(canvasTransform, false);
+            go.transform.SetAsFirstSibling();
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
+            rect.anchoredPosition = new Vector2(
+                -(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing + SmallButtonSize.x + TopRightSpacing),
+                SmallButtonTop);
+            rect.sizeDelta = SmallButtonSize;
+            go.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
+            CreateFillText(go.transform, "1배속", 15);
+            var button = go.GetComponent<Button>();
+            button.onClick.AddListener(controller.ToggleSpeed);
+            return button;
+        }
+
+        /// <summary>진행 버튼(AdvanceButton) 왼쪽, 배속 버튼과 같은 크기·세로 가운데로 붙는 저장 버튼. 진행 버튼처럼 Canvas 맨 뒤라 창이 열리면 그 아래로 깔린다.</summary>
+        private static void CreateSaveButton(Transform canvasTransform)
+        {
+            var go = new GameObject("SaveButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(canvasTransform, false);
+            go.transform.SetAsFirstSibling();
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
+            rect.anchoredPosition = new Vector2(-(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing), SmallButtonTop);
+            rect.sizeDelta = SmallButtonSize;
+            go.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
+            CreateFillText(go.transform, "저장", 15);
+            go.GetComponent<Button>().onClick.AddListener(() =>
+                ToastLog.Show(SaveSystem.Save() ? $"저장했습니다 ({GameCalendar.Format(GameClock.CurrentDay)})" : "저장에 실패했습니다"));
         }
 
         private static Button CreateSkipButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick)
@@ -232,13 +273,37 @@ namespace GN3.UI
             return button;
         }
 
-        /// <summary>보유 골드 표시. 바뀔 때마다 숫자를 갱신하고 잠깐 색을 깜빡인다(벌면 초록, 쓰면 빨강).</summary>
+        /// <summary>보유 골드 표시: [동전 아이콘][숫자]. 바뀔 때마다 숫자를 갱신하고 잠깐 색을 깜빡인다(벌면 초록, 쓰면 빨강).
+        /// 아이콘(Resources/UIIcons/gold)을 못 읽으면 예전처럼 "N G" 글자만.</summary>
         private static void CreateGoldText(Transform parent)
         {
+            var group = new GameObject("Gold", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            group.transform.SetParent(parent, false);
+            var groupLayout = group.GetComponent<HorizontalLayoutGroup>();
+            groupLayout.spacing = 4f;
+            groupLayout.childAlignment = TextAnchor.MiddleLeft;
+            groupLayout.childControlWidth = groupLayout.childControlHeight = true;
+            groupLayout.childForceExpandWidth = groupLayout.childForceExpandHeight = false;
+
+            var icon = UIIcons.Load("UIIcons/gold");
+            if (icon != null)
+            {
+                var iconGO = new GameObject("GoldIcon", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+                iconGO.transform.SetParent(group.transform, false);
+                var iconImage = iconGO.GetComponent<Image>();
+                iconImage.sprite = icon;
+                iconImage.preserveAspect = true;
+                iconImage.raycastTarget = false;
+                var iconLayout = iconGO.GetComponent<LayoutElement>();
+                iconLayout.minWidth = iconLayout.preferredWidth = 32f;
+                iconLayout.minHeight = iconLayout.preferredHeight = 32f;
+            }
+            string Format() => icon != null ? $"{Wallet.Gold}" : $"{Wallet.Gold} G";
+
             var go = new GameObject("GoldText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(Shadow));
-            go.transform.SetParent(parent, false);
+            go.transform.SetParent(group.transform, false);
             var layout = go.GetComponent<LayoutElement>();
-            layout.minWidth = 110f;
+            layout.minWidth = 80f;
             layout.minHeight = 40f;
             var text = go.GetComponent<Text>();
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -246,14 +311,14 @@ namespace GN3.UI
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleLeft;
             text.color = UITheme.TitleText;
-            text.text = $"{Wallet.Gold} G";
+            text.text = Format();
             text.raycastTarget = false;
 
             Coroutine flash = null;
             Wallet.OnChanged += delta =>
             {
                 if (text == null) return;
-                text.text = $"{Wallet.Gold} G";
+                text.text = Format();
                 if (flash != null) CoroutineHost.Instance.StopCoroutine(flash);
                 flash = CoroutineHost.Instance.StartCoroutine(FlashGold(text, delta > 0 ? new Color(0.5f, 0.9f, 0.45f) : new Color(1f, 0.4f, 0.35f)));
             };

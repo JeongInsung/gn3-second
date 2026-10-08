@@ -13,7 +13,8 @@ namespace GN3.UI
     /// 가장 어두운 순간에 Midpoint를 알려 마을 쪽이 용병 위치를 바꾼다(막에 가려 순간이동이 안 보인다).
     /// 프로젝트가 Player Settings에서 Input System 패키지만 쓰도록 돼 있어(레거시 UnityEngine.Input 비활성)
     /// 새 Input System API를 사용한다.
-    /// 가만히 둬도 시간이 흐른다(게임 1시간 = 실제 30초). 2배속 버튼은 Time.timeScale을 2로 올려 시계와 함께 캐릭터·애니메이션·파티클까지 두 배로 돌린다(UI 연출은 unscaled라 그대로). 전환 중·하루 보고서가 떠 있는 동안은 멈춘다.</summary>
+    /// 가만히 둬도 시간이 흐른다(게임 1시간 = 실제 30초). 2배속 버튼은 Time.timeScale을 2로 올려 시계와 함께 캐릭터·애니메이션·파티클까지 두 배로 돌린다(UI 연출은 unscaled라 그대로).
+    /// 전환 중이거나 게임이 멈춘 동안(GamePause — 중요 알림창)은 시간이 흐르지 않고 timeScale도 0이다. 하루 보고서는 우편함(Mailbox)으로 간다.</summary>
     public class TimeAdvanceController : MonoBehaviour
     {
         private const float TransitionSeconds = 1f;
@@ -34,6 +35,7 @@ namespace GN3.UI
         private static readonly Color SpeedFastColor = new Color(0.75f, 0.5f, 0.15f, 0.95f);
 
         private Text _clockText;
+        private TooltipTrigger _clockTip; // 마우스를 올리면 "N일차"
         private Button _button;
         private Button[] _skipButtons = new Button[0];
         private bool _isAdvancing;
@@ -49,11 +51,12 @@ namespace GN3.UI
         public void Init(Text clockText, Button button)
         {
             _clockText = clockText;
+            _clockTip = clockText != null ? clockText.GetComponent<TooltipTrigger>() : null;
             _button = button;
             UpdateClockText(GameClock.CurrentHour);
         }
 
-        /// <summary>하루·4일·일주일 건너뛰기 버튼. 전환 중에는 진행 버튼과 함께 잠근다.</summary>
+        /// <summary>진행 버튼 우클릭 메뉴의 하루·4일·일주일 건너뛰기 버튼(AdvanceButton). 전환 중에는 진행 버튼과 함께 잠근다.</summary>
         public void SetSkipButtons(params Button[] buttons) => _skipButtons = buttons ?? new Button[0];
 
         private void SetLocked(bool locked)
@@ -83,7 +86,7 @@ namespace GN3.UI
         public void ToggleSpeed()
         {
             _speed = _speed == 1 ? 2 : 1;
-            Time.timeScale = _speed; // 시계·캐릭터·Animator·파티클이 함께 빨라진다
+            if (!GamePause.IsPaused) Time.timeScale = _speed; // 시계·캐릭터·Animator·파티클이 함께 빨라진다
             UpdateSpeedButton();
         }
 
@@ -98,32 +101,34 @@ namespace GN3.UI
 
         private void Update()
         {
+            // 중요 알림창이 떠 있으면(GamePause) 시계·캐릭터·애니메이션이 모두 멈춘다.
+            Time.timeScale = GamePause.IsPaused ? 0f : _speed;
             if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
                 RequestAdvance();
             FlowTime();
         }
 
-        /// <summary>가만히 둬도 시간이 흐른다. 진행·건너뛰기 전환 중이거나 하루 보고서가 떠 있으면 멈춘다.</summary>
+        /// <summary>가만히 둬도 시간이 흐른다. 진행·건너뛰기 전환 중이거나 게임이 멈춰 있으면 멈춘다.</summary>
         private void FlowTime()
         {
-            if (_isAdvancing || DayReportPanel.IsOpen) return;
+            if (_isAdvancing || GamePause.IsPaused) return;
             int dayBefore = GameClock.CurrentDay;
             GameClock.AdvanceHours(Time.deltaTime / RealSecondsPerGameHour); // deltaTime에 배속(timeScale)이 이미 들어 있다
             var cycle = DayNightCycle.Instance;
             if (cycle != null) cycle.TimeOfDay = GameClock.CurrentHour;
             UpdateClockText(GameClock.CurrentHour);
 
-            // 자정을 넘겼으면 진행 버튼과 같이 그날 보고서를 띄우고 자동 저장한다.
+            // 자정을 넘겼으면 진행 버튼과 같이 그날 보고서를 우편함에 넣고 자동 저장한다.
             if (GameClock.CurrentDay != dayBefore)
             {
-                DayReportPanel.Show(GameClock.CurrentDay, GameClock.CurrentDay);
+                Mailbox.PostReport(GameClock.CurrentDay, GameClock.CurrentDay);
                 AutoSave();
             }
         }
 
         public void RequestAdvance()
         {
-            if (_isAdvancing) return;
+            if (_isAdvancing || GamePause.IsPaused) return;
             StartCoroutine(AdvanceRoutine());
         }
 
@@ -164,10 +169,10 @@ namespace GN3.UI
             SetLocked(false);
             _isAdvancing = false;
 
-            // 자정을 넘겼으면 그날 보고서(파견 진행·있었던 일)를 띄우고 자동 저장한다.
+            // 자정을 넘겼으면 그날 보고서(파견 진행·있었던 일)를 우편함에 넣고 자동 저장한다.
             if (GameClock.CurrentDay != dayBefore)
             {
-                DayReportPanel.Show(GameClock.CurrentDay, GameClock.CurrentDay);
+                Mailbox.PostReport(GameClock.CurrentDay, GameClock.CurrentDay);
                 AutoSave();
             }
         }
@@ -175,7 +180,7 @@ namespace GN3.UI
         /// <summary>하루(1)·4일(4)·일주일(7)을 한 번에 건너뛴다. 시각은 그대로, 끝나면 그동안의 날짜별 보고서를 띄운다.</summary>
         public void RequestSkipDays(int days)
         {
-            if (_isAdvancing || days <= 0) return;
+            if (_isAdvancing || GamePause.IsPaused || days <= 0) return;
             StartCoroutine(SkipRoutine(days));
         }
 
@@ -190,7 +195,7 @@ namespace GN3.UI
             if (_bannerFade != null) StopCoroutine(_bannerFade);
             _bannerFade = null;
             _bannerTitle.text = days == 1 ? "하루 후…" : days == 7 ? "일주일 후…" : $"{days}일 후…";
-            _bannerSub.text = $"{startDay}일차 {DayNightCycle.FormatTime(hour)}  →  {startDay + days}일차 {DayNightCycle.FormatTime(hour)}";
+            _bannerSub.text = $"{GameCalendar.Format(startDay)} {DayNightCycle.FormatTime(hour)}  →  {GameCalendar.Format(startDay + days)} {DayNightCycle.FormatTime(hour)}";
             _banner.alpha = 1f;
 
             bool skipped = false;
@@ -211,7 +216,7 @@ namespace GN3.UI
             _bannerFade = StartCoroutine(FadeBanner());
             SetLocked(false);
             _isAdvancing = false;
-            DayReportPanel.Show(startDay + 1, GameClock.CurrentDay);
+            Mailbox.PostReport(startDay + 1, GameClock.CurrentDay); // 건너뛴 날 전체를 보고서 한 통으로
             AutoSave();
         }
 
@@ -241,8 +246,13 @@ namespace GN3.UI
         // 자정을 넘는 중에도 일차는 GameClock 기준이라 0시에 확정될 때 바뀐다.
         private void UpdateClockText(float hour)
         {
+            var weather = Weather.Today;
             if (_clockText != null)
-                _clockText.text = $"{GameClock.CurrentDay}일차 · {DayNightCycle.FormatTime(hour)}";
+                _clockText.text = $"{GameCalendar.FormatWithSeason(GameClock.CurrentDay)} · {DayNightCycle.FormatTime(hour)} · " +
+                                  $"{Weather.KindName(weather.Kind)} {Mathf.RoundToInt(Weather.CurrentTemperatureAt(hour))}°C";
+            if (_clockTip != null)
+                _clockTip.Text = $"{GameClock.CurrentDay}일차\n오늘 {Weather.KindName(weather.Kind)} · 최저 {Mathf.RoundToInt(weather.Min)}°C / 최고 {Mathf.RoundToInt(weather.Max)}°C" +
+                                (Weather.DebugTemperature.HasValue ? "\n(기온 시험용 고정 중)" : "");
         }
 
         private void ShowBanner(float from, float to)
@@ -254,7 +264,7 @@ namespace GN3.UI
             bool overnight = to >= 24f;
             _bannerTitle.text = overnight ? "밤이 지나…" : $"{GameClock.HoursPerStep:0}시간 후…";
             _bannerSub.text = overnight
-                ? $"{GameClock.CurrentDay + 1}일차 · {DayNightCycle.FormatTime(to)}"
+                ? $"{GameCalendar.Format(GameClock.CurrentDay + 1)} · {DayNightCycle.FormatTime(to)}"
                 : $"{DayNightCycle.FormatTime(from)}  →  {DayNightCycle.FormatTime(to)}";
             _banner.alpha = 1f;
         }

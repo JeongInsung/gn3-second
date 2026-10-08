@@ -9,7 +9,7 @@ namespace GN3.UI
     /// <summary>
     /// 화면 왼쪽 아래에 잠깐 떴다 사라지는 알림(파견 출발·귀환, 보상, 회복, 습격, 골드 부족 등).
     /// 최대 4줄을 아래에서 위로 쌓고, 각 줄은 3초 뒤 서서히 사라진다. 클릭을 막지 않는다.
-    /// 띄운 알림은 History에 남아 "알림 기록" 창(ToastHistoryPanel)에서 다시 볼 수 있다(한 판 동안, 저장 안 함).
+    /// 띄운 알림은 우편함(Mailbox)에 일반 알림 편지로 남아 다시 볼 수 있다(한 판 동안, 저장 안 함).
     /// </summary>
     public class ToastLog : MonoBehaviour
     {
@@ -43,11 +43,18 @@ namespace GN3.UI
         private RectTransform _stack;
         private readonly List<GameObject> _lines = new List<GameObject>();
 
-        public static void Show(string message)
+        /// <summary>
+        /// 왼쪽 아래에 잠깐 띄운다. mail이면 우편함에 일반 알림(Notice) 편지로도 남긴다.
+        /// 퀘스트 결과·중요 소식처럼 따로 편지를 만드는 곳은 mail:false로 불러 같은 내용이 두 번 쌓이지 않게 한다.
+        /// </summary>
+        public static void Show(string message) => Show(message, true);
+
+        public static void Show(string message, bool mail)
         {
             if (string.IsNullOrEmpty(message)) return;
             _history.Add(new Entry { Day = GameClock.CurrentDay, Hour = GameClock.CurrentHour, Message = message });
             if (_history.Count > MaxHistory) _history.RemoveAt(0);
+            if (mail) Mailbox.Post(MailKind.Notice, message);
             if (_instance == null) _instance = Create();
             _instance.Add(message);
             Added?.Invoke();

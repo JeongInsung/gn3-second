@@ -111,9 +111,17 @@ namespace GN3.EditorTools
         /// </summary>
         internal static Sprite[] BakeFrames(SheetAnimationSettings settings, SpriteRenderer target, out Vector2 anchorPoint)
         {
+            GetPlacement(settings, target, out anchorPoint, out float targetWidth);
+            return BakeFramesAtWidth(settings, targetWidth);
+        }
+
+        /// <summary>
+        /// 씬에 맞출 기존 그림 없이, 그림 불투명 폭이 targetWidth(월드 유닛)가 되게 구운 프레임 스프라이트들(강아지처럼 새로 등장하는 것).
+        /// </summary>
+        internal static Sprite[] BakeFramesAtWidth(SheetAnimationSettings settings, float targetWidth)
+        {
             var cam = Camera.main;
             float screenPixelsPerUnit = PixelBaker.ReferenceScreenHeight / (cam.orthographicSize * 2f);
-            GetPlacement(settings, target, out anchorPoint, out float targetWidth);
 
             var sheet = LoadReadable(settings.SheetPath);
             var frames = ExtractAlignedFrames(sheet, settings, out int canvasWidth, out int canvasHeight, out int maxBboxWidth);

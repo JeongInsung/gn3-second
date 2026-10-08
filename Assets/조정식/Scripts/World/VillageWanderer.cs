@@ -31,6 +31,15 @@ namespace GN3.World
         private const float MaxDetourRatio = 2f; // 경로가 직선거리의 이 배수를 넘으면(건물을 크게 빙 돎) 다른 목표를 고른다
         private const float ShadowHeightScale = 0.5f; // 그림자 길이 비율(건물과 같은 값). 높이면 길어진다
 
+        // 친한 동료 따라 걷기(VillagePartyPresenter가 Follow로 붙인다)
+        private const float FollowRepathInterval = 0.4f; // 걷는 중 이 간격마다 리더가 움직였는지 본다
+        private const float FollowRepathMove = 0.2f;     // 리더가 이만큼 움직였으면 길을 다시 찾는다
+        private const float FollowCloseEnough = 0.15f;   // 자리(리더 옆)와 이만큼 가까우면 걷지 않고 쉰다
+        private const float FollowCatchUpDistance = 0.35f; // 이보다 멀면 빨리 걸어 따라잡는다
+        private const float FollowCatchUpSpeed = 1.25f;
+        private const float FollowIdleMin = 0.3f;
+        private const float FollowIdleMax = 0.8f;
+
         // 호버 테두리: 흰 실루엣을 8방향으로 이만큼(Body 로컬) 밀어 파츠 뒤에 그린다. 0.06 × 0.3 ≈ 화면 2px(1080p)
         private const float OutlineOffset = 0.06f;
         private const int OutlineSortingOrder = -1; // 파츠(0~) 뒤
@@ -84,6 +93,15 @@ namespace GN3.World
         private int _pathIndex;
         private bool _entering;
         private System.Action _onEntered;
+        private VillageWanderer _leader;
+        private Vector2 _followOffset;
+        private Vector2 _leaderPosAtPath;
+        private float _repathTimer;
+        private float _speedMultiplier = 1f;
+        private bool _scriptedWalk; // 문에서 나오기·마을로 걸어 들어오기: 따라가기로 끊지 않는다
+
+        /// <summary>따라 걷고 있는 동료(없으면 null).</summary>
+        public VillageWanderer Leader => _leader;
 
         /// <summary>건물(여관)로 걸어 들어가는 중. 이때는 마우스로 고를 수 없다.</summary>
         public bool IsEntering => _entering;
@@ -268,13 +286,65 @@ namespace GN3.World
         private void StartIdle()
         {
             _walking = false;
-            _idleTimer = Mathf.Lerp(MinIdleSeconds, MaxIdleSeconds, (float)_rng.NextDouble());
+            _scriptedWalk = false;
+            _speedMultiplier = 1f;
+            _idleTimer = _leader != null
+                ? Mathf.Lerp(FollowIdleMin, FollowIdleMax, (float)_rng.NextDouble())
+                : Mathf.Lerp(MinIdleSeconds, MaxIdleSeconds, (float)_rng.NextDouble());
             Play(_idle);
+        }
+
+        /// <summary>
+        /// leader 옆(offset)을 따라 걷기 시작한다. 하던 걸음(문에서 나오기 등)은 마치고 나서 따라간다.
+        /// 리더가 꺼지거나 사라지거나 건물로 들어가면 스스로 그만둔다.
+        /// </summary>
+        public void Follow(VillageWanderer leader, Vector2 offset)
+        {
+            if (leader == null || leader == this) return;
+            _leader = leader;
+            _followOffset = offset;
+            if (!_walking && !_entering) _idleTimer = Mathf.Min(_idleTimer, FollowIdleMin);
+        }
+
+        public void StopFollowing()
+        {
+            _leader = null;
+            _speedMultiplier = 1f;
+        }
+
+        private bool LeaderLost => _leader == null || !_leader.isActiveAndEnabled || _leader.IsEntering;
+
+        /// <summary>리더 옆 자리까지 길을 찾아 걷는다. 이미 가까우면 잠깐 쉰다.</summary>
+        private void StartFollowWalk()
+        {
+            Vector2 from = _grid.NearestWalkable(transform.position);
+            Vector2 leaderPos = _leader.transform.position;
+            Vector2 target = _grid.NearestWalkable(leaderPos + _followOffset);
+            _leaderPosAtPath = leaderPos;
+            _repathTimer = FollowRepathInterval;
+            float distance = Vector2.Distance(from, target);
+            if (distance < FollowCloseEnough || !_grid.TryFindPath(from, target, _path) || _path.Count == 0)
+            {
+                if (_walking) StartIdle();
+                else _idleTimer = Mathf.Lerp(FollowIdleMin, FollowIdleMax, (float)_rng.NextDouble());
+                return;
+            }
+            transform.position = new Vector3(from.x, from.y, transform.position.z);
+            _speedMultiplier = distance > FollowCatchUpDistance ? FollowCatchUpSpeed : 1f;
+            _pathIndex = 0;
+            FaceTowards(_path[0]);
+            _walking = true;
+            Play(_walk);
         }
 
         /// <summary>랜덤 방향·거리의 목표 중 건물·장식을 돌아서 갈 수 있고 너무 빙 돌지 않는 곳을 골라 걷기 시작한다.</summary>
         private void StartWalk()
         {
+            if (_leader != null)
+            {
+                StartFollowWalk();
+                return;
+            }
             Vector2 from = _grid.NearestWalkable(transform.position); // 막힌 칸 안에 있으면 먼저 빠져나온다
             transform.position = new Vector3(from.x, from.y, transform.position.z);
 
@@ -309,6 +379,7 @@ namespace GN3.World
             _pathIndex = 0;
             FaceTowards(outside);
             _walking = true;
+            _scriptedWalk = true;
             Play(_walk);
         }
 
@@ -317,6 +388,7 @@ namespace GN3.World
         /// </summary>
         public void PlaceAt(Vector2 position)
         {
+            StopFollowing();
             _entering = false;
             _onEntered = null;
             _path.Clear();
@@ -344,6 +416,7 @@ namespace GN3.World
 
         private void WalkThenCall(Vector2 target, IList<Vector2> extraSteps, System.Action onArrived)
         {
+            StopFollowing();
             Vector2 here = transform.position;
             Vector2 start = _grid.NearestWalkable(here);
             if (!_grid.TryFindPath(start, target, _path))
@@ -383,6 +456,7 @@ namespace GN3.World
             _pathIndex = 0;
             FaceTowards(_path[0]);
             _walking = true;
+            _scriptedWalk = true;
             Play(_walk);
         }
 
@@ -418,10 +492,21 @@ namespace GN3.World
         {
             if (_current == null) return;
 
+            if (_leader != null && LeaderLost) StopFollowing();
+            if (_walking && _leader != null && !_entering && !_scriptedWalk)
+            {
+                _repathTimer -= Time.deltaTime;
+                if (_repathTimer <= 0f)
+                {
+                    _repathTimer = FollowRepathInterval;
+                    if (Vector2.Distance(_leader.transform.position, _leaderPosAtPath) > FollowRepathMove) StartFollowWalk();
+                }
+            }
+
             if (_walking)
             {
                 Vector2 waypoint = _path[_pathIndex];
-                Vector2 next = Vector2.MoveTowards(transform.position, waypoint, WalkSpeed * Time.deltaTime);
+                Vector2 next = Vector2.MoveTowards(transform.position, waypoint, WalkSpeed * _speedMultiplier * Time.deltaTime);
                 transform.position = new Vector3(next.x, next.y, transform.position.z);
                 if (next == waypoint)
                 {

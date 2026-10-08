@@ -93,6 +93,10 @@ namespace GN3.World
 
         private const float GradientMinAltitude = -18f; // 천문 박명이 끝나는 고도 = 깊은 밤
         private const float GradientMaxAltitude = 40f;
+        private static readonly Color SnowAmbient = new Color(0.9f, 0.95f, 1f); // 눈 오는 날 낮 주변광
+        private static readonly Color OvercastAmbient = new Color(0.72f, 0.77f, 0.86f); // 흐린 날 낮 주변광
+        private static readonly Color HotSun = new Color(1f, 0.86f, 0.62f);  // 무더운 날 햇빛
+        private static readonly Color ColdSun = new Color(0.82f, 0.9f, 1f);  // 추운 날 햇빛
 
         private static Gradient DefaultAmbientColor()
         {
@@ -268,22 +272,32 @@ namespace GN3.World
             Vector2 sunGround = new Vector2(Mathf.Sin(azimuth), Mathf.Cos(azimuth));
             Vector2 sunDir = sunGround;
 
+            // 날씨(Weather): 흐리거나 비 오면 햇빛·주변광이 약해지고, 눈 오는 날은 주변광이 차가운 흰빛으로. Play 중에만.
+            bool weather = Application.isPlaying;
+            float sunWeather = weather ? Weather.SunFactor : 1f;
+            float ambientWeather = weather ? Weather.AmbientFactor : 1f;
+            float snowWhite = weather ? Weather.SnowWhiteness : 0f;
+
             if (globalLight != null)
             {
-                globalLight.color = ambientColor.Evaluate(Mathf.InverseLerp(GradientMinAltitude, GradientMaxAltitude, altitudeDeg));
-                globalLight.intensity = Mathf.Max(0f, ambientIntensity.Evaluate(altitudeDeg));
+                var ambient = ambientColor.Evaluate(Mathf.InverseLerp(GradientMinAltitude, GradientMaxAltitude, altitudeDeg));
+                ambient = Color.Lerp(ambient, SnowAmbient, snowWhite * day);
+                globalLight.color = Color.Lerp(ambient, OvercastAmbient, (weather ? Weather.Overcast : 0f) * 0.6f * day); // 흐린 하늘: 회청색
+                globalLight.intensity = Mathf.Max(0f, ambientIntensity.Evaluate(altitudeDeg)) * ambientWeather;
             }
 
             if (sunLight != null)
             {
                 sunLight.transform.position = (Vector3)(orbitCenter + sunDir * orbitDistance);
-                sunLight.color = sunColor.Evaluate(Mathf.InverseLerp(0f, GradientMaxAltitude, altitudeDeg));
-                sunLight.intensity = Mathf.Max(0f, sunIntensity.Evaluate(altitudeDeg));
+                var sun = sunColor.Evaluate(Mathf.InverseLerp(0f, GradientMaxAltitude, altitudeDeg));
+                float warmth = weather ? Weather.SunWarmth : 0f; // 기온: 더우면 노랗게, 추우면 푸르스름하게
+                sunLight.color = Color.Lerp(sun, warmth >= 0f ? HotSun : ColdSun, Mathf.Abs(warmth) * 0.35f);
+                sunLight.intensity = Mathf.Max(0f, sunIntensity.Evaluate(altitudeDeg)) * sunWeather;
                 sunLight.shadowsEnabled = sunCastsShadows;
                 sunLight.enabled = sunLight.intensity > 0.001f;
             }
 
-            ApplyProjectedShadows(altitudeDeg, sunGround, day);
+            ApplyProjectedShadows(altitudeDeg, sunGround, day * Mathf.Min(1f, sunWeather)); // 흐린 날 그림자는 옅게
 
             if (moonLight != null)
             {
@@ -315,8 +329,10 @@ namespace GN3.World
             if (profile.TryGet(out ColorAdjustments color))
             {
                 float saturation = Mathf.Lerp(daySaturation, goldenHourSaturation, golden);
-                color.saturation.value = Mathf.Lerp(saturation, nightSaturation, night);
-                color.contrast.value = Mathf.Lerp(dayContrast, nightContrast, night);
+                color.saturation.value = Mathf.Lerp(saturation, nightSaturation, night)
+                                         + (Application.isPlaying ? Weather.SaturationOffset : 0f); // 흐림·비·눈은 색이 빠진다
+                color.contrast.value = Mathf.Lerp(dayContrast, nightContrast, night)
+                                       + (Application.isPlaying ? Weather.ContrastOffset : 0f); // 흐린 날은 빛이 납작하다
             }
         }
 
@@ -344,7 +360,9 @@ namespace GN3.World
         /// </summary>
         private void GetSunPosition(out float altitudeDeg, out float azimuthDeg)
         {
-            int n = useTodayDate ? System.DateTime.Now.DayOfYear : dayOfYear;
+            // Play 중에는 게임 달력 날짜(여름엔 해가 높고 길게, 겨울엔 낮고 짧게), 에디터에선 아래 설정
+            int n = Application.isPlaying ? GameCalendar.DayOfYear(GameClock.CurrentDay)
+                : useTodayDate ? System.DateTime.Now.DayOfYear : dayOfYear;
             float declination = 23.44f * Mathf.Deg2Rad * Mathf.Sin(2f * Mathf.PI * (284 + n) / 365f);
             float hourAngle = 15f * (timeOfDay - 12f) * Mathf.Deg2Rad;
             float lat = latitude * Mathf.Deg2Rad;
