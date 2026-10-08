@@ -97,14 +97,21 @@ namespace GN3.World
 
         private void Start()
         {
-            var floor = FindFirstObjectByType<Tilemap>();
+            // 바닥은 바깥 바닥·광장·흙길(칠하기 층) 여러 장이라, 가장 넓은 것(바깥 바닥)을 걷기 영역으로 쓴다.
+            Tilemap floor = null;
+            float floorArea = 0f;
+            foreach (var tilemap in FindObjectsByType<Tilemap>(FindObjectsSortMode.None))
+            {
+                tilemap.CompressBounds();
+                var size = tilemap.localBounds.size;
+                if (size.x * size.y > floorArea) { floor = tilemap; floorArea = size.x * size.y; }
+            }
             if (floor == null)
             {
                 Debug.LogWarning("[VillagePartyPresenter] 마을 바닥 Tilemap을 찾지 못해 용병을 마을에 내보내지 않습니다. (Village 프리팹이 씬에 있는지 확인)");
                 return;
             }
 
-            floor.CompressBounds();
             var local = floor.localBounds;
             Vector3 min = floor.transform.TransformPoint(local.min);
             Vector3 max = floor.transform.TransformPoint(local.max);
