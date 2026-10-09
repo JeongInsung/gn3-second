@@ -125,7 +125,7 @@ namespace GN3.EditorTools
                 for (int x = Mathf.Max(0, x0); x < Mathf.Min(width, x1); x++)
                 {
                     int p = y * width + x;
-                    if (!(forge ? IsFire(pixels[p]) : IsGlass(pixels[p]))) continue;
+                    if (!(forge ? IsFire(pixels[p]) : IsGlass(pixels[p], entry.warmGlass))) continue;
                     mask[p] = Color.white;
                     glassPixels++;
                 }
@@ -137,14 +137,23 @@ namespace GN3.EditorTools
             return result;
         }
 
-        /// <summary>꺼진 창의 어두운 남색·회색 유리, 또는 원래 주황빛 불이 그려진 유리.</summary>
-        private static bool IsGlass(Color c)
+        /// <summary>
+        /// 꺼진 창의 어두운 남색·회색 유리, 또는 원래 주황빛 불이 그려진 유리.
+        /// warmGlass(건물별 설정)면 붉은 유리(뒷골목 건물의 붉은 격자·커튼 창)와 아주 어두운 갈색 유리
+        /// (낡은 마을 건물: 어두운 안쪽에 주황 창살 — 창살은 밝아서 빠지고 사이 유리만 남는다)도 넣는다.
+        /// 기존 건물은 이 규칙을 켜면 창틀까지 빛나 넓어지므로 건물별로만 켠다.
+        /// </summary>
+        private static bool IsGlass(Color c, bool warmGlass)
         {
             if (c.a < 0.5f) return false;
             float luma = 0.299f * c.r + 0.587f * c.g + 0.114f * c.b;
             bool darkCoolGlass = luma < 0.42f && c.b >= c.r * 0.85f;          // 나무(빨강 > 파랑)는 빠진다
             bool litAmberGlass = c.r > 0.7f && c.g > 0.35f && c.b < 0.45f && luma > 0.45f;
-            return darkCoolGlass || litAmberGlass;
+            if (darkCoolGlass || litAmberGlass) return true;
+            if (!warmGlass) return false;
+            bool redGlass = c.r > 0.55f && c.g < 0.3f && c.b < 0.3f;
+            bool darkWarmGlass = luma < 0.2f;
+            return redGlass || darkWarmGlass;
         }
 
         /// <summary>화덕 불꽃: 주황·노랑·흰 노랑 심지(빨강이 파랑보다 확실히 크고 밝다). 검은 석탄·벽돌은 빠진다.</summary>

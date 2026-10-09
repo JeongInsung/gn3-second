@@ -26,6 +26,7 @@ MonoBehaviour:
       width: 0.0677
       height: 0.0833
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uC1E0\uB77D\uD55C \uBAA8\uD5D8\uAC00 \uAE38\uB4DC \uD640 (1)"
     windows:
     - serializedVersion: 2
@@ -54,6 +55,7 @@ MonoBehaviour:
       width: 0.0421
       height: 0.0702
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uC911\uC138 \uB9C8\uC744\uC758 \uC18C\uBC15\uD55C 2\uCE35 \uC8FC\uD0DD-3"
     windows:
     - serializedVersion: 2
@@ -77,6 +79,7 @@ MonoBehaviour:
       width: 0.0524
       height: 0.0556
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uC774\uB07C \uC9C0\uBD95\uC758 \uC911\uC138 \uB9C8\uC744 \uC7A1\uD654\uC810"
     windows:
     - serializedVersion: 2
@@ -90,6 +93,7 @@ MonoBehaviour:
       width: 0.0599
       height: 0.0785
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uB300\uC7A5\uAC04 \uC5F0\uAE30"
     windows:
     - serializedVersion: 2
@@ -113,6 +117,7 @@ MonoBehaviour:
       width: 0.1
       height: 0.063
     forgeIndices: 03000000
+    warmGlass: 0
   - sourceName: "\uC5EC\uAD00"
     windows:
     - serializedVersion: 2
@@ -156,6 +161,7 @@ MonoBehaviour:
       width: 0.1641
       height: 0.0586
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uC911\uC138 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC758 \uC18C\uBC15\uD55C
       \uCD08\uAC00\uC9D1-2"
     windows:
@@ -170,6 +176,7 @@ MonoBehaviour:
       width: 0.028
       height: 0.043
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uC5F0\uD68C\uC0C9 \uC9C0\uBD95\uC758 \uC911\uC138 \uB9C8\uC744\uC9D1"
     windows:
     - serializedVersion: 2
@@ -188,6 +195,7 @@ MonoBehaviour:
       width: 0.057164636
       height: 0.07005838
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uD68C\uC0C9 \uC9C0\uBD95\uC758 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC9D1"
     windows:
     - serializedVersion: 2
@@ -206,6 +214,7 @@ MonoBehaviour:
       width: 0.04553415
       height: 0.06903765
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uCCAD\uB85D \uC9C0\uBD95\uC758 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC9D1"
     windows:
     - serializedVersion: 2
@@ -224,6 +233,7 @@ MonoBehaviour:
       width: 0.08528785
       height: 0.064914994
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uBCF4\uB77C \uC9C0\uBD95\uC758 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC9D1"
     windows:
     - serializedVersion: 2
@@ -237,6 +247,7 @@ MonoBehaviour:
       width: 0.05755396
       height: 0.06666667
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uBD89\uC740 \uC9C0\uBD95\uC758 \uD310\uD0C0\uC9C0 \uB9C8\uC744\uC9D1"
     windows:
     - serializedVersion: 2
@@ -250,6 +261,7 @@ MonoBehaviour:
       width: 0.053295933
       height: 0.098684214
     forgeIndices: 
+    warmGlass: 0
   - sourceName: "\uC911\uC138 \uB9C8\uC744 \uD6C8\uB828\uC18C \uAC74\uBB3C"
     windows:
     - serializedVersion: 2
@@ -268,7 +280,9 @@ MonoBehaviour:
       width: 0.043891735
       height: 0.13175231
     forgeIndices: 
-  - sourceName: "\uC2ED\uC790\uAC00\uAC00 \uB3CB\uBCF4\uC774\uB294 \uC911\uC138 \uD53D\uC140 \uBCD1\uC6D0"
+    warmGlass: 0
+  - sourceName: "\uC2ED\uC790\uAC00\uAC00 \uB3CB\uBCF4\uC774\uB294 \uC911\uC138 \uD53D\uC140
+      \uBCD1\uC6D0"
     windows:
     - serializedVersion: 2
       x: 0.3491
@@ -291,3 +305,190 @@ MonoBehaviour:
       width: 0.0732
       height: 0.1084
     forgeIndices: 
+    warmGlass: 0
+  - sourceName: "\uB9E5\uC8FC\uC794 \uAC04\uD310\uC758 \uB4B7\uACE8\uBAA9 \uC120\uC220\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.77096117
+      y: 0.5826087
+      width: 0.07157464
+      height: 0.07608695
+    - serializedVersion: 2
+      x: 0.41308793
+      y: 0.40434784
+      width: 0.07157464
+      height: 0.1
+    - serializedVersion: 2
+      x: 0.76687115
+      y: 0.38260868
+      width: 0.075664625
+      height: 0.08695652
+    - serializedVersion: 2
+      x: 0.75255626
+      y: 0.15434782
+      width: 0.061349694
+      height: 0.08695652
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uBD84\uD64D \uBCBD\uC758 \uAF43\uCC3D 2\uCE35\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.24625267
+      y: 0.7044025
+      width: 0.07066381
+      height: 0.0754717
+    - serializedVersion: 2
+      x: 0.51605994
+      y: 0.7023061
+      width: 0.07494646
+      height: 0.077568136
+    - serializedVersion: 2
+      x: 0.24197002
+      y: 0.4989518
+      width: 0.07280514
+      height: 0.10062893
+    - serializedVersion: 2
+      x: 0.5117773
+      y: 0.49685535
+      width: 0.0770878
+      height: 0.094339624
+    - serializedVersion: 2
+      x: 0.7858672
+      y: 0.4528302
+      width: 0.03640257
+      height: 0.04192872
+    - serializedVersion: 2
+      x: 0.23982869
+      y: 0.2033543
+      width: 0.07494646
+      height: 0.0985325
+    - serializedVersion: 2
+      x: 0.71948606
+      y: 0.1865828
+      width: 0.07494646
+      height: 0.0524109
+    - serializedVersion: 2
+      x: 0.8608137
+      y: 0.19287212
+      width: 0.06423983
+      height: 0.044025157
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uBD89\uC740 \uCC28\uC591\uC758 \uB3CC\uACC4\uB2E8 \uC8FC\uC810"
+    windows:
+    - serializedVersion: 2
+      x: 0.5617284
+      y: 0.6779661
+      width: 0.0781893
+      height: 0.0911017
+    - serializedVersion: 2
+      x: 0.590535
+      y: 0.46822035
+      width: 0.07201646
+      height: 0.09322034
+    - serializedVersion: 2
+      x: 0.25925925
+      y: 0.46822035
+      width: 0.061728396
+      height: 0.08898305
+    - serializedVersion: 2
+      x: 0.8271605
+      y: 0.44491526
+      width: 0.04526749
+      height: 0.061440676
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uC8FC\uC0AC\uC704 \uAC04\uD310\uC758 \uB4B7\uACE8\uBAA9 \uB3C4\uBC15\uC7A5"
+    windows:
+    - serializedVersion: 2
+      x: 0.38961038
+      y: 0.6421471
+      width: 0.032467533
+      height: 0.059642147
+    - serializedVersion: 2
+      x: 0.35281384
+      y: 0.45328033
+      width: 0.08874459
+      height: 0.099403575
+    - serializedVersion: 2
+      x: 0.5974026
+      y: 0.4831014
+      width: 0.077922076
+      height: 0.07554672
+    - serializedVersion: 2
+      x: 0.3030303
+      y: 0.1332008
+      width: 0.12770563
+      height: 0.08151093
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uCCAD\uB85D \uC9C0\uBD95\uC758 \uD3EC\uB834 \uCC3B\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.38229376
+      y: 0.48366013
+      width: 0.100603625
+      height: 0.069716774
+    - serializedVersion: 2
+      x: 0.49295774
+      y: 0.48366013
+      width: 0.100603625
+      height: 0.069716774
+    - serializedVersion: 2
+      x: 0.40643862
+      y: 0.1328976
+      width: 0.14084508
+      height: 0.08278867
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uBE48 \uAC04\uD310\uC758 \uB0A1\uC740 2\uCE35\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.3959596
+      y: 0.6593186
+      width: 0.052525252
+      height: 0.09418838
+    - serializedVersion: 2
+      x: 0.37171718
+      y: 0.4228457
+      width: 0.105050504
+      height: 0.13226452
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uBE68\uB798 \uAC78\uB9B0 \uBCF4\uB77C \uC9C0\uBD95 2\uCE35\uC9D1"
+    windows:
+    - serializedVersion: 2
+      x: 0.47334754
+      y: 0.6864407
+      width: 0.06609808
+      height: 0.074152544
+    - serializedVersion: 2
+      x: 0.36247334
+      y: 0.4279661
+      width: 0.08955224
+      height: 0.12288135
+    - serializedVersion: 2
+      x: 0.63539445
+      y: 0.4279661
+      width: 0.08528785
+      height: 0.12288135
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uD310\uC790 \uB367\uB304 \uD68C\uC0C9 \uC9C0\uBD95 \uC624\uB450\uB9C9"
+    windows:
+    - serializedVersion: 2
+      x: 0.6385542
+      y: 0.21303259
+      width: 0.06827309
+      height: 0.14035088
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uB3C4\uB974\uB798 \uB2EC\uB9B0 \uB0A1\uC740 \uCC3D\uACE0"
+    windows:
+    - serializedVersion: 2
+      x: 0.37121212
+      y: 0.59731543
+      width: 0.16287878
+      height: 0.15659955
+    forgeIndices: 
+    warmGlass: 1

@@ -349,6 +349,12 @@ namespace GN3.EditorTools
                 using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
                 {
                     var quest = expedition.Quest;
+                    if (expedition.IsReturning)
+                    {
+                        EditorGUILayout.LabelField($"{quest.Title} — 귀환 중 남은 {expedition.ReturnDaysLeft}일");
+                        if (GUILayout.Button("즉시 귀환", GUILayout.Width(80))) ExpeditionLog.Instance.DebugReturnNow(expedition);
+                        continue;
+                    }
                     EditorGUILayout.LabelField(expedition.IsReady ? $"{quest.Title} — 도착" : $"{quest.Title} — 남은 {quest.RemainingDays}일");
                     using (new EditorGUI.DisabledScope(expedition.IsReady))
                         if (GUILayout.Button("즉시 도착", GUILayout.Width(80))) ExpeditionLog.Instance.DebugArriveNow(expedition);

@@ -35,7 +35,7 @@ namespace GN3.Quests
 
         /// <summary>
         /// 전투 결과를 반영하고 파견을 끝낸다: 체력 반영(0이면 전사 → 파티에서 제거), 승리 시 보상, 알림·하루 보고서 기록,
-        /// ExpeditionLog.Complete(살아남은 용병은 마을 출구에서 걸어 들어온다). 한 줄 요약을 돌려준다.
+        /// 귀환 시작(ExpeditionLog.BeginReturn — 귀환 일수가 지나면 살아남은 용병이 마을 출구에서 걸어 들어온다). 한 줄 요약을 돌려준다.
         /// 우편함에 퀘스트 결과 편지(중요 → 게임을 멈추고 알림창)를 남기고 도착 편지를 처리 완료로 바꾼다.
         /// alertShown: 이미 결과 화면을 보여 준 곳(직접 진행 전투 씬·파티 패널 로그 재생)은 true — 알림창을 다시 띄우지 않는다.
         /// </summary>
@@ -83,7 +83,7 @@ namespace GN3.Quests
             summary += $" · 경험치 +{xp}";
 
             string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
-            if (survivors.Length > 0) summary += $" · 귀환: {survivors}";
+            if (survivors.Length > 0) summary += $" · 귀환길: {survivors} ({System.Math.Max(1, (expedition.OutboundDays + 1) / 2)}일)";
             if (fallen.Count > 0) summary += $" · 전사: {string.Join(", ", fallen)}";
 
             ToastLog.Show(summary, false);
@@ -102,7 +102,9 @@ namespace GN3.Quests
             if (alertShown) Mailbox.Acknowledge(mail);
             Mailbox.ResolveArrival(expedition);
 
-            ExpeditionLog.Instance.Complete(expedition);
+            // 살아남은 사람이 있으면 귀환길에 오른다(며칠 뒤 마을 도착). 전멸이면 바로 끝낸다.
+            if (survivorsList.Count > 0) ExpeditionLog.Instance.BeginReturn(expedition);
+            else ExpeditionLog.Instance.Complete(expedition);
             return summary;
         }
 

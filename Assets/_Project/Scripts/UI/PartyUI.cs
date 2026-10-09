@@ -141,7 +141,7 @@ namespace GN3.UI
 
             var row = new GameObject(quest.Title, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
             row.transform.SetParent(listContainer, false);
-            row.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.25f, 0.4f);
+            row.GetComponent<Image>().color = expedition.IsReturning ? new Color(0.2f, 0.28f, 0.4f, 0.4f) : new Color(0.2f, 0.35f, 0.25f, 0.4f);
 
             var layoutElement = row.GetComponent<LayoutElement>();
             layoutElement.minHeight = 56;
@@ -157,7 +157,8 @@ namespace GN3.UI
             hLayout.childControlHeight = true;
 
             string members = string.Join(", ", expedition.Members.Select(m => m.IsAlive ? m.Name : $"{m.Name}(사망)"));
-            string status = expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {quest.RemainingDays}일)";
+            string status = expedition.IsReturning ? $"귀환 중 (남은 {expedition.ReturnDaysLeft}일)"
+                : expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {quest.RemainingDays}일)";
             string info = $"{QuestDifficulty.RichTitle(quest)}    {status}    파견: {members}    {QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(expedition.Members))}";
             var infoText = CreateText(row.transform, info, 15, TextAnchor.MiddleLeft);
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();

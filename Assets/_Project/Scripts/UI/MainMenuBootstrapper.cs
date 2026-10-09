@@ -177,21 +177,33 @@ namespace GN3.UI
         /// <summary>일차·시각 표시 + 오른쪽 위 "진행" 버튼(AdvanceButton, 우클릭 → 며칠 진행). 누르면 GameClock을 3시간 진행시키고 마을 낮/밤도 함께 흐른다
         /// (TimeAdvanceController). 자정을 넘으면 하루가 지나 진행 중인 파견들의 남은 일수가 줄어든다(ExpeditionLog).
         /// MarketPanel/PartyPanel/QuestPanel은 전부 화면 우측에 붙어 있어서(우상단 anchor),
-        /// 패널 안쪽 버튼(예: PartyUI의 파견 시작 버튼)과 겹치지 않도록 좌상단 메뉴 버튼바 바로 아래에 둔다.</summary>
+        /// 패널 안쪽 버튼(예: PartyUI의 파견 시작 버튼)과 겹치지 않도록 좌상단 메뉴 버튼바의 [퀘스트] 버튼 오른쪽, 같은 줄에 둔다.</summary>
         private static void CreateDayControls(Transform canvasTransform)
         {
-            var barGO = new GameObject("DayControlBar", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(TimeAdvanceController));
+            var barGO = new GameObject("DayControlBar", typeof(RectTransform), typeof(Image), typeof(ContentSizeFitter),
+                typeof(HorizontalLayoutGroup), typeof(TimeAdvanceController));
             barGO.transform.SetParent(canvasTransform, false);
+
+            // 다른 창과 같은 숯빛 판(청동 테두리)으로 글씨 줄을 감싼다. 판은 클릭을 막지 않는다(툴팁·길드 클릭은 글씨가 받는다).
+            var background = barGO.GetComponent<Image>();
+            background.sprite = UITheme.Panel;
+            background.type = Image.Type.Sliced;
+            background.raycastTarget = false;
+            var fitter = barGO.GetComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             var rect = barGO.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(16f, -64f);
+            float menuBarWidth = MenuButtonCount * MenuButtonWidth + (MenuButtonCount - 1) * MenuSpacing;
+            rect.anchoredPosition = new Vector2(MenuBarMargin + menuBarWidth + MenuBarMargin, -MenuBarMargin);
 
             var layout = barGO.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 8f;
-            layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.spacing = 12f;
+            layout.padding = new RectOffset(14, 14, 0, 0); // 위아래 0 → 판 높이 40 = 메뉴 버튼 높이
+            layout.childAlignment = TextAnchor.UpperLeft; // 메뉴 버튼(높이 40, 위 맞춤)과 같은 줄에 오도록 위로 붙인다
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
             layout.childControlWidth = true;
@@ -377,6 +389,13 @@ namespace GN3.UI
             if (text != null) text.color = UITheme.TitleText;
         }
 
+        // 좌상단 메뉴 버튼바. 날짜·골드·명성 줄(DayControlBar)이 이 값으로 [퀘스트] 버튼 오른쪽 자리를 계산한다.
+        private const float MenuBarMargin = 16f;
+        private const float MenuButtonWidth = 120f;
+        private const float MenuButtonHeight = 40f;
+        private const float MenuSpacing = 8f;
+        private const int MenuButtonCount = 3;
+
         private static void CreateMenuBar(Transform canvasTransform, GameObject marketPanel, GameObject partyPanel, GameObject questPanel)
         {
             var barGO = new GameObject("MenuButtonBar", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -386,10 +405,10 @@ namespace GN3.UI
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(16f, -16f);
+            rect.anchoredPosition = new Vector2(MenuBarMargin, -MenuBarMargin);
 
             var layout = barGO.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 8f;
+            layout.spacing = MenuSpacing;
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
             layout.childControlWidth = true;
@@ -410,8 +429,8 @@ namespace GN3.UI
             buttonGO.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.25f, 0.9f);
 
             var layoutElement = buttonGO.GetComponent<LayoutElement>();
-            layoutElement.minWidth = 120f;
-            layoutElement.minHeight = 40f;
+            layoutElement.minWidth = MenuButtonWidth;
+            layoutElement.minHeight = MenuButtonHeight;
 
             CreateFillText(buttonGO.transform, label, 18);
             buttonGO.GetComponent<Button>().onClick.AddListener(onClick);

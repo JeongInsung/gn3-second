@@ -111,6 +111,9 @@ namespace GN3.Save
                     difficulty = q.Difficulty,
                     durationDays = q.DurationDays,
                     remainingDays = q.RemainingDays,
+                    outboundDays = expedition.OutboundDays,
+                    returning = expedition.IsReturning,
+                    returnDaysLeft = expedition.ReturnDaysLeft,
                 };
                 e.memberIds.AddRange(expedition.Members.Where(m => m.IsAlive).Select(m => m.Id));
                 data.expeditions.Add(e);
@@ -189,7 +192,9 @@ namespace GN3.Save
                 if (members.Count == 0) continue;
                 var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays);
                 quest.SetRemainingDays(e.remainingDays);
-                ExpeditionLog.Instance.Restore(new Expedition(quest, members));
+                var expedition = new Expedition(quest, members);
+                expedition.RestoreState(e.outboundDays, e.returning, e.returnDaysLeft);
+                ExpeditionLog.Instance.Restore(expedition);
             }
 
             foreach (var merc in mercs)

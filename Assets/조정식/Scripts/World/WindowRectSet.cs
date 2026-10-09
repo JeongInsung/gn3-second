@@ -20,6 +20,8 @@ namespace GN3.World
             public List<Rect> windows = new List<Rect>();
             [Tooltip("windows 중 화덕 불꽃 사각형의 번호(0부터). 창 불빛 대신 ForgeFire(일렁이는 불꽃·깜빡이는 조명·불티)가 맡는다.")]
             public List<int> forgeIndices = new List<int>();
+            [Tooltip("붉은 유리·아주 어두운 갈색 유리도 창으로 본다(뒷골목·낡은 마을 건물처럼 창이 남색·주황이 아닌 그림).")]
+            public bool warmGlass;
         }
 
         public List<Building> buildings = new List<Building>();

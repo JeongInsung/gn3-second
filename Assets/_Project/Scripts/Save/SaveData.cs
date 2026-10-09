@@ -75,6 +75,9 @@ namespace GN3.Save
         public int difficulty;
         public int durationDays;
         public int remainingDays;
+        public int outboundDays;
+        public bool returning;
+        public int returnDaysLeft;
         public List<string> memberIds = new List<string>();
     }
 }
