@@ -7,9 +7,9 @@ using UnityEngine.UI;
 
 namespace GN3.UI
 {
-    /// <summary>"진행" 버튼과 스페이스바로 GameClock을 3시간 진행시키고, 마을의 낮/밤 사이클(DayNightCycle)을
-    /// 그 3시간만큼 약 1초 동안 부드럽게 흘려 해·그림자·가로등·창문 불빛이 함께 바뀌게 한다. DayControlBar에 붙는다.
-    /// 그동안 마을 화면이 잠깐 어두워졌다 밝아지고 가운데에 "3시간 후…" 배너가 떠서 시간이 흐른 느낌을 준다.
+    /// <summary>"진행" 버튼과 스페이스바로 GameClock을 슬라이더로 정한 시간(1~24시간, 처음 3시간)만큼 진행시키고,
+    /// 마을의 낮/밤 사이클(DayNightCycle)을 그만큼 1~2.5초 동안 부드럽게 흘려 해·그림자·가로등·창문 불빛이 함께 바뀌게 한다. DayControlBar에 붙는다.
+    /// 그동안 마을 화면이 잠깐 어두워졌다 밝아지고 가운데에 "N시간 후…" 배너가 떠서 시간이 흐른 느낌을 준다.
     /// 가장 어두운 순간에 Midpoint를 알려 마을 쪽이 용병 위치를 바꾼다(막에 가려 순간이동이 안 보인다).
     /// 프로젝트가 Player Settings에서 Input System 패키지만 쓰도록 돼 있어(레거시 UnityEngine.Input 비활성)
     /// 새 Input System API를 사용한다.
@@ -17,7 +17,15 @@ namespace GN3.UI
     /// 전환 중이거나 게임이 멈춘 동안(GamePause — 중요 알림창)은 시간이 흐르지 않고 timeScale도 0이다. 하루 보고서는 우편함(Mailbox)으로 간다.</summary>
     public class TimeAdvanceController : MonoBehaviour
     {
-        private const float TransitionSeconds = 1f;
+        // 진행 전환 길이: 넘기는 시간이 길수록 길게(24시간을 1초에 돌리면 해가 너무 휙 돈다).
+        private const float MinTransitionSeconds = 1f;
+        private const float MaxTransitionSeconds = 2.5f;
+        private const float TransitionBaseSeconds = 0.6f;
+        private const float TransitionSecondsPerHour = 0.08f;
+
+        /// <summary>진행 버튼 한 번에 넘길 수 있는 시간(진행 버튼 아래 슬라이더).</summary>
+        public const int MinAdvanceHours = 1;
+        public const int MaxAdvanceHours = 24;
         private const float MaxDim = 0.55f;
         private const float BannerFadeSeconds = 0.8f;
 
@@ -37,8 +45,16 @@ namespace GN3.UI
         private Text _clockText;
         private TooltipTrigger _clockTip; // 마우스를 올리면 "N일차"
         private Button _button;
-        private Button[] _skipButtons = new Button[0];
+        private Selectable[] _skipButtons = new Selectable[0];
+        private Selectable _hoursSlider;
+        private int _advanceHours = (int)GameClock.HoursPerStep;
         private bool _isAdvancing;
+
+        /// <summary>진행 버튼·스페이스바가 한 번에 넘길 시간(시). 슬라이더로 1~24시간.</summary>
+        public int AdvanceHours => _advanceHours;
+
+        /// <summary>넘길 시간이 바뀌었을 때(버튼 글자 갱신용).</summary>
+        public event System.Action<int> AdvanceHoursChanged;
         private int _speed = 1;
         private Button _speedButton;
 
@@ -57,11 +73,23 @@ namespace GN3.UI
         }
 
         /// <summary>진행 버튼 우클릭 메뉴의 하루·4일·일주일 건너뛰기 버튼(AdvanceButton). 전환 중에는 진행 버튼과 함께 잠근다.</summary>
-        public void SetSkipButtons(params Button[] buttons) => _skipButtons = buttons ?? new Button[0];
+        public void SetSkipButtons(params Selectable[] buttons) => _skipButtons = buttons ?? new Selectable[0];
+
+        /// <summary>진행 버튼 아래 시간 슬라이더. 전환 중에는 진행 버튼과 함께 잠근다.</summary>
+        public void SetHoursSlider(Selectable slider) => _hoursSlider = slider;
+
+        public void SetAdvanceHours(int hours)
+        {
+            hours = Mathf.Clamp(hours, MinAdvanceHours, MaxAdvanceHours);
+            if (hours == _advanceHours) return;
+            _advanceHours = hours;
+            AdvanceHoursChanged?.Invoke(hours);
+        }
 
         private void SetLocked(bool locked)
         {
             if (_button != null) _button.interactable = !locked;
+            if (_hoursSlider != null) _hoursSlider.interactable = !locked;
             foreach (var b in _skipButtons) if (b != null) b.interactable = !locked;
         }
 
@@ -139,14 +167,16 @@ namespace GN3.UI
             int dayBefore = GameClock.CurrentDay;
 
             var cycle = DayNightCycle.Instance;
+            int hours = _advanceHours;
             float from = GameClock.CurrentHour;
-            float to = from + GameClock.HoursPerStep; // 24를 넘어도 TimeOfDay setter가 Mathf.Repeat로 감는다.
-            ShowBanner(from, to);
+            float to = from + hours; // 24를 넘어도 TimeOfDay setter가 Mathf.Repeat로 감는다.
+            ShowBanner(from, to, hours);
 
+            float duration = Mathf.Clamp(TransitionBaseSeconds + hours * TransitionSecondsPerHour, MinTransitionSeconds, MaxTransitionSeconds);
             bool midpointSent = false;
-            for (float t = 0f; t < TransitionSeconds; t += Time.unscaledDeltaTime)
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
             {
-                float k = t / TransitionSeconds;
+                float k = t / duration;
                 float hour = Mathf.Lerp(from, to, Mathf.SmoothStep(0f, 1f, k));
                 if (cycle != null) cycle.TimeOfDay = hour;
                 UpdateClockText(hour);
@@ -160,7 +190,7 @@ namespace GN3.UI
             }
             if (!midpointSent) Midpoint?.Invoke();
 
-            GameClock.AdvanceTime();
+            GameClock.AdvanceTime(hours);
             if (cycle != null) cycle.TimeOfDay = GameClock.CurrentHour;
             UpdateClockText(GameClock.CurrentHour);
             SetDim(0f);
@@ -255,14 +285,14 @@ namespace GN3.UI
                                 (Weather.DebugTemperature.HasValue ? "\n(기온 시험용 고정 중)" : "");
         }
 
-        private void ShowBanner(float from, float to)
+        private void ShowBanner(float from, float to, int hours)
         {
             EnsureOverlay();
             if (_bannerFade != null) StopCoroutine(_bannerFade);
             _bannerFade = null;
 
             bool overnight = to >= 24f;
-            _bannerTitle.text = overnight ? "밤이 지나…" : $"{GameClock.HoursPerStep:0}시간 후…";
+            _bannerTitle.text = overnight ? "밤이 지나…" : $"{hours}시간 후…";
             _bannerSub.text = overnight
                 ? $"{GameCalendar.Format(GameClock.CurrentDay + 1)} · {DayNightCycle.FormatTime(to)}"
                 : $"{DayNightCycle.FormatTime(from)}  →  {DayNightCycle.FormatTime(to)}";

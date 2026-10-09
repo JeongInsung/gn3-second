@@ -24,11 +24,15 @@ namespace GN3.World
         /// <summary>게임 시간이 흐를 때마다(저절로 흐르기·진행·건너뛰기 모두) 흐른 시간(시)으로 불린다. 훈련처럼 시간에 비례하는 것들이 구독한다.</summary>
         public static event Action<float> OnHoursPassed;
 
-        public static void AdvanceTime()
+        public static void AdvanceTime() => AdvanceTime(HoursPerStep);
+
+        /// <summary>진행 버튼: hours만큼 한 번에 진행(1~24시간, 슬라이더로 정함). 자정을 넘으면 하루가 지난다.</summary>
+        public static void AdvanceTime(float hours)
         {
-            OnHoursPassed?.Invoke(HoursPerStep);
-            CurrentHour += HoursPerStep;
-            if (CurrentHour >= 24f)
+            if (hours <= 0f) return;
+            OnHoursPassed?.Invoke(hours);
+            CurrentHour += hours;
+            while (CurrentHour >= 24f)
             {
                 CurrentHour -= 24f;
                 AdvanceDay();
@@ -38,7 +42,7 @@ namespace GN3.World
 
         /// <summary>
         /// 시간을 조금씩 흘린다(가만히 둬도 흐르는 시간, TimeAdvanceController가 매 프레임 부른다). 자정을 넘으면 하루가 지난다.
-        /// OnTimeAdvanced는 3시간 진행 때만 부르므로 여기서는 부르지 않는다.
+        /// OnTimeAdvanced는 진행 버튼(AdvanceTime) 때만 부르므로 여기서는 부르지 않는다.
         /// </summary>
         public static void AdvanceHours(float hours)
         {

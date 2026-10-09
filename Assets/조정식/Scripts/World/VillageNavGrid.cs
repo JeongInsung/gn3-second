@@ -99,6 +99,9 @@ namespace GN3.World
             var grid = new VillageNavGrid(area);
             foreach (var obstacle in obstacles)
                 grid.Block(obstacle.Footprint);
+            // 울타리로 둘러싼 땅(가축 우리)처럼 그림자로는 알 수 없는 막힌 바닥. 장애물 목록(앞뒤 정렬에도 쓰임)에는 넣지 않는다.
+            foreach (var blocker in Object.FindObjectsByType<NavBlockArea>(FindObjectsSortMode.None))
+                grid.Block(blocker.Area);
             return grid;
         }
 

@@ -101,6 +101,8 @@ namespace GN3.UI
         public void Show(Mercenary merc = null)
         {
             if (merc != null) _selectedId = merc.Id;
+            // 캐릭터 정보창의 "관계" 버튼으로 연 것(용병 지정)은 연계 창: 캐릭터 정보창·그 부모 창을 닫지 않는다.
+            if (merc != null && !_panel.activeSelf) EscapeCloser.MarkNextOpenLinked(_panel);
             _panel.SetActive(true);
             _panel.transform.SetAsLastSibling();
             Refresh();

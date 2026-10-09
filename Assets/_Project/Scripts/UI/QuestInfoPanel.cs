@@ -143,7 +143,7 @@ namespace GN3.UI
             closeRect.sizeDelta = new Vector2(28f, 28f);
             close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
             close.GetComponent<Button>().onClick.AddListener(Hide);
-            EscapeCloser.Register(_panel, Hide);
+            EscapeCloser.Register(_panel, Hide, WindowRole.Linked); // 게시판 줄을 눌러 여는 창: 퀘스트 창을 닫지 않는다
             FillLabel(close.transform, "X", 16);
 
             _panel.SetActive(false);

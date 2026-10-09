@@ -190,7 +190,7 @@ namespace GN3.UI
             CreateButton(_noticeRow.transform, "우편함 열기", OpenMailbox, new Color(0.3f, 0.3f, 0.35f, 1f));
 
             _root.SetActive(false);
-            EscapeCloser.Register(_root, TryEscape);
+            EscapeCloser.Register(_root, TryEscape, WindowRole.Popup);
         }
 
         private GameObject CreateButtonRow(Transform parent)

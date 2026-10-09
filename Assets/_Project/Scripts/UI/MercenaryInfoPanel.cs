@@ -135,7 +135,7 @@ namespace GN3.UI
             CreateDebugDamageButton();
 #endif
             _panel.SetActive(false);
-            EscapeCloser.Register(_panel, Hide);
+            EscapeCloser.Register(_panel, Hide, WindowRole.Linked); // 목록 줄을 눌러 여는 창: 부모 창을 닫지 않는다
         }
 
         /// <summary>어두운 바탕 + 가로로 채워지는 막대. 채움 Image를 돌려준다.</summary>

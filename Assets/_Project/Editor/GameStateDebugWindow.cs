@@ -138,7 +138,8 @@ namespace GN3.EditorTools
             var controller = Object.FindFirstObjectByType<TimeAdvanceController>();
             using (new EditorGUI.DisabledScope(controller == null))
             {
-                if (GUILayout.Button($"진행 (+{GameClock.HoursPerStep:0}시간)")) controller.RequestAdvance();
+                int hours = controller != null ? controller.AdvanceHours : (int)GameClock.HoursPerStep;
+                if (GUILayout.Button($"진행 (+{hours}시간)")) controller.RequestAdvance();
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     if (GUILayout.Button("하루")) controller.RequestSkipDays(1);
