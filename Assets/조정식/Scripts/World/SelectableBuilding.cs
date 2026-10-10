@@ -9,6 +9,7 @@ namespace GN3.World
     /// <summary>
     /// 마우스를 올리면 건물 둘레에 흰 테두리가 숨쉬듯 빛나고, 왼쪽 클릭하면 onClicked를 부르는 건물.
     /// 판정은 건물 그림 실루엣으로 만든 PolygonCollider2D로 하고, UI 위에 마우스가 있으면 무시한다(패널이 열려 있으면 건물이 안 눌린다).
+    /// 실루엣이 겹치면 앞(아래끝이 낮은) 건물만 hover·클릭된다(Pick).
     /// 테두리 그림(자식 "Outline")은 에디터 메뉴 "GN3/Interaction/선택한 건물을 클릭 가능하게"가 만든다.
     /// </summary>
     [RequireComponent(typeof(Collider2D))]
@@ -76,7 +77,7 @@ namespace GN3.World
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
             Vector3 world = cam.ScreenToWorldPoint(mouse.position.ReadValue());
             // 건물 앞에 선 마을 캐릭터를 가리키고 있으면 캐릭터가 우선(건물 테두리·클릭은 무시).
-            SetHover(!overUI && ContainsPoint(world) && VillageWanderer.Pick(world) == null);
+            SetHover(!overUI && Pick(world) == this && VillageWanderer.Pick(world) == null);
 
             if (IsHovered && mouse.leftButton.wasPressedThisFrame)
                 Click();
@@ -98,6 +99,16 @@ namespace GN3.World
 
         /// <summary>월드 좌표가 건물 실루엣 안인지.</summary>
         public bool ContainsPoint(Vector2 world) => _collider != null && _collider.OverlapPoint(world);
+
+        /// <summary>그 점을 덮는 건물 중 맨 앞(Y축 정렬이라 실루엣 아래끝이 가장 낮은) 건물. 겹친 곳에서 두 건물이 함께 눌리지 않게 한다.</summary>
+        public static SelectableBuilding Pick(Vector2 world)
+        {
+            SelectableBuilding best = null;
+            foreach (var building in All)
+                if (building.ContainsPoint(world) && (best == null || building._collider.bounds.min.y < best._collider.bounds.min.y))
+                    best = building;
+            return best;
+        }
 
         public void Click() => onClicked.Invoke(this);
 

@@ -9,6 +9,7 @@ namespace GN3.UI
     /// <summary>
     /// 대장간 건물 패널의 상품 칸을 무기(WeaponCatalog)로 채운다. 무기를 사서 마을에 있는 용병 한 명에게 쥐여 준다
     /// (들고 있던 무기는 버림). 대상 화면에서 용병마다 "공격 15 → 21(적성)"처럼 바뀔 능력치를 보여 준다.
+    /// "창고로"를 누르면 장착하지 않고 길드 창고(GuildStorage)에 넣는다.
     /// 골드가 모자라거나 마을에 용병이 없으면 돈을 받지 않고 알림만 띄운다. MainMenuBootstrapper가 만든다.
     /// </summary>
     public class WeaponShop : MonoBehaviour
@@ -40,6 +41,7 @@ namespace GN3.UI
                 ShopListUI.CreatePrice(row.transform, weapon.Price);
                 var picked = weapon;
                 ShopListUI.CreateButton(row.transform, "구매", () => ShowTargets(picked));
+                ShopListUI.CreateButton(row.transform, "창고로", () => BuyToStorage(picked));
             }
             ShopListUI.EndList(_panel);
         }
@@ -73,6 +75,23 @@ namespace GN3.UI
             }
 
             ShopListUI.EndList(_panel);
+        }
+
+        /// <summary>장착하지 않고 길드 창고에 넣는다. 창고가 가득 차면 돈을 받지 않는다.</summary>
+        private void BuyToStorage(WeaponItem weapon)
+        {
+            if (GuildStorage.IsFull)
+            {
+                ToastLog.Show($"창고가 가득 찼습니다 ({GuildStorage.Count} / {GuildStorage.Capacity}칸)");
+                return;
+            }
+            if (!Wallet.TrySpend(weapon.Price))
+            {
+                ToastLog.Show($"골드가 부족합니다 (필요 {weapon.Price}G, 보유 {Wallet.Gold}G)");
+                return;
+            }
+            GuildStorage.TryAdd(weapon);
+            ToastLog.Show($"{weapon.Name}을(를) 창고에 보관 -{weapon.Price}G");
         }
 
         private void Equip(WeaponItem weapon, Mercenary merc)

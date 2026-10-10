@@ -127,6 +127,8 @@ namespace GN3.Save
             data.researchers = RestVenues.MagicLab.SaveIds();
             data.prayers = RestVenues.Cathedral.SaveIds();
             data.affinities = Affinity.SaveEntries();
+            data.storageWeapons = GuildStorage.WeaponNames();
+            data.storageItems = GuildStorage.ItemNames();
             return data;
         }
 
@@ -213,6 +215,7 @@ namespace GN3.Save
             RestVenues.MagicLab.Restore(data.researchers);
             RestVenues.Cathedral.Restore(data.prayers);
             Affinity.Restore(data.affinities);
+            GuildStorage.Restore(data.storageWeapons, data.storageItems);
 
             OnLoaded?.Invoke();
             return true;

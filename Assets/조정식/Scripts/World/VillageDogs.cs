@@ -21,7 +21,7 @@ namespace GN3.World
 
         [SerializeField] private Sprite[] walkFrames;   // 오른쪽을 보고 걷는 8프레임(0번 = 서 있을 때)
         [SerializeField] private Material shadowMaterial;
-        [SerializeField, Min(0)] private int dogCount = 2;
+        [SerializeField, Min(0)] private int dogCount = 1;
 
         private readonly List<VillageDog> _dogs = new List<VillageDog>();
         private bool _hidden;

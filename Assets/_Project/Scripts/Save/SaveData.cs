@@ -25,6 +25,8 @@ namespace GN3.Save
         public List<string> gamblers = new List<string>(); // 도박장에 있는 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> researchers = new List<string>(); // 마법 연구소에 있는 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> prayers = new List<string>();     // 성당에 있는 용병 id(예전 저장엔 없어 빈 목록)
+        public List<string> storageWeapons = new List<string>(); // 길드 창고 무기 이름(예전 저장엔 없어 빈 창고)
+        public List<string> storageItems = new List<string>();   // 길드 창고 약 이름
         public List<AffinitySave> affinities = new List<AffinitySave>(); // 용병 쌍 친밀도(예전 저장엔 없어 성격 궁합 기본값으로 시작)
     }
 

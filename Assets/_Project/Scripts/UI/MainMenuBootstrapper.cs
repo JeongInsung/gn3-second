@@ -68,6 +68,7 @@ namespace GN3.UI
             ConnectBuildings(canvas.transform, partyPanel, questPanel);
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
+            new GameObject("GuildStorageUI", typeof(GuildStorageUI)); // 길드 창 "창고" → 건물 패널에 창고 목록
             new GameObject("TrainingHallUI", typeof(TrainingHallUI)); // 훈련소 패널에 훈련 중·맡길 용병 목록
             new GameObject("HospitalUI", typeof(HospitalUI));         // 병원 패널에 입원 환자·대기 환자 목록
             new GameObject("RestVenueUI", typeof(RestVenueUI));       // 온천·도박장 패널에 쉬는 중인 용병 목록
@@ -140,7 +141,13 @@ namespace GN3.UI
             var board = VillageProps.FindRenderer(QuestBoardSpritePrefix);
             if (board != null) VillageProps.EnsureClickable(board);
             var guildHall = VillageProps.FindRenderer(GuildHallSpritePrefix);
-            if (guildHall != null) VillageProps.EnsureClickable(guildHall);
+            SelectableBuilding guildBuilding = null;
+            if (guildHall != null)
+            {
+                // 클릭은 길드 창, 길드 창의 "창고" 버튼이 이 건물로 건물 패널을 연다(GuildStorageUI가 "창고" 이름을 보고 채운다)
+                guildBuilding = VillageProps.EnsureClickable(guildHall);
+                guildBuilding.SetInfo("길드 창고", "용병의 무기와 사 둔 약을 보관합니다. 길드 등급이 오르면 칸이 늘어납니다.");
+            }
             var blacksmith = VillageProps.FindRenderer(BlacksmithSpritePrefix);
             if (blacksmith != null)
             {
@@ -180,6 +187,8 @@ namespace GN3.UI
                 else if (VillageProps.IsProp(building, GuildHallSpritePrefix)) building.onClicked.AddListener(_ => GuildPanel.ShowGlobal());
                 else building.onClicked.AddListener(buildingPanel.Open);
             }
+            if (guildBuilding != null) GuildPanel.SetStorageOpener(() => buildingPanel.Open(guildBuilding));
+            else GuildPanel.SetStorageOpener(null);
         }
 
         /// <summary>일차·시각 표시 + 오른쪽 위 "진행" 버튼(AdvanceButton, 우클릭 → 며칠 진행). 누르면 GameClock을 3시간 진행시키고 마을 낮/밤도 함께 흐른다
@@ -209,7 +218,7 @@ namespace GN3.UI
             rect.anchoredPosition = new Vector2(MenuBarMargin + menuBarWidth + MenuBarMargin, -MenuBarMargin);
 
             var layout = barGO.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 12f;
+            layout.spacing = 16f; // 칸 폭은 글씨에 딱 맞추고(최소 폭 없음) 칸 사이만 띄운다. 글씨가 길어지면 판도 같이 늘어난다
             layout.padding = new RectOffset(14, 14, 0, 0); // 위아래 0 → 판 높이 40 = 메뉴 버튼 높이
             layout.childAlignment = TextAnchor.UpperLeft; // 메뉴 버튼(높이 40, 위 맞춤)과 같은 줄에 오도록 위로 붙인다
             layout.childForceExpandWidth = false;
@@ -221,7 +230,6 @@ namespace GN3.UI
             var dayTextGO = new GameObject("DayText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(TooltipTrigger));
             dayTextGO.transform.SetParent(barGO.transform, false);
             var dayTextLayout = dayTextGO.GetComponent<LayoutElement>();
-            dayTextLayout.minWidth = 430f;
             dayTextLayout.minHeight = 40f;
             var dayText = dayTextGO.GetComponent<Text>();
             dayText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -336,7 +344,6 @@ namespace GN3.UI
             var go = new GameObject("GoldText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(Shadow));
             go.transform.SetParent(group.transform, false);
             var layout = go.GetComponent<LayoutElement>();
-            layout.minWidth = 80f;
             layout.minHeight = 40f;
             var text = go.GetComponent<Text>();
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -363,7 +370,6 @@ namespace GN3.UI
             var go = new GameObject("GuildText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(Shadow), typeof(TooltipTrigger), typeof(Button));
             go.transform.SetParent(parent, false);
             var layout = go.GetComponent<LayoutElement>();
-            layout.minWidth = 190f;
             layout.minHeight = 40f;
             var text = go.GetComponent<Text>();
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");

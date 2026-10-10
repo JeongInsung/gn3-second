@@ -12,6 +12,7 @@ namespace GN3.World
     {
         private const float MinSpawnSpacing = 0.9f;
         private const int SpawnAttempts = 30;
+        private const float HideNightLightFactor = 0.5f; // VillageDogs와 같은 밤 기준
 
         [SerializeField] private Sprite[] walkFrames;   // 오른쪽을 보고 걷는 8프레임
         [SerializeField] private Sprite idleSprite;     // 서 있을 때(다리를 모은 그림). 없으면 걷기 0번 프레임
@@ -19,6 +20,9 @@ namespace GN3.World
         [SerializeField, Min(0)] private int cowCount = 3;
         [SerializeField] private Rect area;             // 우리 안쪽(월드 좌표, 소 발 위치가 머무는 범위)
         [SerializeField] private Rect[] avoid = new Rect[0]; // 여물통처럼 소가 서지 않을 자리
+
+        private readonly List<VillagePenCow> _cows = new List<VillagePenCow>();
+        private bool _hidden;
 
         public void Configure(Sprite[] frames, Sprite idle, Material shadow, int count, Rect penArea, Rect[] avoidRects)
         {
@@ -46,9 +50,24 @@ namespace GN3.World
                 var go = new GameObject($"소 {i + 1}");
                 go.transform.SetParent(transform, false);
                 go.transform.position = new Vector3(start.x, start.y, 0f);
-                go.AddComponent<VillagePenCow>().Init(walkFrames, idleSprite, shadowMaterial, this, new System.Random(rng.Next()));
+                var cow = go.AddComponent<VillagePenCow>();
+                cow.Init(walkFrames, idleSprite, shadowMaterial, this, new System.Random(rng.Next()));
+                _cows.Add(cow);
             }
+            _hidden = !IsDaytime();
+            foreach (var cow in _cows) cow.gameObject.SetActive(!_hidden);
         }
+
+        private void Update()
+        {
+            bool hidden = !IsDaytime();
+            if (hidden == _hidden) return;
+            _hidden = hidden;
+            foreach (var cow in _cows)
+                if (cow != null) cow.gameObject.SetActive(!_hidden);
+        }
+
+        private static bool IsDaytime() => DayNightCycle.NightLightFactor <= HideNightLightFactor;
 
         /// <summary>우리 안에서 피할 자리를 뺀 무작위 지점.</summary>
         internal Vector2 RandomPoint(System.Random rng)
@@ -67,7 +86,7 @@ namespace GN3.World
     }
 
     /// <summary>
-    /// 소 한 마리: 한동안 서 있다가(다리를 모은 그림) 우리 안 무작위 지점까지 천천히 걷는다. 밤에는 걷지 않고 서 있는다.
+    /// 소 한 마리: 한동안 서 있다가(다리를 모은 그림) 우리 안 무작위 지점까지 천천히 걷는다. 밤에는 VillagePenCows가 숨긴다(들어가 쉰다).
     /// 구조는 VillageDog와 같다: 루트(발 위치) → Visual(SortingGroup) → 그림, 그룹 밖에 그림자.
     /// SortingGroup order 2 = 우리 위 울타리(1) 앞, 아래 울타리(3) 뒤.
     /// </summary>
@@ -80,7 +99,6 @@ namespace GN3.World
         private const float MaxIdleSeconds = 6f;
         private const float MinWalkDistance = 0.4f;
         private const float ShadowHeightScale = 0.5f;
-        private const float HideNightLightFactor = 0.5f; // VillageDogs와 같은 밤 기준
 
         private Sprite[] _frames;
         private Sprite _idle;
@@ -146,7 +164,6 @@ namespace GN3.World
             if (_frames == null) return;
             if (!_walking)
             {
-                if (DayNightCycle.NightLightFactor > HideNightLightFactor) return; // 밤에는 서서 쉰다
                 _idleTimer -= Time.deltaTime;
                 if (_idleTimer <= 0f) StartWalk();
                 return;

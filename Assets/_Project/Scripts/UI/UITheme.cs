@@ -3,7 +3,7 @@ using UnityEngine;
 namespace GN3.UI
 {
     /// <summary>
-    /// MainScene UI의 다크 판타지 테마: 숯빛 판 + 청동 베벨 테두리 + 진홍 버튼 + 호박색 제목.
+    /// MainScene UI의 다크 판타지 테마: 숯빛 판 + 청동 베벨 테두리 + 숯빛 버튼(알림창 판과 같은 색) + 호박색 제목.
     /// 그림 파일 없이 코드로 9-slice 스프라이트를 그려(처음 한 번, 캐시) 해상도와 상관없이 테두리가 늘어지지 않는다.
     /// 어떤 UI에 무엇을 입힐지는 UIThemeApplier가 정한다.
     /// </summary>
@@ -13,20 +13,17 @@ namespace GN3.UI
         public static readonly Color InsetFill = Hex(0x120f0d);
         public static readonly Color BronzeLight = Hex(0xb0834f);
         public static readonly Color BronzeDark = Hex(0x4a3220);
-        public static readonly Color CrimsonTop = Hex(0xa8302a);
-        public static readonly Color CrimsonBottom = Hex(0x5a1410);
-        public static readonly Color GreenTop = Hex(0x4f7a3a);
-        public static readonly Color GreenBottom = Hex(0x23391a);
         public static readonly Color TitleText = Hex(0xf0a54a);
+        public static readonly Color ButtonTop = Hex(0x2e2924);         // 버튼 바탕 = 알림창 판(PanelFill) 숯빛, 위만 살짝 밝게
+        public static readonly Color ButtonBottom = PanelFill;
         public static readonly Color BodyText = Hex(0xe6d8bd);
         public static readonly Color MutedText = Hex(0xa3937c);
         private static readonly Color Outline = new Color(0.03f, 0.02f, 0.02f, 1f);
 
-        private static Sprite _panel, _button, _buttonGreen, _inset;
+        private static Sprite _panel, _button, _inset;
 
         public static Sprite Panel => _panel != null ? _panel : _panel = BuildPanel();
-        public static Sprite Button => _button != null ? _button : _button = BuildButton(CrimsonTop, CrimsonBottom, "ThemeButton");
-        public static Sprite ButtonGreen => _buttonGreen != null ? _buttonGreen : _buttonGreen = BuildButton(GreenTop, GreenBottom, "ThemeButtonGreen");
+        public static Sprite Button => _button != null ? _button : _button = BuildButton(ButtonTop, ButtonBottom, "ThemeButton");
         public static Sprite Inset => _inset != null ? _inset : _inset = BuildInset();
 
         /// <summary>판: 검은 외곽선 1px → 청동 베벨 5px(위·왼쪽 밝게) → 어두운 선 1px → 비네트 숯빛 안쪽. 모서리에 사선 장식.</summary>
@@ -63,10 +60,15 @@ namespace GN3.UI
             return Make(pixels, size, size, 16, "ThemePanel");
         }
 
-        /// <summary>버튼: 검은 외곽선 1px → 청동 테두리 2px → 세로 그라데이션 안쪽, 위쪽 1px 하이라이트.</summary>
+        /// <summary>
+        /// 버튼: 검은 외곽선 1px → 청동 베벨 3px → 어두운 선 1px → 세로 그라데이션 안쪽.
+        /// 안쪽 위 40%에 광택 띠, 맨 위 1px 하이라이트, 맨 아래 1px 안 그림자. 네 모서리 베벨에 청동 리벳.
+        /// 장식은 모두 9-slice 테두리(8px) 안이라 버튼 크기가 바뀌어도 늘어나지 않는다.
+        /// </summary>
         private static Sprite BuildButton(Color top, Color bottom, string name)
         {
-            const int w = 48, h = 32, rim = 2;
+            const int w = 64, h = 40, rim = 3, border = 8;
+            const int inner = rim + 2; // 안쪽이 시작하는 edge
             var pixels = new Color[w * h];
             for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
@@ -75,16 +77,32 @@ namespace GN3.UI
                 Color c;
                 if (edge == 0) c = Outline;
                 else if (edge <= rim) c = Bevel(x, y, w, h, edge, rim);
+                else if (edge == rim + 1) c = Outline;
                 else
                 {
-                    float t = (float)(y - rim - 1) / (h - 2 * rim - 3); // 0 아래 → 1 위
+                    float t = (float)(y - inner) / (h - 2 * inner - 1); // 0 아래 → 1 위
                     c = Color.Lerp(bottom, top, Mathf.Clamp01(t));
-                    if (y == h - rim - 2) c = Color.Lerp(c, Color.white, 0.25f); // 위쪽 하이라이트
+                    if (t > 0.6f) c = Color.Lerp(c, Color.white, 0.08f * Mathf.InverseLerp(0.6f, 1f, t)); // 광택 띠
+                    if (y == h - 1 - inner) c = Color.Lerp(c, Color.white, 0.25f);                    // 위쪽 하이라이트
+                    if (y == inner) c = bottom * 0.6f;                                                   // 아래 안 그림자
                     c.a = 1f;
                 }
                 pixels[y * w + x] = c;
             }
-            return Make(pixels, w, h, 10, name);
+            // 네 모서리 리벳: 2x2 밝은 점 + 오른쪽 아래 그림자 1px
+            Color rivet = Color.Lerp(BronzeLight, Color.white, 0.3f);
+            foreach (int rx in new[] { 1, w - 4 })
+            foreach (int ry in new[] { 1, h - 4 })
+            {
+                Put(pixels, w, rx, ry + 1, rivet);
+                Put(pixels, w, rx + 1, ry + 1, rivet);
+                Put(pixels, w, rx, ry + 2, rivet);
+                Put(pixels, w, rx + 1, ry + 2, rivet);
+                Put(pixels, w, rx + 2, ry + 1, BronzeDark);
+                Put(pixels, w, rx + 1, ry, BronzeDark);
+                Put(pixels, w, rx + 2, ry, BronzeDark);
+            }
+            return Make(pixels, w, h, border, name);
         }
 
         /// <summary>안쪽 칸: 어두운 청동 테두리 1px + 아주 어두운 안쪽(파인 느낌으로 위쪽이 조금 더 어둡다).</summary>

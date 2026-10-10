@@ -10,7 +10,7 @@ namespace GN3.UI
 {
     /// <summary>
     /// 마을의 길드 건물(또는 왼쪽 위 길드 글자)을 클릭하면 뜨는 창: 길드 티어(몇 / 5단계)·명성 막대·파티 수용 인원·
-    /// 지금 해금 내용·다음 단계 조건·전체 단계표. 명성·파티·파견이 바뀌면 열린 채로 다시 그린다. 끌어 옮길 수 있고 X·ESC로 닫는다.
+    /// 지금 해금 내용·다음 단계 조건·전체 단계표, 아래에 "창고" 버튼(GuildStorageUI). 명성·파티·파견이 바뀌면 열린 채로 다시 그린다. 끌어 옮길 수 있고 X·ESC로 닫는다.
     /// </summary>
     public class GuildPanel : MonoBehaviour
     {
@@ -28,7 +28,13 @@ namespace GN3.UI
         private Image _repFill;
         private Text _repText;
         private Text _body;
+        private GameObject _storageButton;
+        private Text _storageLabel;
         private Font _font;
+        private static System.Action _openStorage;
+
+        /// <summary>"창고" 버튼이 할 일(길드 건물로 건물 패널을 연다). 연결이 없으면 버튼을 숨긴다.</summary>
+        public static void SetStorageOpener(System.Action open) => _openStorage = open;
 
         public static GuildPanel Create()
         {
@@ -46,6 +52,7 @@ namespace GN3.UI
             Guild.OnChanged += panel.OnGuildChanged;
             PlayerParty.Instance.OnChanged += panel.RefreshIfOpen;
             ExpeditionLog.Instance.OnChanged += panel.RefreshIfOpen;
+            GuildStorage.OnChanged += panel.RefreshIfOpen;
             return panel;
         }
 
@@ -54,6 +61,13 @@ namespace GN3.UI
             Guild.OnChanged -= OnGuildChanged;
             PlayerParty.Instance.OnChanged -= RefreshIfOpen;
             ExpeditionLog.Instance.OnChanged -= RefreshIfOpen;
+            GuildStorage.OnChanged -= RefreshIfOpen;
+        }
+
+        private void OpenStorage()
+        {
+            Hide();
+            _openStorage?.Invoke();
         }
 
         public static void ShowGlobal()
@@ -114,7 +128,7 @@ namespace GN3.UI
             sb.Append($"<b>주급</b>   합계 {MercenaryCondition.TotalWeeklyWage()}G · 다음 지급 {GN3.World.GameCalendar.Format(MercenaryCondition.NextPayday)} 자정\n\n");
             sb.Append("<b>지금 해금</b>\n");
             sb.Append($"  퀘스트 최고 {current.MaxQuestGrade}급 · 용병 최고 {current.MaxMercGrade}급\n");
-            sb.Append($"  시장 Lv.{current.MarketMinLevel}~{current.MarketMaxLevel} · 파티 정원 {current.PartySize}명\n\n");
+            sb.Append($"  시장 Lv.{current.MarketMinLevel}~{current.MarketMaxLevel} · 파티 정원 {current.PartySize}명 · 창고 {current.StorageSlots}칸\n\n");
 
             if (!Guild.IsMaxRank)
             {
@@ -135,6 +149,9 @@ namespace GN3.UI
 
             sb.Append($"\n<color={Dim}>임무 성공 시 명성 +10×(퀘스트 등급+1), 실패 시 −{Guild.FailPenalty}</color>");
             _body.text = sb.ToString();
+
+            _storageButton.SetActive(_openStorage != null);
+            _storageLabel.text = $"창고 ({GuildStorage.Count} / {GuildStorage.Capacity}칸)";
         }
 
         // ---------- 화면 ----------
@@ -175,8 +192,23 @@ namespace GN3.UI
             _repFill.color = new Color(0.94f, 0.72f, 0.3f);
 
             _repText = CreateText("Rep", 14, FontStyle.Normal, new Vector2(20f, -108f), new Vector2(Width - 40f, 20f));
-            _body = CreateText("Body", 15, FontStyle.Normal, new Vector2(20f, -144f), new Vector2(Width - 40f, Height - 160f));
+            _body = CreateText("Body", 15, FontStyle.Normal, new Vector2(20f, -144f), new Vector2(Width - 40f, Height - 210f));
             _body.lineSpacing = 1.15f;
+
+            // 창고(아래 가운데): 길드 건물 패널을 "길드 창고"로 연다
+            _storageButton = new GameObject("StorageButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            _storageButton.transform.SetParent(_panel.transform, false);
+            var storageRect = _storageButton.GetComponent<RectTransform>();
+            storageRect.anchorMin = storageRect.anchorMax = storageRect.pivot = new Vector2(0.5f, 0f);
+            storageRect.anchoredPosition = new Vector2(0f, 16f);
+            storageRect.sizeDelta = new Vector2(200f, 40f);
+            _storageButton.GetComponent<Image>().color = new Color(0.6f, 0.2f, 0.2f, 1f); // UIThemeApplier가 테마 버튼으로
+            _storageButton.GetComponent<Button>().onClick.AddListener(OpenStorage);
+            _storageLabel = CreateText("Text", 16, FontStyle.Normal, Vector2.zero, Vector2.zero, _storageButton.transform);
+            _storageLabel.alignment = TextAnchor.MiddleCenter;
+            _storageLabel.rectTransform.anchorMin = Vector2.zero;
+            _storageLabel.rectTransform.anchorMax = Vector2.one;
+            _storageLabel.rectTransform.offsetMin = _storageLabel.rectTransform.offsetMax = Vector2.zero;
 
             // 닫기
             var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));

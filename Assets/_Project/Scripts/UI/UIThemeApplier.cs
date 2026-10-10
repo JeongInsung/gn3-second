@@ -5,8 +5,9 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 씬의 모든 Canvas UI에 UITheme(숯빛 판·청동 테두리·진홍 버튼·호박색 제목)을 자동으로 입힌다.
+    /// 씬의 모든 Canvas UI에 UITheme(숯빛 판·청동 테두리·숯빛 버튼·호박색 제목)을 자동으로 입힌다.
     /// 목록 줄·버튼은 UI 코드가 수시로 다시 만들므로 0.2초마다 훑어 아직 안 입힌 것만 입힌다(인스턴스 ID로 기억).
+    /// 버튼에는 크기 반응(ButtonFeedback)도 붙인다.
     /// 자기 그림이 있는 Image(초상·상인 그림·체력 채움·아이콘), 마스크, 화면 전체 어두운 막은 건드리지 않는다.
     /// MainMenuBootstrapper가 MainScene에서 만든다.
     /// </summary>
@@ -16,7 +17,6 @@ namespace GN3.UI
         private static readonly Vector2 PanelMinSize = new Vector2(300f, 200f);
         private const int TitleFontSize = 20;
         private const float RowAlpha = 0.9f;
-
         private static readonly HashSet<string> DefaultSpriteNames = new HashSet<string> { "UISprite", "Background", "InputFieldBackground" };
 
         private readonly HashSet<int> _done = new HashSet<int>();
@@ -85,8 +85,7 @@ namespace GN3.UI
 
             if (isButton)
             {
-                bool green = original.g > original.r + 0.05f && original.g > original.b;
-                SetSprite(image, green ? UITheme.ButtonGreen : UITheme.Button, Color.white);
+                SetSprite(image, UITheme.Button, Color.white);
                 var button = image.GetComponent<Button>();
                 var colors = button.colors;
                 colors.normalColor = Color.white;
@@ -96,6 +95,7 @@ namespace GN3.UI
                 colors.disabledColor = new Color(0.55f, 0.5f, 0.5f, 0.6f);
                 colors.colorMultiplier = 1f;
                 button.colors = colors;
+                if (button.GetComponent<ButtonFeedback>() == null) button.gameObject.AddComponent<ButtonFeedback>();
                 return true;
             }
 
@@ -177,7 +177,7 @@ namespace GN3.UI
 
             if (inButton)
             {
-                text.color = WithAlpha(UITheme.BodyText, c.a);
+                text.color = WithAlpha(Color.white, c.a);
                 AddShadow(text);
                 return true;
             }
