@@ -65,6 +65,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged += panel.RefreshIfOpen;
             ExpeditionLog.Instance.OnChanged += panel.RefreshIfOpen;
             TrainingHall.OnChanged += panel.RefreshIfOpen;
+            HotSpring.OnChanged += panel.RefreshIfOpen;
             Hospital.OnChanged += panel.RefreshIfOpen;
             return panel;
         }
@@ -74,6 +75,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged -= RefreshIfOpen;
             ExpeditionLog.Instance.OnChanged -= RefreshIfOpen;
             TrainingHall.OnChanged -= RefreshIfOpen;
+            HotSpring.OnChanged -= RefreshIfOpen;
             Hospital.OnChanged -= RefreshIfOpen;
         }
 
@@ -155,6 +157,7 @@ namespace GN3.UI
         {
             if (ExpeditionLog.Instance.IsOnExpedition(merc)) return "파견 중";
             if (TrainingHall.IsTraining(merc)) return "훈련 중";
+            if (HotSpring.IsBathing(merc)) return "온천 중";
             if (Hospital.IsAdmitted(merc)) return $"입원 중 (약 {Hospital.RemainingHours(merc):0}시간)";
             return "마을";
         }

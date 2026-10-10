@@ -120,6 +120,7 @@ namespace GN3.Save
             }
             data.trainees = TrainingHall.SaveIds();
             data.patients = Hospital.SaveIds();
+            data.bathers = HotSpring.SaveIds();
             data.affinities = Affinity.SaveEntries();
             return data;
         }
@@ -201,6 +202,7 @@ namespace GN3.Save
                 PlayerParty.Instance.RestoreAdd(merc);
             TrainingHall.Restore(data.trainees);
             Hospital.Restore(data.patients);
+            HotSpring.Restore(data.bathers);
             Affinity.Restore(data.affinities);
 
             OnLoaded?.Invoke();

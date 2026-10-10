@@ -62,7 +62,7 @@ namespace GN3.Mercenaries
         /// <summary>입원할 수 있는 사람: 살아 있고, 상태이상이 있고, 파견·훈련·입원 중이 아님.</summary>
         public static bool CanAdmit(Mercenary merc) =>
             merc != null && merc.IsAlive && merc.HasAilment && !IsAdmitted(merc)
-            && !ExpeditionLog.Instance.IsOnExpedition(merc) && !TrainingHall.IsTraining(merc);
+            && !ExpeditionLog.Instance.IsOnExpedition(merc) && !TrainingHall.IsTraining(merc) && !HotSpring.IsBathing(merc);
 
         /// <summary>지금까지 쌓인 치료비(퇴원할 때 낸다).</summary>
         public static int Fee(Mercenary merc) =>

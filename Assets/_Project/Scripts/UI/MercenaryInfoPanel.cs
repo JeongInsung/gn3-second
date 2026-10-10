@@ -327,6 +327,8 @@ namespace GN3.UI
                 _statusText.text = $"상태: 파견 중 ({ExpeditionLog.Instance.FindQuest(merc)?.Title})";
             else if (TrainingHall.IsTraining(merc))
                 _statusText.text = $"상태: 훈련소에서 훈련 중 (남은 약 {TrainingHall.RemainingHours(merc):0.#}시간)";
+            else if (HotSpring.IsBathing(merc))
+                _statusText.text = $"상태: 온천에서 쉬는 중 (남은 약 {HotSpring.RemainingHours(merc):0.#}시간)";
             else if (Hospital.IsAdmitted(merc))
                 _statusText.text = $"상태: 병원에서 치료 중 (남은 약 {Hospital.RemainingHours(merc):0.#}시간)";
             else if (merc.HasAilment)

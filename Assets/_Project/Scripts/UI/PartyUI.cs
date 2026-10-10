@@ -42,6 +42,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnChanged += RefreshList;
             TrainingHall.OnChanged += RefreshList;
+            HotSpring.OnChanged += RefreshList;
             Hospital.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnTravelEvent += HandleTravelEvent;
         }
@@ -51,6 +52,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnChanged -= RefreshList;
             TrainingHall.OnChanged -= RefreshList;
+            HotSpring.OnChanged -= RefreshList;
             Hospital.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnTravelEvent -= HandleTravelEvent;
         }
@@ -214,7 +216,8 @@ namespace GN3.UI
         {
             bool training = TrainingHall.IsTraining(merc);
             bool hospitalized = Hospital.IsAdmitted(merc);
-            bool onExpedition = ExpeditionLog.Instance.IsOnExpedition(merc) || training || hospitalized; // 훈련·입원 중도 마을에 없음(선택·해고 불가)
+            bool bathing = HotSpring.IsBathing(merc);
+            bool onExpedition = ExpeditionLog.Instance.IsOnExpedition(merc) || training || hospitalized || bathing; // 훈련·입원·온천 중도 마을에 없음(선택·해고 불가)
             bool selected = _selectedForDispatch.Contains(merc.Id);
 
             var row = new GameObject(merc.Name, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
@@ -255,7 +258,7 @@ namespace GN3.UI
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 100;
 
-            string status = training ? "  · 훈련 중" : hospitalized ? "  · 입원 중" : onExpedition ? "  · 파견 중"
+            string status = training ? "  · 훈련 중" : hospitalized ? "  · 입원 중" : bathing ? "  · 온천 중" : onExpedition ? "  · 파견 중"
                 : merc.CurrentHealth < stats.MaxHealth ? $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}" : "";
             // 피로·사기: 지치면 파견 불가, 피로 50↑·사기 30↓은 능력치가 깎이니 눈에 띄게
             if (merc.IsExhausted) status += $"  · 지침(피로 {merc.Fatigue})";

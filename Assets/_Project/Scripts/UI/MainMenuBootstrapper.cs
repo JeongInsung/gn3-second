@@ -70,6 +70,7 @@ namespace GN3.UI
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
             new GameObject("TrainingHallUI", typeof(TrainingHallUI)); // 훈련소 패널에 훈련 중·맡길 용병 목록
             new GameObject("HospitalUI", typeof(HospitalUI));         // 병원 패널에 입원 환자·대기 환자 목록
+            new GameObject("HotSpringUI", typeof(HotSpringUI));       // 온천 패널에 쉬는 중인 용병 목록
             QuestInfoPanel.Create();                              // 퀘스트 줄 클릭 → 상세 창
             GuildPanel.Create();                                  // 길드 건물·길드 글자 클릭 → 티어·수용 인원 창
             RelationsPanel.Create();                              // 오른쪽 아래 "관계" 버튼 → 용병 친밀도 창
@@ -127,6 +128,7 @@ namespace GN3.UI
         private const string GuildHallSpritePrefix = "쇠락한 모험가 길드 홀"; // 구운 "…@285x285" 포함
         private const string TrainingHallSpritePrefix = "중세 마을 훈련소 건물";
         private const string HospitalSpritePrefix = "십자가가 돋보이는 중세 픽셀 병원";
+        private const string HotSpringSpritePrefix = "청록 지붕의 포렴 찻집"; // 찻집 그림을 온천으로 쓴다
 
         /// <summary>
         /// 마을 건물 클릭 연결(클릭 기능이 없는 물체는 실행 중에 붙인다).
@@ -162,6 +164,14 @@ namespace GN3.UI
                 VillageProps.EnsureClickable(hospital).SetInfo("병원",
                     $"다치거나 병든 용병이 스스로 입원합니다. 시간당 {Hospital.ProgressPerHour * 100f:0}%씩 나으며, 퇴원할 때 입원 시간당 {Hospital.FeePerHour}G를 냅니다. (최대 {Hospital.Capacity}명)");
                 Hospital.AdmitWaiting();
+            }
+
+            var hotSpring = VillageProps.FindRenderer(HotSpringSpritePrefix);
+            if (hotSpring != null)
+            {
+                // 온천 → 건물 패널(HotSpringUI가 "온천" 이름을 보고 목록을 채운다)
+                VillageProps.EnsureClickable(hotSpring).SetInfo("온천",
+                    $"지친 용병들이 가끔 스스로 찾아와 {HotSpring.MinSessionHours:0}~{HotSpring.MaxSessionHours:0}시간 쉬며 피로를 풉니다. 1시간마다 피로 -{HotSpring.FatigueReliefPerHour:0}, 사기 +{HotSpring.MoralePerHour:0}. (최대 {HotSpring.Capacity}명)");
             }
 
             var buildingPanel = BuildingPanel.Create(canvasTransform);

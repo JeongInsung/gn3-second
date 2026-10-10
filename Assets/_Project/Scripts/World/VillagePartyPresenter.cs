@@ -18,7 +18,8 @@ namespace GN3.World
     /// 9시가 되면 안에 있던 용병이 모두 문에서 차례로 나오고, 자정까지는 아무도 들어가지 않는다.
     /// 자정~아침(어두운 동안)에는 모두 안에서 잔다.
     /// 여관이 없으면 밝을 때 전원이 숨기 전 자리에서 나타난다.
-    /// 친밀도(Affinity)가 높은 용병끼리는 가끔 짝을 지어 같이 걷고, 여관·훈련소에도 같이 드나든다.
+    /// 친밀도(Affinity)가 높은 용병끼리는 가끔 짝을 지어 같이 걷고, 여관·훈련소·온천에도 같이 드나든다.
+    /// 피로가 쌓인 용병은 가끔 스스로 온천(청록 지붕의 포렴 찻집)에 들어가 쉬고 나온다(HotSpring).
     /// MainMenuBootstrapper가 MainScene에서 만든다.
     /// </summary>
     public class VillagePartyPresenter : MonoBehaviour
@@ -80,6 +81,18 @@ namespace GN3.World
         private const float FirstTrainingRollMax = 90f;
         private const float TrainingChance = 0.15f;
         private readonly Dictionary<string, float> _nextTrainingRoll = new Dictionary<string, float>();
+        // 온천(청록 지붕의 포렴 찻집): 밖에서 걷는 지친 용병이 HotSpringRoll초마다 HotSpring.VisitChance 확률로 1~2시간 쉬러 간다(밤엔 안 감).
+        private readonly HashSet<string> _bathingIds = new HashSet<string>(); // 온천에 들어간 용병(다 쉬면 온천 문에서 나온다)
+        private const string HotSpringSpritePrefix = "청록 지붕의 포렴 찻집";
+        private const float HotSpringDoorU = 0.48f; // 찻집 그림에서 포렴 문 가운데(가로 비율)
+        private const float HotSpringRollMin = 40f;
+        private const float HotSpringRollMax = 90f;
+        private const float FirstHotSpringRollMin = 20f;
+        private const float FirstHotSpringRollMax = 60f;
+        private bool _hasHotSpring;
+        private Vector2 _hotSpringDoor;
+        private Vector2 _hotSpringExit;
+        private readonly Dictionary<string, float> _nextBathRoll = new Dictionary<string, float>();
         private const float MarchGap = 0.4f;                          // 파견대가 한 줄로 나가는 간격
         private const float ReturnSpacing = 2f;                       // 귀환대 간격 = MarchGap × 이 값(유닛, 성문 밖에서 한 명씩 더 뒤에서 출발)
         private readonly Dictionary<string, float> _nextDecision = new Dictionary<string, float>();
@@ -136,12 +149,14 @@ namespace GN3.World
             FindInnDoor();
             FindTrainingHallDoor();
             FindHospitalDoor();
+            FindHotSpringDoor();
             _infoPanel = MercenaryInfoPanel.Create(transform);
 
             PlayerParty.Instance.OnChanged += Refresh;
             ExpeditionLog.Instance.OnChanged += Refresh;
             TrainingHall.OnChanged += Refresh;
             Hospital.OnChanged += Refresh;
+            HotSpring.OnChanged += Refresh;
             TimeAdvanceController.Midpoint += ShuffleAfterTimeSkip;
             _subscribed = true;
             Refresh();
@@ -218,6 +233,7 @@ namespace GN3.World
                 else UpdateInnVisits();
             }
             if (!_hidden && _hasTrainingHall) UpdateTrainingVisits();
+            if (!_hidden && _hasHotSpring) UpdateHotSpringVisits();
 
             UpdateHoverAndClick();
             CloseInfoIfGone();
@@ -265,6 +281,17 @@ namespace GN3.World
             _hasHospital = true;
         }
 
+        /// <summary>찻집(온천) 그림의 포렴 문(아래쪽)을 문으로, 그 아래 처음 걸을 수 있는 지점을 문 앞으로 정한다. 없으면 온천 드나들기 없음.</summary>
+        private void FindHotSpringDoor()
+        {
+            var renderer = VillageProps.FindRenderer(HotSpringSpritePrefix);
+            if (renderer == null) return;
+            var bounds = renderer.bounds;
+            _hotSpringDoor = new Vector2(Mathf.Lerp(bounds.min.x, bounds.max.x, HotSpringDoorU), bounds.min.y + bounds.size.y * 0.08f);
+            _hotSpringExit = _grid.FirstWalkableBelow(_hotSpringDoor);
+            _hasHotSpring = true;
+        }
+
         /// <summary>9시~자정: 전원 밖. 게임 시계 기준이라 "진행" 전환이 끝나 9시가 된 뒤에 나온다(새벽은 _hidden이 먼저 처리).</summary>
         private static bool IsAllOutTime() => GameClock.CurrentHour >= AllOutHour;
 
@@ -309,6 +336,36 @@ namespace GN3.World
                 // 친한 동료가 밖에 있으면 관계 단계의 동행 확률로 같이 훈련하러 간다(정원·피로는 TrainingHall이 거절).
                 if (buddy.merc != null && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && TrainingHall.TryAdd(buddy.merc, hours))
                     ToastLog.Show($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 훈련하러 간다");
+                return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
+            }
+        }
+
+        /// <summary>
+        /// 밖에 나와 걷는 지친 용병이 가끔 스스로 온천에 간다. 사람마다 결정 시각이 되면 HotSpring.VisitChance(피로 비례) 확률로
+        /// 1~2시간 등록하고, 등록되면 Refresh가 온천 문까지 걸어 들어가게 한다. 친한 동료도 피로가 있으면 같이 갈 수 있다.
+        /// </summary>
+        private void UpdateHotSpringVisits()
+        {
+            if (GameClock.IsNight || HotSpring.IsFull) return;
+            float now = Time.time;
+            foreach (var pair in _wanderers.ToList())
+            {
+                var wanderer = pair.Value;
+                if (wanderer == null || !wanderer.gameObject.activeSelf || wanderer.IsEntering) continue;
+                if (!_nextBathRoll.TryGetValue(pair.Key, out float at))
+                {
+                    _nextBathRoll[pair.Key] = now + RandomRange(FirstHotSpringRollMin, FirstHotSpringRollMax);
+                    continue;
+                }
+                if (now < at) continue;
+                _nextBathRoll[pair.Key] = now + RandomRange(HotSpringRollMin, HotSpringRollMax);
+                if (!_mercById.TryGetValue(pair.Key, out var merc) || _rng.NextDouble() >= HotSpring.VisitChance(merc)) continue;
+                float hours = RandomRange(HotSpring.MinSessionHours, HotSpring.MaxSessionHours);
+                var buddy = ClosestOutsideFriend(merc, pair.Key); // Refresh가 _wanderers를 바꾸기 전에 고른다
+                if (!HotSpring.TryAdd(merc, hours)) continue;
+                if (buddy.merc != null && buddy.merc.Fatigue >= HotSpring.MinFatigueToVisit
+                    && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && HotSpring.TryAdd(buddy.merc, hours))
+                    ToastLog.Show($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 온천에 간다");
                 return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
             }
         }
@@ -568,6 +625,7 @@ namespace GN3.World
             ExpeditionLog.Instance.OnChanged -= Refresh;
             TrainingHall.OnChanged -= Refresh;
             Hospital.OnChanged -= Refresh;
+            HotSpring.OnChanged -= Refresh;
             TimeAdvanceController.Midpoint -= ShuffleAfterTimeSkip;
         }
 
@@ -601,7 +659,7 @@ namespace GN3.World
         private void Refresh()
         {
             var present = PlayerParty.Instance.Members
-                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m) && !Hospital.IsAdmitted(m))
+                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m) && !Hospital.IsAdmitted(m) && !HotSpring.IsBathing(m))
                 .ToList();
 
             var departing = new List<VillageWanderer>();
@@ -643,6 +701,19 @@ namespace GN3.World
                             Destroy(entering.gameObject);
                     }
                 }
+                else if (merc != null && merc.IsAlive && HotSpring.IsBathing(merc))
+                {
+                    // 온천: 밖에 나와 있으면 포렴 문으로 걸어 들어가 사라진다.
+                    _bathingIds.Add(id);
+                    if (wanderer != null)
+                    {
+                        var entering = wanderer;
+                        if (_hasHotSpring && entering.gameObject.activeSelf)
+                            entering.ReturnInto(_hotSpringExit, _hotSpringDoor, () => { if (entering != null) Destroy(entering.gameObject); });
+                        else
+                            Destroy(entering.gameObject);
+                    }
+                }
                 else if (wanderer != null)
                 {
                     Destroy(wanderer.gameObject); // 해고·사망
@@ -652,6 +723,7 @@ namespace GN3.World
                 _mercById.Remove(id);
                 _nextDecision.Remove(id);
                 _nextCompanionRoll.Remove(id);
+                _nextBathRoll.Remove(id);
             }
             if (departing.Count > 0)
             {
@@ -684,6 +756,13 @@ namespace GN3.World
                     // 퇴원한 용병: 병원 문에서 걸어 나온다.
                     go.SetActive(true);
                     wanderer.ExitBuilding(_hospitalDoor, _hospitalExit);
+                    _nextDecision[merc.Id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
+                }
+                else if (_bathingIds.Remove(merc.Id) && _hasHotSpring && !_hidden)
+                {
+                    // 온천에서 다 쉰 용병: 포렴 문에서 걸어 나온다.
+                    go.SetActive(true);
+                    wanderer.ExitBuilding(_hotSpringDoor, _hotSpringExit);
                     _nextDecision[merc.Id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
                 }
                 else if (_awayIds.Remove(merc.Id) && !_hidden)
