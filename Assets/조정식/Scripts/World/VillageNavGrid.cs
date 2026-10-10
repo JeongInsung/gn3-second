@@ -9,6 +9,7 @@ namespace GN3.World
     /// 물체 종류(ShadowBuilder.ApplyDefaults: 건물 0.5 / 나무·가로등·화분 0.8 / 분수·벤치 0)를 알려 주고,
     /// 0.8 장식은 그림 비율로 다시 나눈다(화분 = 상자 전체, 가로등 = 받침, 나무 = 줄기).
     /// 비스듬히 내려다본 그림이라 그림 전체가 아니라 발밑 쪽 일부만 바닥을 차지한다(지붕·나뭇잎 뒤로는 지나간다).
+    /// 예외로 성당은 그림 전체를 막는다(FullBlockKeyword).
     /// </summary>
     public class VillageNavGrid
     {
@@ -38,6 +39,9 @@ namespace GN3.World
         private const float BuildingHeightScale = 0.5f;
         private const float PropHeightScale = 0.8f;
         private const string VillageRootName = "Village";
+        // 종탑이 높은 성당은 위쪽 절반이 비어 그 위로 가로질러 다녔다 → 그림 이름에 이 말이 있으면 보이는 범위 전체를 막는다.
+        private const string FullBlockKeyword = "성당";
+        private const float FullBlockShrink = 0.05f; // 투명에 가까운 가장자리만 살짝 뺀다
 
         private readonly Rect _area;
         private readonly int _cols;
@@ -98,7 +102,16 @@ namespace GN3.World
         {
             var grid = new VillageNavGrid(area);
             foreach (var obstacle in obstacles)
+            {
                 grid.Block(obstacle.Footprint);
+                // 앞뒤 정렬에도 쓰는 Footprint는 그대로 두고 길찾기만 그림 전체로 막는다.
+                if (obstacle.Renderer != null && obstacle.Renderer.name.Contains(FullBlockKeyword))
+                {
+                    Rect visible = VisibleRect(obstacle.Renderer);
+                    float dx = visible.width * FullBlockShrink * 0.5f, dy = visible.height * FullBlockShrink * 0.5f;
+                    grid.Block(Rect.MinMaxRect(visible.xMin + dx, visible.yMin + dy, visible.xMax - dx, visible.yMax - dy));
+                }
+            }
             // 울타리로 둘러싼 땅(가축 우리)처럼 그림자로는 알 수 없는 막힌 바닥. 장애물 목록(앞뒤 정렬에도 쓰임)에는 넣지 않는다.
             foreach (var blocker in Object.FindObjectsByType<NavBlockArea>(FindObjectsSortMode.None))
                 grid.Block(blocker.Area);
