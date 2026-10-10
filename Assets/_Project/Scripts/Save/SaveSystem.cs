@@ -86,6 +86,8 @@ namespace GN3.Save
                     weapon = merc.Weapon != null ? merc.Weapon.Name : "",
                     fatigue = merc.Fatigue,
                     morale = merc.Morale,
+                    researchHours = merc.ResearchHours,
+                    researchBonus = merc.ResearchLevel,
                     bodyCharacter = merc.Appearance.BodyCharacter,
                 };
                 foreach (var pair in merc.Appearance.PartSources)
@@ -120,7 +122,10 @@ namespace GN3.Save
             }
             data.trainees = TrainingHall.SaveIds();
             data.patients = Hospital.SaveIds();
-            data.bathers = HotSpring.SaveIds();
+            data.bathers = RestVenues.HotSpring.SaveIds();
+            data.gamblers = RestVenues.GamblingDen.SaveIds();
+            data.researchers = RestVenues.MagicLab.SaveIds();
+            data.prayers = RestVenues.Cathedral.SaveIds();
             data.affinities = Affinity.SaveEntries();
             return data;
         }
@@ -167,6 +172,7 @@ namespace GN3.Save
                 var merc = new Mercenary(m.name, cls, Math.Max(1, m.level), appearance, (Personality)m.personality, m.rarePassive,
                     (MercenaryGrade)m.grade, m.id);
                 var weapon = string.IsNullOrEmpty(m.weapon) ? null : WeaponCatalog.All.FirstOrDefault(w => w.Name == m.weapon);
+                merc.RestoreResearch(m.researchHours, m.researchBonus); // 힐러 최대 체력이 달라지므로 체력보다 먼저
                 merc.RestoreState(m.experience, m.health, weapon);
                 merc.RestoreCondition(m.fatigue, m.morale);
                 if (m.ailments != null)
@@ -202,7 +208,10 @@ namespace GN3.Save
                 PlayerParty.Instance.RestoreAdd(merc);
             TrainingHall.Restore(data.trainees);
             Hospital.Restore(data.patients);
-            HotSpring.Restore(data.bathers);
+            RestVenues.HotSpring.Restore(data.bathers);
+            RestVenues.GamblingDen.Restore(data.gamblers);
+            RestVenues.MagicLab.Restore(data.researchers);
+            RestVenues.Cathedral.Restore(data.prayers);
             Affinity.Restore(data.affinities);
 
             OnLoaded?.Invoke();

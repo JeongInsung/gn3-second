@@ -43,6 +43,11 @@ namespace GN3.Mercenaries
                 stats.Defense += Weapon.Defense;
                 stats.MoveSpeed = Math.Max(0, stats.MoveSpeed + Weapon.Speed);
             }
+            // 연구소·성당에서 쌓은 영구 보너스(직업별)
+            var research = ResearchStatBonus();
+            stats.Attack += research.attack;
+            stats.Defense += research.defense;
+            stats.MaxHealth += research.health;
             // 지치거나 사기가 낮으면 공격·방어가 깎인다(최대 체력은 그대로라 체력 계산이 꼬이지 않는다).
             float condition = ConditionMultiplier;
             if (condition < 1f)
@@ -96,6 +101,67 @@ namespace GN3.Mercenaries
         {
             Fatigue = Math.Clamp(fatigue, 0, MaxCondition);
             Morale = Math.Clamp(morale, 0, MaxCondition);
+        }
+
+        // ---------- 수련 단계 (마법사 = 마법 연구소, 힐러 = 성당 — RestVenues) ----------
+
+        public const float ResearchHoursPerBonus = 4f;
+        public const int MaxResearchLevel = 10;
+        public const int HealerHealthPerResearchLevel = 4;
+
+        /// <summary>연구소·성당에서 쌓은 수련 단계(4시간마다 +1, 최대 10). 단계가 어떤 능력치가 되는지는 직업이 정한다(ResearchStatBonus).</summary>
+        public int ResearchLevel { get; private set; }
+        /// <summary>다음 단계까지 쌓인 수련 시간(0~4).</summary>
+        public float ResearchHours { get; private set; }
+
+        public bool CanResearchMore => ResearchLevel < MaxResearchLevel;
+
+        /// <summary>수련 단계가 주는 능력치: 마법사 공격 +1/단계, 힐러 방어 +1 · 최대 체력 +4/단계, 그 외 없음.</summary>
+        public (int attack, int defense, int health) ResearchStatBonus() => Class.Kind switch
+        {
+            MercenaryClassKind.Mage => (ResearchLevel, 0, 0),
+            MercenaryClassKind.Healer => (0, ResearchLevel, ResearchLevel * HealerHealthPerResearchLevel),
+            _ => (0, 0, 0),
+        };
+
+        /// <summary>UI용: "공격 +3" / "방어 +2 · 체력 +8" (보너스가 없으면 빈 문자열).</summary>
+        public string ResearchBonusText()
+        {
+            var (attack, defense, health) = ResearchStatBonus();
+            var parts = new List<string>();
+            if (attack > 0) parts.Add($"공격 +{attack}");
+            if (defense > 0) parts.Add($"방어 +{defense}");
+            if (health > 0) parts.Add($"체력 +{health}");
+            return string.Join(" · ", parts);
+        }
+
+        /// <summary>UI용 수련 이름: 마법사 "연구", 힐러 "기도".</summary>
+        public string ResearchLabel => Class.Kind == MercenaryClassKind.Healer ? "기도" : "연구";
+
+        /// <summary>수련 시간을 더하고 새로 오른 단계 수를 돌려준다. 최대 체력이 오르면 현재 체력도 그만큼 오른다. 최대가 되면 더 쌓지 않는다.</summary>
+        public int AddResearch(float hours)
+        {
+            if (hours <= 0f || !CanResearchMore) return 0;
+            ResearchHours += hours;
+            int gained = 0;
+            while (CanResearchMore && ResearchHours >= ResearchHoursPerBonus)
+            {
+                ResearchHours -= ResearchHoursPerBonus;
+                int oldMax = CurrentStats.MaxHealth;
+                ResearchLevel++;
+                gained++;
+                if (IsAlive)
+                    CurrentHealth = Math.Min(CurrentStats.MaxHealth, CurrentHealth + (CurrentStats.MaxHealth - oldMax));
+            }
+            if (!CanResearchMore) ResearchHours = 0f;
+            return gained;
+        }
+
+        /// <summary>저장 파일에서 불러올 때 수련 단계·시간을 되돌린다(체력보다 먼저 — 힐러는 최대 체력이 달라진다).</summary>
+        public void RestoreResearch(float hours, int level)
+        {
+            ResearchLevel = Math.Clamp(level, 0, MaxResearchLevel);
+            ResearchHours = CanResearchMore ? Math.Clamp(hours, 0f, ResearchHoursPerBonus) : 0f;
         }
 
         // ---------- 부상·질병 (규칙·수치는 Ailments, 입원은 Hospital) ----------

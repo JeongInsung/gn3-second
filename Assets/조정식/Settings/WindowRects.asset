@@ -492,3 +492,81 @@ MonoBehaviour:
       height: 0.15659955
     forgeIndices: 
     warmGlass: 1
+  - sourceName: "\uC7A5\uBBF8\uCC3D\uACFC \uC885\uD0D1\uC758 \uC911\uC138 \uC131\uB2F9"
+    windows:
+    - serializedVersion: 2
+      x: 0.1448
+      y: 0.3178
+      width: 0.0442
+      height: 0.1835
+    - serializedVersion: 2
+      x: 0.1258
+      y: 0.1460
+      width: 0.0328
+      height: 0.1101
+    - serializedVersion: 2
+      x: 0.1738
+      y: 0.1460
+      width: 0.0335
+      height: 0.1101
+    - serializedVersion: 2
+      x: 0.4040
+      y: 0.3511
+      width: 0.1692
+      height: 0.1802
+    - serializedVersion: 2
+      x: 0.2759
+      y: 0.1593
+      width: 0.0564
+      height: 0.1852
+    - serializedVersion: 2
+      x: 0.6494
+      y: 0.1593
+      width: 0.0610
+      height: 0.1852
+    - serializedVersion: 2
+      x: 0.8415
+      y: 0.1226
+      width: 0.0762
+      height: 0.1384
+    - serializedVersion: 2
+      x: 0.8582
+      y: 0.2677
+      width: 0.0442
+      height: 0.0434
+    forgeIndices: 
+    warmGlass: 1
+  - sourceName: "\uD130\uD0A4\uC11D \uC218\uC815\uC758 \uB9C8\uBC95\uC0AC \uC5F0\uAD6C\uC18C"
+    windows:
+    - serializedVersion: 2
+      x: 0.1890
+      y: 0.6397
+      width: 0.0396
+      height: 0.0642
+    - serializedVersion: 2
+      x: 0.1814
+      y: 0.3561
+      width: 0.0945
+      height: 0.1601
+    - serializedVersion: 2
+      x: 0.1814
+      y: 0.1426
+      width: 0.0945
+      height: 0.1526
+    - serializedVersion: 2
+      x: 0.5518
+      y: 0.3761
+      width: 0.0518
+      height: 0.1401
+    - serializedVersion: 2
+      x: 0.6883
+      y: 0.4646
+      width: 0.0648
+      height: 0.2202
+    - serializedVersion: 2
+      x: 0.7912
+      y: 0.4962
+      width: 0.0259
+      height: 0.1718
+    forgeIndices: 
+    warmGlass: 0

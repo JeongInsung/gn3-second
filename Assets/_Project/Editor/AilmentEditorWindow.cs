@@ -216,7 +216,7 @@ namespace GN3.EditorTools
             {
                 EditorGUILayout.BeginVertical(EditorStyles.helpBox);
                 EditorGUILayout.BeginHorizontal();
-                string where = ExpeditionLog.Instance.IsOnExpedition(merc) ? " · 파견 중" : Hospital.IsAdmitted(merc) ? " · 입원 중" : TrainingHall.IsTraining(merc) ? " · 훈련 중" : HotSpring.IsBathing(merc) ? " · 온천 중" : "";
+                string where = ExpeditionLog.Instance.IsOnExpedition(merc) ? " · 파견 중" : Hospital.IsAdmitted(merc) ? " · 입원 중" : TrainingHall.IsTraining(merc) ? " · 훈련 중" : RestVenues.IsResting(merc) ? $" · {RestVenues.Find(merc).Name} 중" : "";
                 EditorGUILayout.LabelField($"{merc.Name}  (체력 {merc.CurrentHealth}/{merc.CurrentStats.MaxHealth}){where}", EditorStyles.boldLabel);
                 bool sameCategory = selected.IsInjury ? merc.HasInjury : merc.HasIllness;
                 using (new EditorGUI.DisabledScope(sameCategory))

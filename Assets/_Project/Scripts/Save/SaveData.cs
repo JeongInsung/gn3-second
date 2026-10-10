@@ -22,6 +22,9 @@ namespace GN3.Save
         public List<string> trainees = new List<string>(); // 훈련소에 맡긴 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> patients = new List<string>(); // 병원에 입원한 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> bathers = new List<string>();  // 온천에서 쉬는 용병 id(예전 저장엔 없어 빈 목록)
+        public List<string> gamblers = new List<string>(); // 도박장에 있는 용병 id(예전 저장엔 없어 빈 목록)
+        public List<string> researchers = new List<string>(); // 마법 연구소에 있는 용병 id(예전 저장엔 없어 빈 목록)
+        public List<string> prayers = new List<string>();     // 성당에 있는 용병 id(예전 저장엔 없어 빈 목록)
         public List<AffinitySave> affinities = new List<AffinitySave>(); // 용병 쌍 친밀도(예전 저장엔 없어 성격 궁합 기본값으로 시작)
     }
 
@@ -49,6 +52,8 @@ namespace GN3.Save
         public int fatigue;
         public int morale = 70; // 예전 저장엔 없어 기본값으로 읽힌다
         public List<AilmentSave> ailments = new List<AilmentSave>(); // 부상·질병(예전 저장엔 없어 빈 목록)
+        public float researchHours; // 수련: 다음 단계까지 쌓인 시간(예전 저장엔 없어 0)
+        public int researchBonus;  // 수련 단계(마법 연구소·성당, 직업별 능력치 보너스)
 
         // 외형: 파츠 이름 ↔ 출처 캐릭터(사전은 JsonUtility가 못 써서 두 목록으로)
         public string bodyCharacter;

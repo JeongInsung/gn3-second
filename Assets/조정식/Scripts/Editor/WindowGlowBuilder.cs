@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using GN3.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -37,7 +38,10 @@ namespace GN3.EditorTools
             Build();
         }
 
-        public static void Build()
+        public static void Build() => Build(null);
+
+        /// <summary>only가 있으면 그 건물들만 만든다(새로 옮겨 온 건물만 — 다른 건물 불빛을 지우고 다시 만들지 않는다).</summary>
+        public static void Build(ICollection<SpriteRenderer> only)
         {
             var rects = EnsureRects();
             var material = EnsureMaterial();
@@ -48,9 +52,11 @@ namespace GN3.EditorTools
             var log = new List<string>();
             // 처리 중에 기존 WindowGlow 자식을 지우고 다시 만들므로, 대상 건물을 먼저 모아 둔 뒤 처리한다
             // (모으면서 바로 처리하면 지워진 렌더러를 다시 건드려 MissingReferenceException이 났다).
+            // only가 있으면 그 렌더러만(씬 밖, 예: 열어 둔 프리팹 안의 건물이어도 된다), 없으면 지금 씬 전체.
+            var candidates = only ?? SceneManager.GetActiveScene().GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<SpriteRenderer>(true)).ToList();
             var targets = new List<(SpriteRenderer renderer, string key)>();
-            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
-            foreach (var candidate in root.GetComponentsInChildren<SpriteRenderer>(true))
+            foreach (var candidate in candidates)
             {
                 // 그림자(같은 건물 그림을 씀)와 창 불빛 자신은 건너뛴다.
                 if (candidate.GetComponent<ProjectedShadow>() != null || candidate.GetComponent<WindowGlow>() != null) continue;
@@ -81,8 +87,25 @@ namespace GN3.EditorTools
                 built++;
             }
 
-            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            if (only == null) EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             Debug.Log($"[WindowGlow] 건물 {built}채에 창문 불빛을 만들었습니다.\n" + string.Join("\n", log));
+        }
+
+        /// <summary>
+        /// 창 불빛을 다시 만들어야 하는 건물인지: WindowRects에 창이 있는데 불빛 자식이 없거나, 불빛 마스크 크기가 건물 그림과 다르다
+        /// (건물만 다시 구워 크기·scale이 바뀌면 옛 마스크가 커져 창 밖으로 떠 보인다). 그림자·불빛 자신과 애니메이션 조각은 대상이 아니다.
+        /// </summary>
+        public static bool NeedsRebuild(SpriteRenderer building)
+        {
+            if (building.sprite == null || building.GetComponent<ProjectedShadow>() != null || building.GetComponent<WindowGlow>() != null) return false;
+            if (PixelBaker.FindSourcePath(building.sprite) == null) return false;
+            string key = BuildingKey(building.sprite);
+            var entry = key != null ? EnsureRects().Find(key) : null;
+            if (entry == null || entry.windows.Count == 0) return false;
+            var glow = building.transform.Find(GlowChildName);
+            var glowRenderer = glow != null ? glow.GetComponent<SpriteRenderer>() : null;
+            if (glowRenderer == null || glowRenderer.sprite == null) return true;
+            return glowRenderer.sprite.rect.size != building.sprite.rect.size;
         }
 
         /// <summary>

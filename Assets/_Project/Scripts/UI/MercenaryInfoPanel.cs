@@ -327,8 +327,8 @@ namespace GN3.UI
                 _statusText.text = $"상태: 파견 중 ({ExpeditionLog.Instance.FindQuest(merc)?.Title})";
             else if (TrainingHall.IsTraining(merc))
                 _statusText.text = $"상태: 훈련소에서 훈련 중 (남은 약 {TrainingHall.RemainingHours(merc):0.#}시간)";
-            else if (HotSpring.IsBathing(merc))
-                _statusText.text = $"상태: 온천에서 쉬는 중 (남은 약 {HotSpring.RemainingHours(merc):0.#}시간)";
+            else if (RestVenues.Find(merc) is RestVenue venue)
+                _statusText.text = $"상태: {venue.Name}에서 쉬는 중 (남은 약 {venue.RemainingHours(merc):0.#}시간)";
             else if (Hospital.IsAdmitted(merc))
                 _statusText.text = $"상태: 병원에서 치료 중 (남은 약 {Hospital.RemainingHours(merc):0.#}시간)";
             else if (merc.HasAilment)
@@ -367,9 +367,19 @@ namespace GN3.UI
             var healthy = merc.StatsWithoutAilments;
             string Stat(string label, int value, int normal) => value < normal ? $"{label} <color=#e06050>{value}</color>" : $"{label} {value}";
             _statsText.supportRichText = true;
+            // 연구소(마법사)·성당(힐러) 보너스는 능력치 옆에 "(연구 공격 +N)"·"(기도 방어 +N · 체력 +M)"으로, 마우스를 올리면 다음 단계까지 남은 시간
+            string bonusText = merc.ResearchBonusText();
+            string research = bonusText.Length > 0 ? $" <color=#7fd8e0>({merc.ResearchLabel} {bonusText})</color>" : "";
+            bool studies = merc.Class.Kind == MercenaryClassKind.Mage || merc.Class.Kind == MercenaryClassKind.Healer;
+            string place = merc.Class.Kind == MercenaryClassKind.Healer ? "성당" : "마법 연구소";
+            string researchTip = !studies ? null
+                : merc.CanResearchMore
+                    ? $"{place} {merc.ResearchLabel} {merc.ResearchLevel}/{Mercenary.MaxResearchLevel}단계 · 다음 단계까지 {Mercenary.ResearchHoursPerBonus - merc.ResearchHours:0.#}시간"
+                    : $"{place} {merc.ResearchLabel} {merc.ResearchLevel}/{Mercenary.MaxResearchLevel}단계 (최대)";
+            string statsTip = string.IsNullOrEmpty(ailmentTip) ? researchTip : researchTip == null ? ailmentTip : ailmentTip + "\n" + researchTip;
             SetTipLine(_statsText, _statsTip,
-                $"{Stat("공격", stats.Attack, healthy.Attack)}  ·  {Stat("방어", stats.Defense, healthy.Defense)}  ·  {Stat("속도", stats.MoveSpeed, healthy.MoveSpeed)}  ·  전투력 {merc.CombatPower}",
-                ailmentTip);
+                $"{Stat("공격", stats.Attack, healthy.Attack)}{research}  ·  {Stat("방어", stats.Defense, healthy.Defense)}  ·  {Stat("속도", stats.MoveSpeed, healthy.MoveSpeed)}  ·  전투력 {merc.CombatPower}",
+                statsTip);
             if (merc.Weapon != null)
                 SetTipLine(_weaponText, _weaponTip, $"무기: {merc.Weapon.Name}", merc.Weapon.DescribeFor(merc.Class.Kind));
             else

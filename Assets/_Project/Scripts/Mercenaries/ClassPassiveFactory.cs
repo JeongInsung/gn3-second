@@ -24,6 +24,8 @@ namespace GN3.Mercenaries
                         return new List<PassiveBase> { new ReviveAllyPassive() };
                     case MercenaryClassKind.Assassin:
                         return new List<PassiveBase> { new InstakillPassive() };
+                    case MercenaryClassKind.Mage:
+                        return new List<PassiveBase> { new ChainLightningPassive() };
                 }
             }
 
@@ -37,6 +39,8 @@ namespace GN3.Mercenaries
                     return new List<PassiveBase> { new HealingAuraPassive() };
                 case MercenaryClassKind.Assassin:
                     return new List<PassiveBase> { new AmbushPassive() };
+                case MercenaryClassKind.Mage:
+                    return new List<PassiveBase> { new ArcaneAmpPassive() };
                 default:
                     return new List<PassiveBase>();
             }

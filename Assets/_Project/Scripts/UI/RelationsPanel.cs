@@ -55,7 +55,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged += panel.RefreshIfOpen;
             ExpeditionLog.Instance.OnChanged += panel.RefreshIfOpen;
             TrainingHall.OnChanged += panel.RefreshIfOpen;
-            HotSpring.OnChanged += panel.RefreshIfOpen;
+            RestVenues.OnAnyChanged += panel.RefreshIfOpen;
             Affinity.OnChanged += panel.RefreshIfOpen;
             return panel;
         }
@@ -65,7 +65,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged -= RefreshIfOpen;
             ExpeditionLog.Instance.OnChanged -= RefreshIfOpen;
             TrainingHall.OnChanged -= RefreshIfOpen;
-            HotSpring.OnChanged -= RefreshIfOpen;
+            RestVenues.OnAnyChanged -= RefreshIfOpen;
             Affinity.OnChanged -= RefreshIfOpen;
         }
 
@@ -219,7 +219,7 @@ namespace GN3.UI
             // 이름 + 상태
             string status = ExpeditionLog.Instance.IsOnExpedition(other) ? " <size=12><color=" + Dim + ">(파견 중)</color></size>"
                 : TrainingHall.IsTraining(other) ? " <size=12><color=" + Dim + ">(훈련 중)</color></size>"
-                : HotSpring.IsBathing(other) ? " <size=12><color=" + Dim + ">(온천 중)</color></size>"
+                : RestVenues.IsResting(other) ? " <size=12><color=" + Dim + ">(" + RestVenues.Find(other).Name + " 중)</color></size>"
                 : Hospital.IsAdmitted(other) ? " <size=12><color=" + Dim + ">(입원 중)</color></size>" : "";
             var name = CreateText("Name", 15, row.transform, other.Name + status);
             Place(name.rectTransform, 10f, 160f);

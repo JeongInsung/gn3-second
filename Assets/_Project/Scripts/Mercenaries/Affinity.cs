@@ -24,7 +24,7 @@ namespace GN3.Mercenaries
         public const int DefeatGain = 4;     // 실패해도 같이 고생한 사이는 조금 가까워진다
         public const int DefeatBlame = -6;   // 성격이 안 맞으면 실패를 서로 탓한다
         public const float TrainingGainPerHour = 1.5f;
-        public const float HotSpringGainPerHour = 1.5f; // 온천에 같이 몸을 담근 시간
+        public const float RestGainPerHour = 1.5f;     // 온천·도박장에 같이 있던 시간
 
         /// <summary>친밀도 단계 하나와 그 효과.</summary>
         public class Tier

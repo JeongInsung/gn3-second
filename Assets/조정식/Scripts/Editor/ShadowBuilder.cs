@@ -12,6 +12,7 @@ namespace GN3.EditorTools
     /// 대상은 Buildings/Decorations 그림(원본 또는 PixelBaker가 구운 것)을 쓰는 오브젝트, ShadowCaster2D가 있는 것,
     /// 이미 Shadow 자식이 있는 것. 2D 조명 그림자는 끝없이 늘어나 길이를 못 정해서, ShadowCaster2D는 지운다.
     /// 다시 실행하면 갱신만 한다. 새 건물·장식은 놓고 이 메뉴(또는 "마을 프리팹 만들기")만 누르면 된다.
+    /// 성벽·울타리는 이어 붙인 조각이라 납작 그림자(통째로 밀기 + 쓸기 사본)로 한 띠처럼 이어지게 한다.
     /// </summary>
     public static class ShadowBuilder
     {
@@ -26,6 +27,8 @@ namespace GN3.EditorTools
         private const float WallLift = 0.6f;   // 성벽(가로·세로·모서리) 높이
         private const float GateLift = 0.9f;
         private const float TowerLift = 1.0f;
+        private const string FenceFolder = "Assets/조정식/Decorations/울타리/";
+        private const float FenceLift = 0.4f;  // 울타리 높이(가로 울타리 그림이 월드 약 0.5 — 위에서 본 윗면 빼고 0.4)
         private const int SweepSteps = 3;  // 납작 그림자를 몇 장으로 쓸어 채울지(간격 ≤ 1.0×1.5/3 < 세로벽 폭 0.69)
         private const string SweepChildName = "Shadow Sweep";
 
@@ -84,7 +87,8 @@ namespace GN3.EditorTools
             if (shadow == null) shadow = Undo.AddComponent<ProjectedShadow>(shadowObject);
 
             // 새로 만든 그림자에만 기본 높이 비율을 넣는다(손으로 조절한 값 보호).
-            if (isNew)
+            // 울타리는 예전에 장식 기본값(기울인 그림자)으로 만들어진 것도 성벽처럼 납작 그림자로 맞춘다.
+            if (isNew || IsFencePiece(owner))
             {
                 Undo.RecordObject(shadow, "Shadow Height");
                 ApplyDefaults(shadow, owner);
@@ -140,6 +144,13 @@ namespace GN3.EditorTools
             return source.StartsWith(WallFolder) || owner.transform.parent != null && owner.transform.parent.name.StartsWith("성벽_");
         }
 
+        /// <summary>가축 우리 울타리 조각(가로·세로·문·부러짐). 같은 폴더의 고삐 기둥·여물통은 울타리가 아니다.</summary>
+        private static bool IsFencePiece(SpriteRenderer owner)
+        {
+            string source = PixelBaker.FindSourcePath(owner.sprite) ?? AssetDatabase.GetAssetPath(owner.sprite);
+            return source.StartsWith(FenceFolder) && System.IO.Path.GetFileName(source).Contains("울타리");
+        }
+
         /// <summary>
         /// 물체 종류별 기본값.
         /// - 건물: 위에서 내려다본 지붕이 그림의 절반쯤이라 높이 비율 0.5
@@ -169,6 +180,13 @@ namespace GN3.EditorTools
             {
                 shadow.heightScale = 0f;
                 shadow.liftHeight = owner.name.Contains("탑") ? TowerLift : owner.name.Contains("성문") ? GateLift : WallLift;
+                return;
+            }
+            // 울타리도 성벽처럼 조각을 이어 놓아서, 기울이면 조각마다 끊기고 세로 울타리(바닥에 길게 누운 그림)는 끝이 엉뚱하게 늘어난다.
+            if (IsFencePiece(owner))
+            {
+                shadow.heightScale = 0f;
+                shadow.liftHeight = FenceLift;
                 return;
             }
             shadow.heightScale = source.StartsWith("Assets/조정식/Buildings/") ? BuildingHeightScale : DecorationHeightScale;
