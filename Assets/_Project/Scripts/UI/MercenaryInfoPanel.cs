@@ -354,8 +354,9 @@ namespace GN3.UI
             // 나이 칸: 나이와 생일만(성장 속도·재능은 숨은 값)
             _growthText.text = $"{merc.Age}세 · {MercenaryAge.BirthdayText(merc)}생";
 
-            // 능력치: "공격 20 (+3 −2)" — 20 = 이번 달 기준값(매달 1일 정산, Mercenary.SnapshotMonth),
-            // +3/−1 = 이번 달 영구 변화(성장·쇠퇴·무기·수련, 초록/빨강), −2 = 부상·질병·피로·사기로 잠깐 깎인 양(빨강, 나으면 돌아옴·정산 안 함).
+            // 능력치: "공격 23 (+3 −2)" — 23 = 지금 영구 수치(성장·쇠퇴·무기·수련이 바로 반영),
+            // +3/−1 = 이번 달 오른·내린 양(참고용, 왼쪽에 이미 들어 있음, 매달 1일 Mercenary.SnapshotMonth로 0부터),
+            // −2 = 부상·질병·피로·사기로 잠깐 깎인 양(빨강, 나으면 돌아옴).
             var permanent = merc.PermanentStats;
             int permanentPower = GradeTable.CombatPower(permanent);
             string Stat(string label, int monthBase, int perm, int now)
@@ -364,13 +365,13 @@ namespace GN3.UI
                 var parts = new List<string>();
                 if (grew != 0) parts.Add(grew > 0 ? $"<color=#7fd36a>+{grew}</color>" : $"<color=#e06050>−{-grew}</color>");
                 if (temp != 0) parts.Add(temp > 0 ? $"<color=#7fd36a>+{temp}</color>" : $"<color=#e06050>−{-temp}</color>");
-                return parts.Count > 0 ? $"{label} {monthBase} ({string.Join(" ", parts)})" : $"{label} {monthBase}";
+                return parts.Count > 0 ? $"{label} {perm} ({string.Join(" ", parts)})" : $"{label} {perm}";
             }
             _statsText.supportRichText = true;
             int grewSum = permanentPower - merc.MonthBasePower, tempSum = merc.CombatPower - permanentPower;
-            string monthTip = "괄호: 이번 달 변화" + (grewSum != 0 ? $" · 성장·무기 등 전투력 {grewSum:+0;−0}" : "")
+            string monthTip = "괄호: 이번 달 변화(왼쪽 수치에 이미 반영)" + (grewSum != 0 ? $" · 성장·무기 등 전투력 {grewSum:+0;−0}" : "")
                               + (tempSum != 0 ? $" · 부상·피로 등으로 잠깐 전투력 {tempSum:+0;−0}(나으면 돌아옴)" : "")
-                              + "\n매달 1일에 이번 달 성장분이 원래 수치에 더해집니다.";
+                              + "\n매달 1일에 괄호가 0부터 다시 셉니다.";
             // 연구소(마법사)·성당(힐러) 수련 보너스는 수치에 이미 들어 있다 — 마우스를 올리면 단계와 다음 단계까지 남은 시간
             string bonusText = merc.ResearchBonusText();
             bool studies = merc.Class.Kind == MercenaryClassKind.Mage || merc.Class.Kind == MercenaryClassKind.Healer;
