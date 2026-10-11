@@ -95,7 +95,7 @@ namespace GN3.UI
             _labels[merc.Id] = (merc, texts[0], texts[1]);
         }
 
-        private static string Title(Mercenary merc) => $"[{merc.Grade}] {merc.Name} · {merc.Class.ClassName} Lv {merc.Level}";
+        private static string Title(Mercenary merc) => $"[{merc.Grade}] {merc.Name} · {merc.Class.ClassName} {merc.Age}세";
 
         private string Progress(Mercenary merc)
         {

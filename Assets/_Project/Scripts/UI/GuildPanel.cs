@@ -127,8 +127,9 @@ namespace GN3.UI
 
             sb.Append($"<b>주급</b>   합계 {MercenaryCondition.TotalWeeklyWage()}G · 다음 지급 {GN3.World.GameCalendar.Format(MercenaryCondition.NextPayday)} 자정\n\n");
             sb.Append("<b>지금 해금</b>\n");
-            sb.Append($"  퀘스트 최고 {current.MaxQuestGrade}급 · 용병 최고 {current.MaxMercGrade}급\n");
-            sb.Append($"  시장 Lv.{current.MarketMinLevel}~{current.MarketMaxLevel} · 파티 정원 {current.PartySize}명 · 창고 {current.StorageSlots}칸\n\n");
+            sb.Append($"  퀘스트 최고 {current.MaxQuestGrade}급 · 용병 재능 최고 {current.MaxMercGrade}급\n");
+            sb.Append($"  시장 경력 +{current.MarketMinGrowth}~{current.MarketMaxGrowth} · 파티 정원 {current.PartySize}명 · 창고 {current.StorageSlots}칸\n");
+            sb.Append($"  지역: {string.Join(", ", GN3.World.RegionInfo.GetUnlockedRegions().Select(GN3.World.RegionInfo.DisplayName))}\n\n");
 
             if (!Guild.IsMaxRank)
             {

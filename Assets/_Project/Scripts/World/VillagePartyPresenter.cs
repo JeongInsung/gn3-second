@@ -79,7 +79,7 @@ namespace GN3.World
         private const float TrainingRollMax = 120f;
         private const float FirstTrainingRollMin = 30f;
         private const float FirstTrainingRollMax = 90f;
-        private const float TrainingChance = 0.15f;
+        private const float TrainingChance = ConditionTuning.TrainingVisitChance;
         private readonly Dictionary<string, float> _nextTrainingRoll = new Dictionary<string, float>();
         // 쉼터(온천·도박장): 밖에서 걷는 용병마다 RestRoll초마다 쉼터를 무작위 순서로 하나씩 RestVenue.VisitChance 확률로 굴려 처음 걸린 곳에 간다.
         private const float RestRollMin = 40f;
@@ -146,6 +146,7 @@ namespace GN3.World
             FindTrainingHallDoor();
             FindHospitalDoor();
             FindVenueDoors();
+            VillageSkipVisits.SetBuildings(_venueDoors.Keys, _hasTrainingHall); // '진행'으로 건너뛸 때도 같은 건물에만 간다
             _infoPanel = MercenaryInfoPanel.Create(transform);
 
             PlayerParty.Instance.OnChanged += Refresh;
@@ -629,6 +630,7 @@ namespace GN3.World
             Hospital.OnChanged -= Refresh;
             RestVenues.OnAnyChanged -= Refresh;
             TimeAdvanceController.Midpoint -= ShuffleAfterTimeSkip;
+            VillageSkipVisits.SetBuildings(null, false);
         }
 
         /// <summary>

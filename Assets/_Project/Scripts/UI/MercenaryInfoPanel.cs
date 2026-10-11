@@ -27,8 +27,7 @@ namespace GN3.UI
         private Text _statusText;
         private Image _healthFill;
         private Text _healthText;
-        private Image _xpFill;
-        private Text _xpText;
+        private Text _growthText; // "23세 (5월 12일생) · 성장 빠름 · 성장 공격 +6 · 체력 +12"
         private Text _statsText;
         private Text _weaponText;
         private Text _personalityText;
@@ -106,10 +105,8 @@ namespace GN3.UI
             _healthFill = CreateBar("HealthBar", new Vector2(infoX, -92f), new Vector2(infoWidth + 30f, 12f));
             _healthText = CreateText("Health", 13, FontStyle.Normal, new Vector2(infoX, -106f), new Vector2(infoWidth + 30f, 18f));
 
-            // 경험치 막대(파랑)
-            _xpFill = CreateBar("XpBar", new Vector2(infoX, -128f), new Vector2(infoWidth + 30f, 8f));
-            _xpFill.color = new Color(0.35f, 0.6f, 0.95f);
-            _xpText = CreateText("Xp", 13, FontStyle.Normal, new Vector2(infoX, -138f), new Vector2(infoWidth + 30f, 18f));
+            // 나이·성장 한 줄(예전 경험치 막대 자리)
+            _growthText = CreateText("Growth", 13, FontStyle.Normal, new Vector2(infoX, -128f), new Vector2(infoWidth + 30f, 30f));
 
             // 아래: 능력치·성격·패시브 (전체 폭)
             float bottomWidth = PanelWidth - 28f;
@@ -316,7 +313,7 @@ namespace GN3.UI
 
             _nameText.supportRichText = true; // 등급 글자 색
             _nameText.text = $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}";
-            _classText.text = $"{merc.Class.ClassName}  Lv.{merc.Level}";
+            _classText.text = $"{merc.Class.ClassName}  {merc.Age}세";
 
             bool wounded = merc.CurrentHealth < stats.MaxHealth;
             bool hired = PlayerParty.Instance.Members.Contains(merc);
@@ -352,16 +349,13 @@ namespace GN3.UI
                 if (condition < 1f) _healthText.text += $" (공·방 -{Mathf.RoundToInt((1f - condition) * 100f)}%)";
             }
 
-            if (merc.Level >= Mercenary.MaxLevel)
-            {
-                _xpFill.fillAmount = 1f;
-                _xpText.text = "경험치 최대 레벨";
-            }
-            else
-            {
-                _xpFill.fillAmount = (float)merc.Experience / merc.XpToNext;
-                _xpText.text = $"경험치 {merc.Experience} / {merc.XpToNext}";
-            }
+            // 나이·성장: 성장 속도는 나이가 정한다(GrowthTuning). 지금까지 훈련·실전으로 오른 능력치.
+            string grown = merc.GrowthSummary();
+            int toNext = GradeTable.PowerToNextGrade(merc.GradePower);
+            _growthText.supportRichText = true; // 재능 등급 색
+            _growthText.text = $"{merc.Age}세 ({MercenaryAge.BirthdayText(merc)}생) · 재능 {GradeTable.RichLabel(merc.Talent)} · {GrowthTuning.RateLabel(merc.Age)}(×{merc.GrowthRate:0.##})"
+                               + (toNext > 0 ? $" · 다음 등급까지 전투력 {toNext}" : "")
+                               + (grown.Length > 0 ? $"\n성장 {grown}" : "\n아직 성장 없음");
 
             // 부상·질병으로 떨어진 능력치는 빨간색, 마우스를 올리면 얼마에서 떨어졌는지
             var healthy = merc.StatsWithoutAilments;

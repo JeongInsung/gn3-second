@@ -12,31 +12,47 @@ namespace GN3.Mercenaries
         public string Id { get; }
         public string Name { get; }
         public MercenaryClassSO Class { get; }
-        public int Level { get; private set; }
         public ComposedCharacter Appearance { get; }
         public Personality Personality { get; }
         public bool HasRarePassive { get; }
 
-        /// <summary>타고난 등급(F~S). 클래스·레벨 능력치에 배율로 붙는다(GradeTable).</summary>
-        public MercenaryGrade Grade { get; private set; }
+        /// <summary>타고난 재능(F~S). 성장 속도 배율로만 쓴다(GrowthTuning.TalentRate). 시장에서 생길 때 정해진다.</summary>
+        public MercenaryGrade Talent { get; private set; }
 
-        /// <summary>최종 능력치로 계산한 전투력(레벨·등급·성격·무기 모두 반영).</summary>
+        /// <summary>등급(F~S) = 지금 전투력 구간(GradeTable.ForCombatPower). 키우면 오르고(승급) 늙으면 내려간다.</summary>
+        public MercenaryGrade Grade => GradeTable.ForCombatPower(GradePower);
+
+        /// <summary>등급을 정하는 전투력: 피로·사기·부상을 뺀 전투력(성장·성격·무기·수련). 지치거나 다쳐도 등급이 깜빡이지 않게.</summary>
+        public int GradePower => GradeTable.CombatPower(ComputeStats(null, includeCondition: false));
+
+        /// <summary>최종 능력치로 계산한 전투력(성장·성격·무기·피로·부상 모두 반영).</summary>
         public int CombatPower => GradeTable.CombatPower(CurrentStats);
+
+        /// <summary>등급이 바뀌었을 때(성장·쇠퇴·무기). 승급·강등 알림용(MercenaryAge가 구독).</summary>
+        public static event Action<Mercenary, MercenaryGrade, MercenaryGrade> GradeChanged;
+
+        private void NotifyGrade(MercenaryGrade before)
+        {
+            var after = Grade;
+            if (after != before) GradeChanged?.Invoke(this, before, after);
+        }
 
         /// <summary>들고 있는 무기(없으면 맨손). 대장간에서 사서 쥐여 준다.</summary>
         public WeaponItem Weapon { get; private set; }
 
-        /// <summary>클래스·레벨 → 등급 배율 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어만) → 부상·질병 순으로 계산한 현재 능력치.</summary>
+        /// <summary>직업 기본값 + 성장 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어만) → 부상·질병 순으로 계산한 현재 능력치.</summary>
         public CombatStats CurrentStats => ComputeStats(_ailments);
 
         /// <summary>부상·질병이 없었다면의 능력치(툴팁에서 "공격 24 → 18"처럼 비교할 때).</summary>
         public CombatStats StatsWithoutAilments => ComputeStats(null);
 
-        /// <summary>이 상태이상들만 적용한 능력치(null이면 부상·질병 없이).</summary>
-        public CombatStats ComputeStats(IEnumerable<Ailment> ailments)
+        /// <summary>이 상태이상들만 적용한 능력치(null이면 부상·질병 없이). includeCondition이 false면 피로·사기 배율도 빼고(등급 전투력).
+        /// legacyTalent면 예전 공식(재능 능력치 배율) — 예전 저장의 전투력을 잴 때만.</summary>
+        public CombatStats ComputeStats(IEnumerable<Ailment> ailments, bool includeCondition = true, bool legacyTalent = false)
         {
-            var graded = GradeTable.Apply(MercenaryStatCalculator.Calculate(Class, Level), Grade);
-            var stats = PersonalityTable.Apply(graded, Personality);
+            var raw = MercenaryStatCalculator.Calculate(Class, GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed);
+            if (legacyTalent) raw = GradeTable.ApplyLegacyTalent(raw, Talent);
+            var stats = PersonalityTable.Apply(raw, Personality);
             if (Weapon != null)
             {
                 stats.Attack += Weapon.AttackFor(Class.Kind);
@@ -49,7 +65,7 @@ namespace GN3.Mercenaries
             stats.Defense += research.defense;
             stats.MaxHealth += research.health;
             // 지치거나 사기가 낮으면 공격·방어가 깎인다(최대 체력은 그대로라 체력 계산이 꼬이지 않는다).
-            float condition = ConditionMultiplier;
+            float condition = includeCondition ? ConditionMultiplier : 1f;
             if (condition < 1f)
             {
                 stats.Attack = (int)Math.Round(stats.Attack * condition);
@@ -69,11 +85,12 @@ namespace GN3.Mercenaries
 
         // ---------- 피로·사기 (규칙·수치는 MercenaryCondition) ----------
 
-        public const int MaxCondition = 100;
-        public const int StartingMorale = 70;
-        public const int TiredFatigue = 50;      // 이상이면 공격·방어 -10%
-        public const int ExhaustedFatigue = 80;  // 이상이면 -25%, 파견·훈련 불가
-        public const int LowMorale = 30;         // 미만이면 공격·방어 -10%
+        // 수치는 ConditionTuning
+        public const int MaxCondition = ConditionTuning.MaxCondition;
+        public const int StartingMorale = ConditionTuning.StartingMorale;
+        public const int TiredFatigue = ConditionTuning.TiredFatigue;          // 이상이면 공격·방어 -10%
+        public const int ExhaustedFatigue = ConditionTuning.ExhaustedFatigue;  // 이상이면 -25%, 파견·훈련 불가
+        public const int LowMorale = ConditionTuning.LowMorale;                // 미만이면 공격·방어 -10%
 
         /// <summary>피로 0~100. 파견·전투·훈련으로 오르고 마을에서 자면 내린다.</summary>
         public int Fatigue { get; private set; }
@@ -87,8 +104,9 @@ namespace GN3.Mercenaries
         {
             get
             {
-                float m = Fatigue >= ExhaustedFatigue ? 0.75f : Fatigue >= TiredFatigue ? 0.9f : 1f;
-                if (Morale < LowMorale) m *= 0.9f;
+                float m = Fatigue >= ExhaustedFatigue ? ConditionTuning.ExhaustedMultiplier
+                    : Fatigue >= TiredFatigue ? ConditionTuning.TiredMultiplier : 1f;
+                if (Morale < LowMorale) m *= ConditionTuning.LowMoraleMultiplier;
                 return m;
             }
         }
@@ -191,79 +209,204 @@ namespace GN3.Mercenaries
             string.Join(" · ", _ailments.ConvertAll(a => $"{a.Def.displayName} {Math.Round(a.Progress * 100f)}%"));
 
         /// <summary>무기를 든다. 들고 있던 무기는 버린다(되팔기 없음).</summary>
-        public void Equip(WeaponItem weapon) => Weapon = weapon;
+        public void Equip(WeaponItem weapon)
+        {
+            var before = Grade;
+            Weapon = weapon;
+            NotifyGrade(before);
+        }
 
         /// <summary>전투/이동 중 습격 등으로 깎이고, 회복 수단이 생기기 전까지는 계속 남아있는 실제 체력.</summary>
         public int CurrentHealth { get; private set; }
         public bool IsAlive => CurrentHealth > 0;
 
-        public Mercenary(string name, MercenaryClassSO mercenaryClass, int level = 1, ComposedCharacter appearance = null, Personality personality = Personality.Calm, bool hasRarePassive = false,
-            MercenaryGrade grade = MercenaryGrade.D, string id = null)
+        public Mercenary(string name, MercenaryClassSO mercenaryClass, int age = 25, int birthdayIndex = 0, ComposedCharacter appearance = null, Personality personality = Personality.Calm,
+            bool hasRarePassive = false, MercenaryGrade talent = MercenaryGrade.D, string id = null)
         {
             Id = string.IsNullOrEmpty(id) ? Guid.NewGuid().ToString() : id; // id는 저장 파일에서 복원할 때만 넘긴다
-            Grade = grade; // 체력 초기값(최대 체력)이 등급을 반영하도록 먼저 정한다
+            Talent = talent;
             Name = name;
             Class = mercenaryClass;
-            Level = level;
+            Age = Math.Max(GrowthTuning.MinHireAge, age);
+            BirthdayIndex = Math.Clamp(birthdayIndex, 0, 359);
             Appearance = appearance ?? new ComposedCharacter();
             Personality = personality;
             HasRarePassive = hasRarePassive;
             CurrentHealth = CurrentStats.MaxHealth;
         }
 
-        public void LevelUp()
+        // ---------- 나이·성장 (레벨·경험치 대신, 수치는 GrowthTuning) ----------
+
+        private static readonly Random GrowthRng = new Random();
+
+        /// <summary>나이(세). 해마다 생일(BirthdayIndex)에 한 살 먹는다(MercenaryAge). 나이가 성장 속도를 정한다(GrowthTuning.RateForAge).</summary>
+        public int Age { get; private set; }
+        /// <summary>생일: 한 해(360일)의 몇째 날(0~359).</summary>
+        public int BirthdayIndex { get; private set; }
+
+        /// <summary>능력치별 성장 횟수. 능력치 = 직업 기본값 + 횟수 × 직업 성장치(MercenaryStatCalculator).</summary>
+        public int GrowthAttack { get; private set; }
+        public int GrowthDefense { get; private set; }
+        public int GrowthHealth { get; private set; }
+        public int GrowthSpeed { get; private set; }
+        public int TotalGrowth => GrowthAttack + GrowthDefense + GrowthHealth + GrowthSpeed;
+
+        /// <summary>다음 성장 1회까지 쌓인 양(0~1). 훈련·실전이 함께 쌓는다.</summary>
+        public float GrowthProgress { get; private set; }
+
+        /// <summary>지금 나이의 성장 배율(0이면 더 자라지 않는다).</summary>
+        public float GrowthRate => GrowthTuning.RateForAge(Age) * GrowthTuning.TalentRate(Talent);
+        public bool CanGrow => GrowthRate > 0f;
+
+        /// <summary>
+        /// 성장량을 쌓는다(amount × 나이 배율). 1이 될 때마다 직업 성향대로 고른 능력치가 한 번 오르고, 오른 최대 체력만큼 현재 체력도 오른다.
+        /// 돌려주는 값은 "공격 +3"처럼 오른 능력치 목록(없으면 빈 목록).
+        /// </summary>
+        public List<string> AddGrowth(float amount)
         {
-            Level++;
-        }
-
-        public const int MaxLevel = 20;
-
-        /// <summary>현재 레벨에서 쌓은 경험치(레벨이 오르면 넘친 만큼만 남는다).</summary>
-        public int Experience { get; private set; }
-
-        /// <summary>다음 레벨까지 필요한 경험치.</summary>
-        public int XpToNext => 100 * Level;
-
-        /// <summary>경험치를 더하고 오른 레벨 수를 돌려준다. 오른 최대 체력만큼 현재 체력도 함께 오른다.</summary>
-        public int AddExperience(int xp)
-        {
-            if (xp <= 0 || Level >= MaxLevel) return 0;
-            Experience += xp;
-            int gained = 0;
-            while (Level < MaxLevel && Experience >= XpToNext)
+            var gains = new List<string>();
+            if (amount <= 0f || !CanGrow) return gains;
+            var before = Grade;
+            GrowthProgress += amount * GrowthRate;
+            while (GrowthProgress >= 1f)
             {
-                Experience -= XpToNext;
-                int oldMax = CurrentStats.MaxHealth;
-                Level++;
-                gained++;
-                if (IsAlive)
-                    CurrentHealth = Math.Min(CurrentStats.MaxHealth, CurrentHealth + (CurrentStats.MaxHealth - oldMax));
+                GrowthProgress -= 1f;
+                gains.Add(GrowOnce(GrowthRng, +1));
             }
-            if (Level >= MaxLevel) Experience = 0;
-            return gained;
+            NotifyGrade(before);
+            return gains;
         }
 
-        /// <summary>저장 파일에서 불러올 때: 경험치·체력·무기를 그대로 되돌린다.</summary>
-        public void RestoreState(int experience, int health, WeaponItem weapon)
+        /// <summary>쇠퇴: 성장 count회만큼 직업 성향대로 고른 능력치가 내려간다(0 아래로는 안 내려간다). 내려간 능력치 목록.</summary>
+        public List<string> Decline(int count)
         {
-            Experience = Math.Max(0, experience);
+            var losses = new List<string>();
+            var before = Grade;
+            for (int i = 0; i < count && TotalGrowth > 0; i++) losses.Add(GrowOnce(GrowthRng, -1));
+            NotifyGrade(before);
+            return losses;
+        }
+
+        /// <summary>
+        /// 예전 저장(버전 3 이하) 보정: 예전 공식(재능 능력치 배율)으로 잰 전투력에 가장 가깝게 성장을 더하거나 뺀다(직업 성향대로).
+        /// 재능 배율이 빠지면서 S급은 약해지고 F급은 강해지는 것을 메운다. 알림은 내지 않는다.
+        /// </summary>
+        public void MatchLegacyPower(Random rng)
+        {
+            int target = GradeTable.CombatPower(ComputeStats(null, includeCondition: false, legacyTalent: true));
+            for (int guard = 0; guard < 500; guard++)
+            {
+                int now = GradePower;
+                if (now == target) break;
+                int sign = now < target ? +1 : -1;
+                if (sign < 0 && TotalGrowth == 0) break;
+                // 한 번 더 움직였을 때 더 멀어지면 멈춘다
+                var snapshot = (GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed);
+                GrowOnce(rng, sign);
+                if (System.Math.Abs(GradePower - target) > System.Math.Abs(now - target))
+                {
+                    (GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed) = snapshot;
+                    break;
+                }
+            }
+        }
+
+        /// <summary>시장에 나올 때 이미 쌓은 경력: 성장 count회를 직업 성향대로 나눠 받고 체력을 가득 채운다.</summary>
+        public void GrantStartingGrowth(int count, Random rng)
+        {
+            for (int i = 0; i < count; i++) GrowOnce(rng, +1);
+            CurrentHealth = CurrentStats.MaxHealth;
+        }
+
+        /// <summary>성장(+1)·쇠퇴(-1) 한 번. 쇠퇴는 성장 횟수가 남은 능력치에서만 고른다. "공격 +3" / "체력 -6"을 돌려준다.</summary>
+        private string GrowOnce(Random rng, int sign)
+        {
+            int stat = PickGrowthStat(rng, sign < 0);
+            int oldMax = CurrentStats.MaxHealth;
+            switch (stat)
+            {
+                case 0: GrowthAttack += sign; break;
+                case 1: GrowthDefense += sign; break;
+                case 2: GrowthHealth += sign; break;
+                default: GrowthSpeed += sign; break;
+            }
+            int newMax = CurrentStats.MaxHealth;
+            if (IsAlive) CurrentHealth = Math.Clamp(CurrentHealth + (newMax - oldMax), 1, newMax);
+            int amount = stat switch { 0 => Class.AttackGrowth, 1 => Class.DefenseGrowth, 2 => Class.HealthGrowth, _ => Class.MoveSpeedGrowth };
+            string label = stat switch { 0 => "공격", 1 => "방어", 2 => "체력", _ => "속도" };
+            return $"{label} {(sign > 0 ? "+" : "-")}{amount}";
+        }
+
+        /// <summary>
+        /// 성장할 능력치를 직업 성향대로 고른다: 가중치 = 직업 성장치 × 전투력 가중치(공격 4 · 방어 3 · 체력 1 · 속도 2, GradeTable.CombatPower와 같음).
+        /// 성장치가 0인 능력치(마법사 방어 등)는 오르지 않는다. onlyGrown이면 성장 횟수가 남은 능력치에서만(쇠퇴).
+        /// </summary>
+        private int PickGrowthStat(Random rng, bool onlyGrown)
+        {
+            int[] growth = { Class.AttackGrowth, Class.DefenseGrowth, Class.HealthGrowth, Class.MoveSpeedGrowth };
+            int[] counts = { GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed };
+            int[] power = { 4, 3, 1, 2 };
+            var weights = new int[4];
+            int total = 0;
+            for (int i = 0; i < 4; i++)
+            {
+                if (onlyGrown && counts[i] <= 0) continue;
+                weights[i] = Math.Max(0, growth[i]) * power[i];
+                total += weights[i];
+            }
+            if (total == 0) // 성장치가 모두 0이거나(이상한 직업) 쇠퇴할 게 남은 능력치의 성장치가 0일 때
+            {
+                for (int i = 0; i < 4; i++)
+                    if (!onlyGrown || counts[i] > 0) return i;
+                return 2;
+            }
+            int roll = rng.Next(total);
+            for (int i = 0; i < 4; i++)
+            {
+                if (roll < weights[i]) return i;
+                roll -= weights[i];
+            }
+            return 2;
+        }
+
+        /// <summary>UI용: 지금까지 성장으로 오른 능력치 "공격 +6 · 방어 +2 · 체력 +12"(없으면 빈 문자열).</summary>
+        public string GrowthSummary()
+        {
+            var parts = new List<string>();
+            if (GrowthAttack * Class.AttackGrowth > 0) parts.Add($"공격 +{GrowthAttack * Class.AttackGrowth}");
+            if (GrowthDefense * Class.DefenseGrowth > 0) parts.Add($"방어 +{GrowthDefense * Class.DefenseGrowth}");
+            if (GrowthHealth * Class.HealthGrowth > 0) parts.Add($"체력 +{GrowthHealth * Class.HealthGrowth}");
+            if (GrowthSpeed * Class.MoveSpeedGrowth > 0) parts.Add($"속도 +{GrowthSpeed * Class.MoveSpeedGrowth}");
+            return string.Join(" · ", parts);
+        }
+
+        /// <summary>한 살 먹는다(MercenaryAge가 생일 자정에).</summary>
+        public void GrowOlder() => Age++;
+
+        /// <summary>저장 파일에서 불러올 때 나이·생일·성장을 되돌린다(체력보다 먼저 — 최대 체력이 달라진다).</summary>
+        public void RestoreGrowth(int age, int birthdayIndex, int attack, int defense, int health, int speed, float progress)
+        {
+            Age = Math.Max(GrowthTuning.MinHireAge, age);
+            BirthdayIndex = Math.Clamp(birthdayIndex, 0, 359);
+            GrowthAttack = Math.Max(0, attack);
+            GrowthDefense = Math.Max(0, defense);
+            GrowthHealth = Math.Max(0, health);
+            GrowthSpeed = Math.Max(0, speed);
+            GrowthProgress = Math.Clamp(progress, 0f, 0.999f);
+        }
+
+        /// <summary>저장 파일에서 불러올 때: 체력·무기를 그대로 되돌린다.</summary>
+        public void RestoreState(int health, WeaponItem weapon)
+        {
             Weapon = weapon;
             CurrentHealth = Math.Clamp(health, 0, CurrentStats.MaxHealth);
         }
 
-        /// <summary>테스트·디버그용(게임 상태 조정 창). 등급을 바꾸고 체력을 새 최대 체력에 맞춰 자른다.</summary>
-        public void SetGrade(MercenaryGrade grade)
-        {
-            Grade = grade;
-            CurrentHealth = Math.Clamp(CurrentHealth, 0, CurrentStats.MaxHealth);
-        }
+        /// <summary>테스트·디버그용(게임 상태 조정 창). 재능을 바꾼다(성장 속도만 달라진다).</summary>
+        public void SetTalent(MercenaryGrade talent) => Talent = talent;
 
-        /// <summary>테스트·디버그용(게임 상태 조정 창). 레벨을 바꾸고 체력을 새 최대 체력에 맞춰 자른다.</summary>
-        public void SetLevel(int level)
-        {
-            Level = Math.Max(1, level);
-            CurrentHealth = Math.Clamp(CurrentHealth, 0, CurrentStats.MaxHealth);
-        }
+        /// <summary>테스트·디버그용(게임 상태 조정 창). 나이를 바꾼다.</summary>
+        public void SetAge(int age) => Age = Math.Max(GrowthTuning.MinHireAge, age);
 
         /// <summary>전투 시뮬레이션이 끝난 뒤 그 결과(Combatant.CurrentHealth)를 그대로 반영할 때 쓴다.</summary>
         public void SetHealth(int value)

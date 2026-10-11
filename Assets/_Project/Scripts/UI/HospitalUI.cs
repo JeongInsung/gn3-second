@@ -98,7 +98,7 @@ namespace GN3.UI
             }
         }
 
-        private static string Title(Mercenary merc) => $"[{merc.Grade}] {merc.Name} · {merc.Class.ClassName} Lv {merc.Level}";
+        private static string Title(Mercenary merc) => $"[{merc.Grade}] {merc.Name} · {merc.Class.ClassName} {merc.Age}세";
 
         private static string Progress(Mercenary merc, bool admitted)
         {

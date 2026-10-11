@@ -7,7 +7,10 @@ namespace GN3.Save
     [Serializable]
     public class SaveData
     {
-        public const int CurrentVersion = 1;
+        // 2: 파견 남은 시간을 시간 단위로(ExpeditionSave.remainingHours 등). 1이면 일 단위 값 × 24로 읽는다.
+        // 3: 레벨·경험치 → 나이·성장 횟수(MercenarySave.age 등). 2 이하면 level-1을 네 능력치 성장 횟수로(능력치 그대로), 나이는 20대 무작위.
+        // 4: 등급 = 전투력 구간, 저장의 grade는 재능. 3 이하면 재능 능력치 배율이 빠진 만큼 성장을 더하거나 빼 예전 전투력에 맞춘다.
+        public const int CurrentVersion = 4;
 
         public int version = CurrentVersion;
         public string savedAt;
@@ -27,6 +30,7 @@ namespace GN3.Save
         public List<string> prayers = new List<string>();     // 성당에 있는 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> storageWeapons = new List<string>(); // 길드 창고 무기 이름(예전 저장엔 없어 빈 창고)
         public List<string> storageItems = new List<string>();   // 길드 창고 약 이름
+        public List<string> leaving = new List<string>(); // 파견 중 길드를 떠나기로 결심한 용병 "id|이유"(예전 저장엔 없어 빈 목록)
         public List<AffinitySave> affinities = new List<AffinitySave>(); // 용병 쌍 친밀도(예전 저장엔 없어 성격 궁합 기본값으로 시작)
     }
 
@@ -44,9 +48,16 @@ namespace GN3.Save
         public string id;
         public string name;
         public string className;
-        public int grade;
-        public int level;
-        public int experience;
+        public int grade; // 재능(타고난 등급, F=0 ~ S=6)
+        public int level;      // 버전 2 이하(레벨제). 버전 3부터는 아래 나이·성장을 읽는다
+        public int experience; // 버전 2 이하. 읽지 않는다
+        public int age;
+        public int birthday;   // 한 해(360일)의 몇째 날(0~359)
+        public int growthAttack;
+        public int growthDefense;
+        public int growthHealth;
+        public int growthSpeed;
+        public float growthProgress;
         public int personality;
         public bool rarePassive;
         public int health;
@@ -82,10 +93,13 @@ namespace GN3.Save
         public int enemyCount;
         public int difficulty;
         public int durationDays;
-        public int remainingDays;
+        public int remainingDays;   // 버전 1(일 단위). 버전 2부터는 아래 시간 값을 읽는다
         public int outboundDays;
         public bool returning;
         public int returnDaysLeft;
+        public float remainingHours;
+        public float outboundHours;
+        public float returnHoursLeft;
         public List<string> memberIds = new List<string>();
     }
 }

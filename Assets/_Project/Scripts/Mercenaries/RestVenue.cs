@@ -26,6 +26,8 @@ namespace GN3.Mercenaries
         public float FatigueReliefPerHour { get; }
         public float MoralePerHour { get; }
         public bool OpenAtNight { get; }
+        /// <summary>사기가 이 값 이상이면 머물러도 사기는 오르지 않는다(도박장, ConditionTuning.GamblingMoraleCap).</summary>
+        public int MoraleCap { get; }
         public string Description { get; }
         public string Summary { get; }            // 패널 머리줄용 짧은 효과 문구("피로 -15 · 사기 +1")
 
@@ -43,7 +45,7 @@ namespace GN3.Mercenaries
 
         public RestVenue(string name, string spritePrefix, float doorU, int capacity, float minHours, float maxHours,
             float fatigueReliefPerHour, float moralePerHour, bool openAtNight, Func<Mercenary, float> visitChance, string description,
-            string summary, Func<Mercenary, bool> eligible = null, Action<Mercenary, float> onStayed = null)
+            string summary, Func<Mercenary, bool> eligible = null, Action<Mercenary, float> onStayed = null, int moraleCap = ConditionTuning.MaxCondition)
         {
             Name = name;
             SpritePrefix = spritePrefix;
@@ -59,6 +61,7 @@ namespace GN3.Mercenaries
             Summary = summary;
             _eligible = eligible;
             _onStayed = onStayed;
+            MoraleCap = moraleCap;
         }
 
         /// <summary>지금 쉼터에 있는 용병(들어온 순서). 파티에서 빠졌거나 죽은 사람은 빠진다.</summary>
@@ -167,7 +170,7 @@ namespace GN3.Mercenaries
                     merc.AddFatigue(-relief);
                     _sessionRelief[merc.Id] = (_sessionRelief.TryGetValue(merc.Id, out int s) ? s : 0) + (before - merc.Fatigue);
                 }
-                int morale = TakeWhole(_pendingMorale, merc.Id, stayed * MoralePerHour);
+                int morale = merc.Morale >= MoraleCap ? 0 : TakeWhole(_pendingMorale, merc.Id, stayed * MoralePerHour);
                 if (morale > 0)
                 {
                     int before = merc.Morale;
@@ -238,9 +241,9 @@ namespace GN3.Mercenaries
     }
 
     /// <summary>
-    /// 마을 쉼터 목록.
-    /// 온천(청록 지붕의 포렴 찻집): 피로 위주. 1시간마다 피로 -15 · 사기 +1, 1~2시간, 최대 3명, 밤엔 안 받음. 피로 30 이상일 때 피로가 높을수록 자주 온다.
-    /// 도박장(주사위 간판의 뒷골목 도박장): 사기 위주. 1시간마다 사기 +4 · 피로 -5, 1~3시간, 최대 4명, 밤에도 받음. 사기 70 미만이거나 피로 30 이상이면 온다.
+    /// 마을 쉼터 목록. 수치는 ConditionTuning(아래 괄호 안은 지금 값).
+    /// 온천(청록 지붕의 포렴 찻집): 피로 위주. 1시간마다 피로 -10 · 사기 +1, 1~2시간, 최대 3명, 밤엔 안 받음. 피로 30 이상일 때 피로가 높을수록 자주 온다.
+    /// 도박장(주사위 간판의 뒷골목 도박장): 사기 위주. 1시간마다 사기 +2(사기 70 미만일 때만) · 피로 -5, 1~3시간, 최대 4명, 밤에도 받음. 사기 70 미만이거나 피로 30 이상이면 온다.
     /// 마법 연구소(터키석 수정의 마법사 연구소): 마법사 전용. 2~4시간 연구, 4시간마다 공격 +1 영구(최대 10단계, Mercenary.AddResearch).
     ///   1시간마다 피로 +2(훈련과 같음), 최대 2명, 밤엔 안 받음. 지치지 않은 마법사가 25% 확률로 온다.
     /// 성당(장미창과 종탑의 중세 성당): 힐러 전용. 2~4시간 기도, 4시간마다 방어 +1 · 최대 체력 +4 영구(최대 10단계).
@@ -248,34 +251,44 @@ namespace GN3.Mercenaries
     /// </summary>
     public static class RestVenues
     {
+        private const float StudyFatiguePerHour = ConditionTuning.TrainingFatiguePerHour;
+
         public static readonly RestVenue HotSpring = new RestVenue(
-            "온천", "청록 지붕의 포렴 찻집", 0.48f, 3, 1f, 2f, 15f, 1f, false,
-            merc => merc.Fatigue < 30 ? 0f : 0.1f + 0.4f * merc.Fatigue / 100f,
-            "지친 용병들이 가끔 스스로 찾아와 1~2시간 쉬며 피로를 풉니다. 1시간마다 피로 -15, 사기 +1. (최대 3명)",
-            "피로 -15 · 사기 +1");
+            "온천", "청록 지붕의 포렴 찻집", 0.48f, ConditionTuning.HotSpringCapacity,
+            ConditionTuning.HotSpringMinHours, ConditionTuning.HotSpringMaxHours,
+            ConditionTuning.HotSpringFatigueReliefPerHour, ConditionTuning.HotSpringMoralePerHour, false,
+            merc => ConditionTuning.HotSpringVisitChance(merc.Fatigue),
+            $"지친 용병들이 가끔 스스로 찾아와 {ConditionTuning.HotSpringMinHours:0}~{ConditionTuning.HotSpringMaxHours:0}시간 쉬며 피로를 풉니다. " +
+            $"1시간마다 피로 -{ConditionTuning.HotSpringFatigueReliefPerHour:0}, 사기 +{ConditionTuning.HotSpringMoralePerHour:0}. (최대 {ConditionTuning.HotSpringCapacity}명)",
+            $"피로 -{ConditionTuning.HotSpringFatigueReliefPerHour:0} · 사기 +{ConditionTuning.HotSpringMoralePerHour:0}");
 
         public static readonly RestVenue GamblingDen = new RestVenue(
-            "도박장", "주사위 간판의 뒷골목 도박장", 0.57f, 4, 1f, 3f, 5f, 4f, true,
-            merc => merc.Morale >= 70 && merc.Fatigue < 30 ? 0f
-                : 0.1f + 0.4f * Mathf.Max((100f - merc.Morale) / 100f, merc.Fatigue / 100f),
-            "사기가 떨어지거나 지친 용병들이 가끔 스스로 찾아와 1~3시간 놀다 갑니다. 1시간마다 사기 +4, 피로 -5. 밤에도 엽니다. (최대 4명)",
-            "사기 +4 · 피로 -5");
+            "도박장", "주사위 간판의 뒷골목 도박장", 0.57f, ConditionTuning.GamblingCapacity,
+            ConditionTuning.GamblingMinHours, ConditionTuning.GamblingMaxHours,
+            ConditionTuning.GamblingFatigueReliefPerHour, ConditionTuning.GamblingMoralePerHour, true,
+            merc => ConditionTuning.GamblingVisitChance(merc.Fatigue, merc.Morale),
+            $"사기가 떨어지거나 지친 용병들이 가끔 스스로 찾아와 {ConditionTuning.GamblingMinHours:0}~{ConditionTuning.GamblingMaxHours:0}시간 놀다 갑니다. " +
+            $"1시간마다 사기 +{ConditionTuning.GamblingMoralePerHour:0}(사기 {ConditionTuning.GamblingMoraleCap} 미만일 때), 피로 -{ConditionTuning.GamblingFatigueReliefPerHour:0}. 밤에도 엽니다. (최대 {ConditionTuning.GamblingCapacity}명)",
+            $"사기 +{ConditionTuning.GamblingMoralePerHour:0} · 피로 -{ConditionTuning.GamblingFatigueReliefPerHour:0}",
+            moraleCap: ConditionTuning.GamblingMoraleCap);
 
         public static readonly RestVenue MagicLab = new RestVenue(
-            "마법 연구소", "터키석 수정의 마법사 연구소", 0.41f, 2, 2f, 4f, -MercenaryCondition.TrainingFatiguePerHour, 0f, false,
-            merc => 0.25f,
-            $"마법사들이 가끔 스스로 찾아와 2~4시간 연구합니다. 연구 {Mercenary.ResearchHoursPerBonus:0}시간마다 공격 +1 영구 상승(최대 +{Mercenary.MaxResearchLevel}). " +
-            $"1시간마다 피로 +{MercenaryCondition.TrainingFatiguePerHour}. 마법사만 이용할 수 있습니다. (최대 2명)",
-            $"{Mercenary.ResearchHoursPerBonus:0}시간마다 공격 +1 · 피로 +{MercenaryCondition.TrainingFatiguePerHour}",
+            "마법 연구소", "터키석 수정의 마법사 연구소", 0.41f, ConditionTuning.StudyCapacity,
+            ConditionTuning.StudyMinHours, ConditionTuning.StudyMaxHours, -StudyFatiguePerHour, 0f, false,
+            merc => ConditionTuning.StudyVisitChance,
+            $"마법사들이 가끔 스스로 찾아와 {ConditionTuning.StudyMinHours:0}~{ConditionTuning.StudyMaxHours:0}시간 연구합니다. 연구 {Mercenary.ResearchHoursPerBonus:0}시간마다 공격 +1 영구 상승(최대 +{Mercenary.MaxResearchLevel}). " +
+            $"1시간마다 피로 +{StudyFatiguePerHour:0}. 마법사만 이용할 수 있습니다. (최대 {ConditionTuning.StudyCapacity}명)",
+            $"{Mercenary.ResearchHoursPerBonus:0}시간마다 공격 +1 · 피로 +{StudyFatiguePerHour:0}",
             eligible: merc => merc.Class.Kind == MercenaryClassKind.Mage && merc.CanResearchMore && !merc.IsExhausted,
             onStayed: Research);
 
         public static readonly RestVenue Cathedral = new RestVenue(
-            "성당", "장미창과 종탑의 중세 성당", 0.49f, 2, 2f, 4f, -MercenaryCondition.TrainingFatiguePerHour, 1f, false,
-            merc => 0.25f,
-            $"힐러들이 가끔 스스로 찾아와 2~4시간 기도합니다. 기도 {Mercenary.ResearchHoursPerBonus:0}시간마다 방어 +1, 최대 체력 +{Mercenary.HealerHealthPerResearchLevel} 영구 상승(최대 {Mercenary.MaxResearchLevel}단계). " +
-            $"1시간마다 피로 +{MercenaryCondition.TrainingFatiguePerHour}, 사기 +1. 힐러만 이용할 수 있습니다. (최대 2명)",
-            $"{Mercenary.ResearchHoursPerBonus:0}시간마다 방어 +1 · 체력 +{Mercenary.HealerHealthPerResearchLevel} · 피로 +{MercenaryCondition.TrainingFatiguePerHour}",
+            "성당", "장미창과 종탑의 중세 성당", 0.49f, ConditionTuning.StudyCapacity,
+            ConditionTuning.StudyMinHours, ConditionTuning.StudyMaxHours, -StudyFatiguePerHour, ConditionTuning.StudyMoralePerHour, false,
+            merc => ConditionTuning.StudyVisitChance,
+            $"힐러들이 가끔 스스로 찾아와 {ConditionTuning.StudyMinHours:0}~{ConditionTuning.StudyMaxHours:0}시간 기도합니다. 기도 {Mercenary.ResearchHoursPerBonus:0}시간마다 방어 +1, 최대 체력 +{Mercenary.HealerHealthPerResearchLevel} 영구 상승(최대 {Mercenary.MaxResearchLevel}단계). " +
+            $"1시간마다 피로 +{StudyFatiguePerHour:0}, 사기 +{ConditionTuning.StudyMoralePerHour:0}. 힐러만 이용할 수 있습니다. (최대 {ConditionTuning.StudyCapacity}명)",
+            $"{Mercenary.ResearchHoursPerBonus:0}시간마다 방어 +1 · 체력 +{Mercenary.HealerHealthPerResearchLevel} · 피로 +{StudyFatiguePerHour:0}",
             eligible: merc => merc.Class.Kind == MercenaryClassKind.Healer && merc.CanResearchMore && !merc.IsExhausted,
             onStayed: Research);
 

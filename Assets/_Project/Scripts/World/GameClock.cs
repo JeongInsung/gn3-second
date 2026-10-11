@@ -24,18 +24,36 @@ namespace GN3.World
         /// <summary>게임 시간이 흐를 때마다(저절로 흐르기·진행·건너뛰기 모두) 흐른 시간(시)으로 불린다. 훈련처럼 시간에 비례하는 것들이 구독한다.</summary>
         public static event Action<float> OnHoursPassed;
 
+        /// <summary>
+        /// '진행'으로 건너뛰는 동안 SkipStepHours마다(그 시간이 흐르기 직전) 흐를 시간과 함께 불린다.
+        /// 실시간이면 마을에서 걸어 다니며 하던 일(쉼터·훈련 가기)을 건너뛸 때는 여기서 굴린다(VillageSkipVisits).
+        /// </summary>
+        public static event Action<float> OnSkipStep;
+        public const float SkipStepHours = 1f;
+
         public static void AdvanceTime() => AdvanceTime(HoursPerStep);
 
-        /// <summary>진행 버튼: hours만큼 한 번에 진행(1~24시간, 슬라이더로 정함). 자정을 넘으면 하루가 지난다.</summary>
+        /// <summary>남은 시간 표시: "1일 6시간" / "5시간" / "1일". 시간은 올림(0.2시간 남아도 1시간).</summary>
+        public static string FormatDuration(float hours)
+        {
+            int total = Mathf.Max(0, Mathf.CeilToInt(hours - 0.001f));
+            int days = total / 24, rest = total % 24;
+            if (days == 0) return $"{rest}시간";
+            return rest == 0 ? $"{days}일" : $"{days}일 {rest}시간";
+        }
+
+        /// <summary>
+        /// 진행 버튼: hours만큼 진행(1~24시간, 슬라이더로 정함). 자정을 넘으면 하루가 지난다.
+        /// 한 번에 넘기지 않고 SkipStepHours씩 나눠 흘려서, 그 사이 쉼터·훈련에 들어가고 하루가 바뀌는 순서가 실시간과 같게 한다.
+        /// </summary>
         public static void AdvanceTime(float hours)
         {
             if (hours <= 0f) return;
-            OnHoursPassed?.Invoke(hours);
-            CurrentHour += hours;
-            while (CurrentHour >= 24f)
+            for (float left = hours; left > 0f; left -= SkipStepHours)
             {
-                CurrentHour -= 24f;
-                AdvanceDay();
+                float step = Mathf.Min(SkipStepHours, left);
+                OnSkipStep?.Invoke(step);
+                AdvanceHours(step);
             }
             OnTimeAdvanced?.Invoke();
         }
@@ -79,6 +97,7 @@ namespace GN3.World
             OnDayAdvanced = null;
             OnTimeAdvanced = null;
             OnHoursPassed = null;
+            OnSkipStep = null;
         }
     }
 }

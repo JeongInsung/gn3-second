@@ -41,6 +41,7 @@ namespace GN3.UI
 
             PlayerParty.Instance.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnChanged += RefreshList;
+            ExpeditionLog.Instance.OnProgress += RefreshList; // 남은 시간(게임 1시간마다)
             TrainingHall.OnChanged += RefreshList;
             RestVenues.OnAnyChanged += RefreshList;
             Hospital.OnChanged += RefreshList;
@@ -51,6 +52,7 @@ namespace GN3.UI
         {
             PlayerParty.Instance.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnChanged -= RefreshList;
+            ExpeditionLog.Instance.OnProgress -= RefreshList;
             TrainingHall.OnChanged -= RefreshList;
             RestVenues.OnAnyChanged -= RefreshList;
             Hospital.OnChanged -= RefreshList;
@@ -159,8 +161,8 @@ namespace GN3.UI
             hLayout.childControlHeight = true;
 
             string members = string.Join(", ", expedition.Members.Select(m => m.IsAlive ? m.Name : $"{m.Name}(사망)"));
-            string status = expedition.IsReturning ? $"귀환 중 (남은 {expedition.ReturnDaysLeft}일)"
-                : expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {quest.RemainingDays}일)";
+            string status = expedition.IsReturning ? $"귀환 중 (남은 {GameClock.FormatDuration(expedition.ReturnHoursLeft)})"
+                : expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {GameClock.FormatDuration(quest.RemainingHours)})";
             string info = $"{QuestDifficulty.RichTitle(quest)}    {status}    파견: {members}    {QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(expedition.Members))}";
             var infoText = CreateText(row.transform, info, 15, TextAnchor.MiddleLeft);
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
@@ -254,7 +256,7 @@ namespace GN3.UI
             nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
             nameText.gameObject.AddComponent<LayoutElement>().minWidth = 150;
 
-            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  Lv.{merc.Level}", 15, TextAnchor.MiddleLeft);
+            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세", 15, TextAnchor.MiddleLeft);
             classText.color = textColor;
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 100;

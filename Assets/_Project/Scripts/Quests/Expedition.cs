@@ -11,12 +11,18 @@ namespace GN3.Quests
         public Quest Quest { get; }
         public IReadOnlyList<Mercenary> Members { get; }
 
-        /// <summary>목적지까지 실제로 걸린 일수(자정마다 센다). 귀환 일수의 기준.</summary>
-        public int OutboundDays { get; private set; }
+        /// <summary>목적지까지 실제로 걸린 게임 시간. 귀환 시간의 기준.</summary>
+        public float OutboundHours { get; private set; }
 
         /// <summary>전투를 마치고 마을로 돌아오는 중.</summary>
         public bool IsReturning { get; private set; }
-        public int ReturnDaysLeft { get; private set; }
+        /// <summary>마을까지 남은 귀환 시간.</summary>
+        public float ReturnHoursLeft { get; private set; }
+        /// <summary>표시용: 남은 귀환 시간을 일로 올림.</summary>
+        public int ReturnDaysLeft => (int)System.Math.Ceiling(ReturnHoursLeft / Quest.HoursPerDay);
+
+        /// <summary>마지막 습격 판정 뒤로 이동한 시간(ExpeditionLog가 24시간마다 한 번 굴린다).</summary>
+        public float HoursSinceAmbushRoll { get; set; }
 
         /// <summary>목적지에 도착해 전투를 기다리는 상태. 귀환 중에는 false.</summary>
         public bool IsReady => !IsReturning && Quest.RemainingDays <= 0;
@@ -28,32 +34,37 @@ namespace GN3.Quests
         }
 
         /// <summary>저장 파일에서 불러올 때 이동·귀환 상태를 되돌린다.</summary>
-        public void RestoreState(int outboundDays, bool returning, int returnDaysLeft)
+        public void RestoreState(float outboundHours, bool returning, float returnHoursLeft)
         {
-            OutboundDays = System.Math.Max(0, outboundDays);
+            OutboundHours = System.Math.Max(0f, outboundHours);
             IsReturning = returning;
-            ReturnDaysLeft = returning ? System.Math.Max(1, returnDaysLeft) : 0;
+            ReturnHoursLeft = returning ? System.Math.Max(1f, returnHoursLeft) : 0f;
         }
 
-        public void CountOutboundDay() => OutboundDays++;
+        public void CountOutbound(float hours) => OutboundHours += hours;
 
-        /// <summary>귀환길에 오른다. 갈 때 걸린 일수의 절반(올림, 최소 1일)이 걸린다.</summary>
+        /// <summary>귀환 시간: 갈 때 걸린 시간의 절반을 일 단위로 올림(최소 1일, 예전 '일수 절반 올림'과 같음). 전투 결과 문구에도 쓴다.</summary>
+        public float ReturnHoursFor =>
+            System.Math.Max(1, (int)System.Math.Ceiling(OutboundHours / (2f * Quest.HoursPerDay) - 0.001f)) * Quest.HoursPerDay;
+
+        /// <summary>귀환길에 오른다.</summary>
         public void BeginReturn()
         {
             IsReturning = true;
-            ReturnDaysLeft = System.Math.Max(1, (OutboundDays + 1) / 2);
+            ReturnHoursLeft = ReturnHoursFor;
+            HoursSinceAmbushRoll = 0f;
         }
 
-        public void AdvanceReturnDay()
+        public void AdvanceReturn(float hours)
         {
-            if (ReturnDaysLeft > 0)
-                ReturnDaysLeft--;
+            if (hours > 0f)
+                ReturnHoursLeft = System.Math.Max(0f, ReturnHoursLeft - hours);
         }
 
         /// <summary>하루를 더 들여 생존 인원 전원을 완전히 회복시킨다.</summary>
         public void Rest()
         {
-            if (IsReturning) ReturnDaysLeft++;
+            if (IsReturning) ReturnHoursLeft += Quest.HoursPerDay;
             else Quest.Delay(1);
             foreach (var member in Members.Where(m => m.IsAlive))
                 member.HealFully();

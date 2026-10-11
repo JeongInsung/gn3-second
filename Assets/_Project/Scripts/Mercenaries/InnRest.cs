@@ -12,7 +12,7 @@ namespace GN3.Mercenaries
     /// </summary>
     public static class InnRest
     {
-        private const float HealRatio = 0.5f;
+        private const float HealRatio = ConditionTuning.InnHealRatio;
 
         // GameClock.ResetForPlaySession(SubsystemRegistration)이 이벤트를 비운 뒤에 구독한다.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

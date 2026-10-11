@@ -284,18 +284,19 @@ namespace GN3.EditorTools
                 {
                     var quest = ExpeditionLog.Instance.FindQuest(merc);
                     string where = quest != null ? $"파견 중: {quest.Title}" : "마을";
-                    EditorGUILayout.LabelField($"[{GradeTable.Label(merc.Grade)}] {merc.Name}  ·  {merc.Class.ClassName}  ·  Lv.{merc.Level}  ·  전투력 {merc.CombatPower}  ·  {where}");
+                    EditorGUILayout.LabelField($"[{GradeTable.Label(merc.Grade)}] {merc.Name}  ·  {merc.Class.ClassName}  ·  {merc.Age}세  ·  재능 {GradeTable.Label(merc.Talent)}  ·  전투력 {merc.CombatPower} (등급 기준 {merc.GradePower})  ·  {where}");
                     var stats = merc.CurrentStats;
                     string weapon = merc.Weapon != null ? $"{merc.Weapon.Name} ({merc.Weapon.DescribeFor(merc.Class.Kind)})" : "맨손";
                     EditorGUILayout.LabelField($"공격 {stats.Attack} · 방어 {stats.Defense} · 속도 {stats.MoveSpeed}   무기: {weapon}");
                     using (new EditorGUILayout.HorizontalScope())
                     {
-                        EditorGUILayout.LabelField("경험치", $"{merc.Experience} / {merc.XpToNext}");
-                        if (GUILayout.Button("경험치 +100", GUILayout.Width(100)))
-                        {
-                            int ups = merc.AddExperience(100);
-                            if (ups > 0) ToastLog.Show($"[테스트] {merc.Name} 레벨 업! Lv.{merc.Level}");
-                        }
+                        EditorGUILayout.LabelField("성장", $"{GrowthTuning.RateLabel(merc.Age)} · 다음까지 {merc.GrowthProgress:P0} · {merc.GrowthSummary()}");
+                        using (new EditorGUI.DisabledScope(!merc.CanGrow))
+                            if (GUILayout.Button("성장 +1", GUILayout.Width(100)))
+                            {
+                                var gains = merc.AddGrowth((1f - merc.GrowthProgress) / merc.GrowthRate + 0.0001f);
+                                if (gains.Count > 0) ToastLog.Show($"[테스트] {merc.Name} {string.Join(", ", gains)}");
+                            }
                     }
 
                     int max = merc.CurrentStats.MaxHealth;
@@ -307,13 +308,13 @@ namespace GN3.EditorTools
                     {
                         if (GUILayout.Button("완전 회복")) merc.HealFully();
                         if (GUILayout.Button("−30%")) DebugHotkeys.Damage(merc);
-                        if (GUILayout.Button("Lv +1")) merc.SetLevel(merc.Level + 1);
-                        using (new EditorGUI.DisabledScope(merc.Level <= 1))
-                            if (GUILayout.Button("Lv −1")) merc.SetLevel(merc.Level - 1);
-                        using (new EditorGUI.DisabledScope(merc.Grade == MercenaryGrade.S))
-                            if (GUILayout.Button("등급 ▲")) merc.SetGrade(merc.Grade + 1);
-                        using (new EditorGUI.DisabledScope(merc.Grade == MercenaryGrade.F))
-                            if (GUILayout.Button("등급 ▼")) merc.SetGrade(merc.Grade - 1);
+                        if (GUILayout.Button("나이 +1")) merc.SetAge(merc.Age + 1);
+                        using (new EditorGUI.DisabledScope(merc.Age <= GrowthTuning.MinHireAge))
+                            if (GUILayout.Button("나이 −1")) merc.SetAge(merc.Age - 1);
+                        using (new EditorGUI.DisabledScope(merc.Talent == MercenaryGrade.S))
+                            if (GUILayout.Button("재능 ▲")) merc.SetTalent(merc.Talent + 1);
+                        using (new EditorGUI.DisabledScope(merc.Talent == MercenaryGrade.F))
+                            if (GUILayout.Button("재능 ▼")) merc.SetTalent(merc.Talent - 1);
                         if (GUILayout.Button("해고")) toRemove = merc;
                     }
                 }
@@ -336,7 +337,7 @@ namespace GN3.EditorTools
                 return;
             }
             var merc = MercenaryMarketGenerator.Generate(pool, 1, 1, 3, _rng)[0];
-            if (party.TryAdd(merc)) ToastLog.Show($"[테스트] {merc.Name} 무료 고용 ({merc.Class.ClassName} Lv.{merc.Level})");
+            if (party.TryAdd(merc)) ToastLog.Show($"[테스트] {merc.Name} 무료 고용 ({merc.Class.ClassName} {merc.Age}세)");
         }
 
         // ---------- 파견 ----------
@@ -352,11 +353,11 @@ namespace GN3.EditorTools
                     var quest = expedition.Quest;
                     if (expedition.IsReturning)
                     {
-                        EditorGUILayout.LabelField($"{quest.Title} — 귀환 중 남은 {expedition.ReturnDaysLeft}일");
+                        EditorGUILayout.LabelField($"{quest.Title} — 귀환 중 남은 {GameClock.FormatDuration(expedition.ReturnHoursLeft)}");
                         if (GUILayout.Button("즉시 귀환", GUILayout.Width(80))) ExpeditionLog.Instance.DebugReturnNow(expedition);
                         continue;
                     }
-                    EditorGUILayout.LabelField(expedition.IsReady ? $"{quest.Title} — 도착" : $"{quest.Title} — 남은 {quest.RemainingDays}일");
+                    EditorGUILayout.LabelField(expedition.IsReady ? $"{quest.Title} — 도착" : $"{quest.Title} — 남은 {GameClock.FormatDuration(quest.RemainingHours)}");
                     using (new EditorGUI.DisabledScope(expedition.IsReady))
                         if (GUILayout.Button("즉시 도착", GUILayout.Width(80))) ExpeditionLog.Instance.DebugArriveNow(expedition);
                 }

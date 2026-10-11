@@ -50,10 +50,10 @@ namespace GN3.UI
                 Destroy(row);
             _cardRows.Clear();
 
-            // 길드 단계에 따라 시장 레벨 범위·최고 등급이 바뀐다.
+            // 길드 단계에 따라 시장 경력(성장 횟수) 범위·최고 등급이 바뀐다.
             var rank = Guild.Current;
-            _market.MinLevel = rank.MarketMinLevel;
-            _market.MaxLevel = rank.MarketMaxLevel;
+            _market.MinGrowth = rank.MarketMinGrowth;
+            _market.MaxGrowth = rank.MarketMaxGrowth;
             _market.MaxGrade = rank.MaxMercGrade;
 
             foreach (var merc in _market.Refresh())
@@ -90,7 +90,8 @@ namespace GN3.UI
             nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
             nameText.gameObject.AddComponent<LayoutElement>().minWidth = 220;
 
-            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  Lv.{merc.Level}", 18, TextAnchor.MiddleLeft);
+            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세 · 재능 {GradeTable.RichLabel(merc.Talent)} · {GrowthTuning.RateLabel(merc.Age)}", 18, TextAnchor.MiddleLeft);
+            classText.supportRichText = true; // 재능 등급 색
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 140;
 
@@ -139,7 +140,7 @@ namespace GN3.UI
                 }
                 ToastLog.Show($"{merc.Name} 고용 (-{cost}G)");
 
-                Debug.Log($"{merc.Name} 고용됨 ({merc.Class.ClassName} Lv.{merc.Level})");
+                Debug.Log($"{merc.Name} 고용됨 ({merc.Class.ClassName} {merc.Age}세)");
                 _cardRows.Remove(row);
                 Destroy(row);
             });

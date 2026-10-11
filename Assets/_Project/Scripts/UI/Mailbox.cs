@@ -50,6 +50,8 @@ namespace GN3.UI
         /// <summary>오래된 것부터.</summary>
         public static IReadOnlyList<Mail> All => _mails;
         public static event System.Action Changed;
+        /// <summary>중요 편지(게임을 멈추고 알림창에 뜨는 것)가 새로 생겼을 때. 진행·건너뛰기가 그 시각에서 멈추는 데 쓴다(TimeAdvanceController).</summary>
+        public static event System.Action<Mail> ImportantPosted;
 
         public static bool HasUnread => _mails.Any(m => !m.Read);
         public static int UnreadCount => _mails.Count(m => !m.Read);
@@ -62,6 +64,7 @@ namespace GN3.UI
             _nextId = 0;
             _subscribed = false;
             Changed = null;
+            ImportantPosted = null;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -89,6 +92,7 @@ namespace GN3.UI
             _mails.Add(mail);
             Trim();
             Changed?.Invoke();
+            if (important) ImportantPosted?.Invoke(mail);
             return mail;
         }
 

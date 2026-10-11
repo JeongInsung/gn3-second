@@ -8,12 +8,12 @@ namespace GN3.Mercenaries
         public string ClassName;
         public MercenaryClassKind Kind;
 
-        [Header("Base Stats (Level 1)")]
+        [Header("Base Stats (성장 전)")]
         public int BaseAttack;
         public int BaseDefense;
         public int BaseHealth;
 
-        [Header("Growth Per Level")]
+        [Header("성장 1회에 오르는 양 (어느 능력치가 오를지도 이 값 × 전투력 가중치로 정한다)")]
         public int AttackGrowth;
         public int DefenseGrowth;
         public int HealthGrowth;

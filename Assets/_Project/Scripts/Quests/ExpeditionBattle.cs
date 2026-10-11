@@ -72,18 +72,15 @@ namespace GN3.Quests
                 Guild.Add(-Guild.FailPenalty);
             }
 
-            // 살아남은 파견원 경험치: 승리 40+20×등급, 실패는 절반.
-            int xp = 40 + 20 * (int)questGrade;
-            if (!battle.Victory) xp /= 2;
-            var levelUps = GrantExperience(expedition.Members.Where(m => m.IsAlive), xp);
+            // 살아남은 파견원 성장: 승리 1 + 0.5×퀘스트 등급, 실패는 절반(× 나이 배율, GrowthTuning.BattleGrowth).
+            var levelUps = GrantGrowth(expedition.Members.Where(m => m.IsAlive), GrowthTuning.BattleGrowth((int)questGrade, battle.Victory));
             var survivorsList = expedition.Members.Where(m => m.IsAlive).ToList();
             MercenaryCondition.AfterBattle(survivorsList, battle.Victory, fallenMercs); // 피로·사기(친밀도 보정 포함)
             // 함께 살아 돌아온 사람끼리 친밀도가 바뀐다(승리면 오르고, 실패면 성격이 안 맞는 사이는 내려간다).
             Affinity.AfterExpedition(survivorsList, battle.Victory);
-            summary += $" · 경험치 +{xp}";
 
             string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
-            if (survivors.Length > 0) summary += $" · 귀환길: {survivors} ({System.Math.Max(1, (expedition.OutboundDays + 1) / 2)}일)";
+            if (survivors.Length > 0) summary += $" · 귀환길: {survivors} ({GN3.World.GameClock.FormatDuration(expedition.ReturnHoursFor)})";
             if (fallen.Count > 0) summary += $" · 전사: {string.Join(", ", fallen)}";
 
             ToastLog.Show(summary, false);
@@ -94,7 +91,7 @@ namespace GN3.Quests
                 DailyLog.Add(line);
             }
 
-            // 우편함: 결과 편지(중요). 본문은 요약을 줄마다 나누고 레벨업을 덧붙인다.
+            // 우편함: 결과 편지(중요). 본문은 요약을 줄마다 나누고 성장(오른 능력치)을 덧붙인다.
             string body = summary.Replace(" · ", "\n");
             if (levelUps.Count > 0) body += "\n\n" + string.Join("\n", levelUps);
             var mail = Mailbox.Post(MailKind.QuestResult,
@@ -109,12 +106,15 @@ namespace GN3.Quests
         }
 
         /// <summary>경험치를 나눠 주고 "아린 레벨 업! Lv.3" 문구 목록을 돌려준다.</summary>
-        public static List<string> GrantExperience(IEnumerable<Mercenary> members, int xp)
+        /// <summary>살아남은 사람에게 성장량(나이 배율 전)을 준다. 능력치가 오른 사람마다 "카이런 공격 +3, 체력 +6" 한 줄.</summary>
+        public static List<string> GrantGrowth(IEnumerable<Mercenary> members, float growth)
         {
             var lines = new List<string>();
             foreach (var merc in members)
-                if (merc.AddExperience(xp) > 0)
-                    lines.Add($"{merc.Name} 레벨 업! Lv.{merc.Level}");
+            {
+                var gains = merc.AddGrowth(growth);
+                if (gains.Count > 0) lines.Add($"{merc.Name} {string.Join(", ", gains)}");
+            }
             return lines;
         }
     }
