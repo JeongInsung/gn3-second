@@ -48,6 +48,10 @@ namespace GN3.World
         private const float AllOutHour = 9f;              // 이 시각부터 자정까지는 전원 여관 밖
 
         private readonly Dictionary<string, VillageWanderer> _wanderers = new Dictionary<string, VillageWanderer>();
+        // 건물·출구로 걸어 들어가는 중인 인형(이미 _wanderers에서 빠짐). 도착하면 지운다.
+        // 시간을 빨리 넘기면 들어가다 다시 나오는 일이 겹쳐 옛 인형이 쌓였다(일주일 넘기기 한 번에 7명 파티가 66개) → 따로 들고 있다가 정리한다.
+        private readonly HashSet<VillageWanderer> _leaving = new HashSet<VillageWanderer>();
+        private bool _wasAdvancing;
         private readonly Dictionary<string, Mercenary> _mercById = new Dictionary<string, Mercenary>();
         private readonly System.Random _rng = new System.Random();
         private Rect _area;
@@ -206,6 +210,10 @@ namespace GN3.World
         private void Update()
         {
             if (!_subscribed) return;
+            // 진행·건너뛰기가 막 끝났으면 남은 옛 인형을 한 번 더 정리한다(가운데 Midpoint 뒤에 생긴 것까지)
+            bool advancing = TimeAdvanceController.IsAdvancing;
+            if (_wasAdvancing && !advancing) SweepStrays();
+            _wasAdvancing = advancing;
             bool hidden = IsBedtime();
             if (hidden != _hidden)
             {
@@ -565,8 +573,9 @@ namespace GN3.World
                 }
                 var leaving = wanderer;
                 var gate = CastleGate.Expedition;
+                _leaving.Add(leaving);
                 // 성문이 있으면 출구를 지나 성문으로 성벽 밖까지 걸어 나간다(가까이 가면 성문이 열린다).
-                wanderer.WalkAndVanish(_villageExit, () => { if (leaving != null) Destroy(leaving.gameObject); },
+                wanderer.WalkAndVanish(_villageExit, () => { _leaving.Remove(leaving); if (leaving != null) Destroy(leaving.gameObject); },
                     gate != null ? gate.OutwardSteps : null);
                 if (gate != null) gate.Pass(wanderer.transform);
                 yield return new WaitForSeconds(MarchGap);
@@ -585,6 +594,9 @@ namespace GN3.World
             {
                 bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
                 if (!overUI) target = VillageWanderer.Pick(cam.ScreenToWorldPoint(mouse.position.ReadValue()));
+                // 건물로 들어가는 중인(등록 안 된) 인형은 고르지 않는다 — 눌러도 창이 안 열리고 뒤의 진짜 인형을 가렸다
+                if (target != null && (target.OwnerId == null || !_wanderers.TryGetValue(target.OwnerId, out var registered) || registered != target))
+                    target = null;
             }
 
             if (target != _hovered)
@@ -639,6 +651,7 @@ namespace GN3.World
         /// </summary>
         private void ShuffleAfterTimeSkip()
         {
+            SweepStrays();
             if (_hidden || _grid == null) return;
             float now = Time.time;
             foreach (var pair in _wanderers)
@@ -658,6 +671,40 @@ namespace GN3.World
                     _nextDecision[pair.Key] = now + RandomRange(InsideRestMin, InsideRestMax);
                 }
             }
+        }
+
+        /// <summary>
+        /// 건물·출구로 들어가게 한다(도착하면 지움). 시간을 넘기는 중이거나 안 보이는 인형이면 걷지 않고 바로 지운다
+        /// (빨리 넘기면 들어가다 나오기가 겹쳐 옛 인형이 쌓였다).
+        /// </summary>
+        private void SendInto(VillageWanderer wanderer, Vector2 exit, Vector2 door)
+        {
+            if (TimeAdvanceController.IsAdvancing || !wanderer.gameObject.activeSelf)
+            {
+                Destroy(wanderer.gameObject);
+                return;
+            }
+            _leaving.Add(wanderer);
+            wanderer.ReturnInto(exit, door, () => { _leaving.Remove(wanderer); if (wanderer != null) Destroy(wanderer.gameObject); });
+        }
+
+        /// <summary>이 용병의 들어가는·나가는 중인 옛 인형을 지운다.</summary>
+        private void DropLeaving(string mercId)
+        {
+            foreach (var w in _leaving.Where(w => w == null || w.OwnerId == mercId).ToList())
+            {
+                _leaving.Remove(w);
+                if (w != null) Destroy(w.gameObject);
+            }
+        }
+
+        /// <summary>등록(_wanderers)도 안 되고 걸어 나가는 중(_leaving)도 아닌 인형을 모두 지운다(시간 넘기기 뒤 안전망).</summary>
+        private void SweepStrays()
+        {
+            _leaving.RemoveWhere(w => w == null);
+            var keep = new HashSet<VillageWanderer>(_wanderers.Values);
+            foreach (var w in FindObjectsByType<VillageWanderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (!keep.Contains(w) && !_leaving.Contains(w)) Destroy(w.gameObject);
         }
 
         private void Refresh()
@@ -686,10 +733,8 @@ namespace GN3.World
                     if (wanderer != null)
                     {
                         var entering = wanderer;
-                        if (_hasTrainingHall && entering.gameObject.activeSelf)
-                            entering.ReturnInto(_trainingExit, _trainingDoor, () => { if (entering != null) Destroy(entering.gameObject); });
-                        else
-                            Destroy(entering.gameObject);
+                        if (_hasTrainingHall) SendInto(entering, _trainingExit, _trainingDoor);
+                        else Destroy(entering.gameObject);
                     }
                 }
                 else if (merc != null && merc.IsAlive && Hospital.IsAdmitted(merc))
@@ -699,10 +744,8 @@ namespace GN3.World
                     if (wanderer != null)
                     {
                         var entering = wanderer;
-                        if (_hasHospital && entering.gameObject.activeSelf)
-                            entering.ReturnInto(_hospitalExit, _hospitalDoor, () => { if (entering != null) Destroy(entering.gameObject); });
-                        else
-                            Destroy(entering.gameObject);
+                        if (_hasHospital) SendInto(entering, _hospitalExit, _hospitalDoor);
+                        else Destroy(entering.gameObject);
                     }
                 }
                 else if (merc != null && merc.IsAlive && RestVenues.Find(merc) is RestVenue venue)
@@ -712,10 +755,8 @@ namespace GN3.World
                     if (wanderer != null)
                     {
                         var entering = wanderer;
-                        if (_venueDoors.TryGetValue(venue, out var doors) && entering.gameObject.activeSelf)
-                            entering.ReturnInto(doors.exit, doors.door, () => { if (entering != null) Destroy(entering.gameObject); });
-                        else
-                            Destroy(entering.gameObject);
+                        if (_venueDoors.TryGetValue(venue, out var doors)) SendInto(entering, doors.exit, doors.door);
+                        else Destroy(entering.gameObject);
                     }
                 }
                 else if (wanderer != null)
@@ -729,6 +770,11 @@ namespace GN3.World
                 _nextCompanionRoll.Remove(id);
                 _nextRestRoll.Remove(id);
             }
+            if (departing.Count > 0 && TimeAdvanceController.IsAdvancing)
+            {
+                foreach (var w in departing) Destroy(w.gameObject); // 넘기는 중: 걸어 나가는 연출 없이 바로
+                departing.Clear();
+            }
             if (departing.Count > 0)
             {
                 ToastLog.Show($"파견대 출발: {string.Join(", ", departing.Select(w => w.gameObject.name.Replace("Wanderer_", "")))}"
@@ -740,6 +786,7 @@ namespace GN3.World
             foreach (var merc in present)
             {
                 if (_wanderers.ContainsKey(merc.Id)) continue;
+                DropLeaving(merc.Id); // 아직 들어가던 옛 인형이 있으면 지운다(같은 사람이 둘 보이지 않게)
 
                 var go = new GameObject($"Wanderer_{merc.Name}");
                 go.transform.position = _grid.RandomWalkablePoint(_rng);

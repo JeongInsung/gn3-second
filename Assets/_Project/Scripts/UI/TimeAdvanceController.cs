@@ -35,7 +35,11 @@ namespace GN3.UI
 
         // Domain Reload가 꺼져 있어도 Play 진입마다 구독을 비운다(GameClock과 같은 방식).
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForPlaySession() => Midpoint = null;
+        private static void ResetForPlaySession()
+        {
+            Midpoint = null;
+            IsAdvancing = false;
+        }
 
         // 건너뛰기 연출: 하루 1.4초, 하루 더할 때마다 0.5초, 최대 3초(4일 2.9초 · 일주일 3초)
         private const float SkipTransitionSeconds = 1.4f;
@@ -53,6 +57,8 @@ namespace GN3.UI
         private Selectable _hoursSlider;
         private int _advanceHours = (int)GameClock.HoursPerStep;
         private bool _isAdvancing;
+        /// <summary>진행·건너뛰기 연출 중인지(그 사이 마을은 걸어 들어가기·나가기 연출을 하지 않는다 — VillagePartyPresenter).</summary>
+        public static bool IsAdvancing { get; private set; }
         private Mailbox.Mail _stopMail; // 진행·건너뛰기 중 처음 생긴 중요 편지(도착·전멸·사망·주급 미지급…). 생기면 거기서 멈춘다
 
         /// <summary>진행 버튼·스페이스바가 한 번에 넘길 시간(시). 슬라이더로 1~24시간.</summary>
@@ -171,7 +177,7 @@ namespace GN3.UI
 
         private IEnumerator AdvanceRoutine()
         {
-            _isAdvancing = true; // 첫 yield 전에 잠가 두 번 눌리지 않게
+            _isAdvancing = IsAdvancing = true; // 첫 yield 전에 잠가 두 번 눌리지 않게
             SetLocked(true);
             int hours = _advanceHours;
             float from = GameClock.CurrentHour;
@@ -189,7 +195,7 @@ namespace GN3.UI
 
         private IEnumerator SkipRoutine(int days)
         {
-            _isAdvancing = true;
+            _isAdvancing = IsAdvancing = true;
             SetLocked(true);
             int startDay = GameClock.CurrentDay;
             float hour = GameClock.CurrentHour;
@@ -213,7 +219,7 @@ namespace GN3.UI
         /// </summary>
         private IEnumerator FlowRoutine(float totalHours, float duration)
         {
-            _isAdvancing = true;
+            _isAdvancing = IsAdvancing = true;
             SetLocked(true);
             int dayBefore = GameClock.CurrentDay;
             var cycle = DayNightCycle.Instance;
@@ -269,7 +275,7 @@ namespace GN3.UI
             SetDim(0f);
             _bannerFade = StartCoroutine(FadeBanner());
             SetLocked(false);
-            _isAdvancing = false;
+            _isAdvancing = IsAdvancing = false;
 
             // 자정을 넘겼으면 넘긴 날들(파견 진행·있었던 일)을 보고서 한 통으로 우편함에 넣고 자동 저장한다.
             if (GameClock.CurrentDay != dayBefore)
