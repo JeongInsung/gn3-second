@@ -33,6 +33,7 @@ namespace GN3.Mercenaries
                 var talent = GradeTable.Roll(rng, maxGrade); // 재능(길드 단계 상한). 등급은 전투력으로 정해진다
                 var merc = new Mercenary(name, mercClass, age, birthday, appearance, personality, hasRarePassive, talent);
                 merc.GrantStartingGrowth(GrowthTuning.StartGrowthForAge(age) + rng.Next(minGrowth, maxGrowth + 1), rng);
+                merc.SnapshotMonth(); // 처음엔 괄호(이번 달 변화) 없음
                 result.Add(merc);
             }
             return result;

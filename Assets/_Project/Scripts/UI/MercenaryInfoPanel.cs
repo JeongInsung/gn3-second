@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using GN3.Economy;
 using GN3.Mercenaries;
@@ -105,12 +106,13 @@ namespace GN3.UI
             _healthFill = CreateBar("HealthBar", new Vector2(infoX, -92f), new Vector2(infoWidth + 30f, 12f));
             _healthText = CreateText("Health", 13, FontStyle.Normal, new Vector2(infoX, -106f), new Vector2(infoWidth + 30f, 18f));
 
-            // 나이·성장 한 줄(예전 경험치 막대 자리)
-            _growthText = CreateText("Growth", 13, FontStyle.Normal, new Vector2(infoX, -128f), new Vector2(infoWidth + 30f, 30f));
+            // 나이·생일 한 줄(예전 경험치 막대 자리)
+            _growthText = CreateText("Growth", 13, FontStyle.Normal, new Vector2(infoX, -128f), new Vector2(infoWidth + 30f, 18f));
 
             // 아래: 능력치·성격·패시브 (전체 폭)
             float bottomWidth = PanelWidth - 28f;
-            _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -162f), new Vector2(bottomWidth, 22f));
+            // 능력치 두 줄: 공격·방어·속도 / 전투력 — 괄호(이번 달 변화)가 붙어도 잘리지 않게
+            _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -150f), new Vector2(bottomWidth, 38f));
             // 무기·성격·패시브는 이름만 쓰고, 마우스를 올리면 설명이 툴팁으로 뜬다.
             _weaponText = CreateText("Weapon", 15, FontStyle.Normal, new Vector2(14f, -190f), new Vector2(bottomWidth, 22f));
             _personalityText = CreateText("Personality", 15, FontStyle.Normal, new Vector2(14f, -218f), new Vector2(bottomWidth, 22f));
@@ -349,28 +351,41 @@ namespace GN3.UI
                 if (condition < 1f) _healthText.text += $" (공·방 -{Mathf.RoundToInt((1f - condition) * 100f)}%)";
             }
 
-            // 나이·성장: 성장 속도는 나이가 정한다(GrowthTuning). 지금까지 훈련·실전으로 오른 능력치.
-            // 재능(성장 배율)과 다음 등급까지는 일부러 보여 주지 않는다(숨은 값 — 키워 보며 느끼게).
-            string grown = merc.GrowthSummary();
-            _growthText.text = $"{merc.Age}세 ({MercenaryAge.BirthdayText(merc)}생) · {GrowthTuning.RateLabel(merc.Age)}"
-                               + (grown.Length > 0 ? $"\n성장 {grown}" : "\n아직 성장 없음");
+            // 나이 칸: 나이와 생일만(성장 속도·재능은 숨은 값)
+            _growthText.text = $"{merc.Age}세 · {MercenaryAge.BirthdayText(merc)}생";
 
-            // 부상·질병으로 떨어진 능력치는 빨간색, 마우스를 올리면 얼마에서 떨어졌는지
-            var healthy = merc.StatsWithoutAilments;
-            string Stat(string label, int value, int normal) => value < normal ? $"{label} <color=#e06050>{value}</color>" : $"{label} {value}";
+            // 능력치: "공격 20 (+3 −2)" — 20 = 이번 달 기준값(매달 1일 정산, Mercenary.SnapshotMonth),
+            // +3/−1 = 이번 달 영구 변화(성장·쇠퇴·무기·수련, 초록/빨강), −2 = 부상·질병·피로·사기로 잠깐 깎인 양(빨강, 나으면 돌아옴·정산 안 함).
+            var permanent = merc.PermanentStats;
+            int permanentPower = GradeTable.CombatPower(permanent);
+            string Stat(string label, int monthBase, int perm, int now)
+            {
+                int grew = perm - monthBase, temp = now - perm;
+                var parts = new List<string>();
+                if (grew != 0) parts.Add(grew > 0 ? $"<color=#7fd36a>+{grew}</color>" : $"<color=#e06050>−{-grew}</color>");
+                if (temp != 0) parts.Add(temp > 0 ? $"<color=#7fd36a>+{temp}</color>" : $"<color=#e06050>−{-temp}</color>");
+                return parts.Count > 0 ? $"{label} {monthBase} ({string.Join(" ", parts)})" : $"{label} {monthBase}";
+            }
             _statsText.supportRichText = true;
-            // 연구소(마법사)·성당(힐러) 보너스는 능력치 옆에 "(연구 공격 +N)"·"(기도 방어 +N · 체력 +M)"으로, 마우스를 올리면 다음 단계까지 남은 시간
+            int grewSum = permanentPower - merc.MonthBasePower, tempSum = merc.CombatPower - permanentPower;
+            string monthTip = "괄호: 이번 달 변화" + (grewSum != 0 ? $" · 성장·무기 등 전투력 {grewSum:+0;−0}" : "")
+                              + (tempSum != 0 ? $" · 부상·피로 등으로 잠깐 전투력 {tempSum:+0;−0}(나으면 돌아옴)" : "")
+                              + "\n매달 1일에 이번 달 성장분이 원래 수치에 더해집니다.";
+            // 연구소(마법사)·성당(힐러) 수련 보너스는 수치에 이미 들어 있다 — 마우스를 올리면 단계와 다음 단계까지 남은 시간
             string bonusText = merc.ResearchBonusText();
-            string research = bonusText.Length > 0 ? $" <color=#7fd8e0>({merc.ResearchLabel} {bonusText})</color>" : "";
             bool studies = merc.Class.Kind == MercenaryClassKind.Mage || merc.Class.Kind == MercenaryClassKind.Healer;
             string place = merc.Class.Kind == MercenaryClassKind.Healer ? "성당" : "마법 연구소";
             string researchTip = !studies ? null
-                : merc.CanResearchMore
+                : (merc.CanResearchMore
                     ? $"{place} {merc.ResearchLabel} {merc.ResearchLevel}/{Mercenary.MaxResearchLevel}단계 · 다음 단계까지 {Mercenary.ResearchHoursPerBonus - merc.ResearchHours:0.#}시간"
-                    : $"{place} {merc.ResearchLabel} {merc.ResearchLevel}/{Mercenary.MaxResearchLevel}단계 (최대)";
-            string statsTip = string.IsNullOrEmpty(ailmentTip) ? researchTip : researchTip == null ? ailmentTip : ailmentTip + "\n" + researchTip;
+                    : $"{place} {merc.ResearchLabel} {merc.ResearchLevel}/{Mercenary.MaxResearchLevel}단계 (최대)")
+                  + (bonusText.Length > 0 ? $" · {bonusText}" : "");
+            string statsTip = monthTip;
+            if (!string.IsNullOrEmpty(ailmentTip)) statsTip += "\n" + ailmentTip;
+            if (researchTip != null) statsTip += "\n" + researchTip;
             SetTipLine(_statsText, _statsTip,
-                $"{Stat("공격", stats.Attack, healthy.Attack)}{research}  ·  {Stat("방어", stats.Defense, healthy.Defense)}  ·  {Stat("속도", stats.MoveSpeed, healthy.MoveSpeed)}  ·  전투력 {merc.CombatPower}",
+                $"{Stat("공격", merc.MonthBaseAttack, permanent.Attack, stats.Attack)}  ·  {Stat("방어", merc.MonthBaseDefense, permanent.Defense, stats.Defense)}  ·  "
+                + $"{Stat("속도", merc.MonthBaseSpeed, permanent.MoveSpeed, stats.MoveSpeed)}\n{Stat("전투력", merc.MonthBasePower, permanentPower, merc.CombatPower)}",
                 statsTip);
             if (merc.Weapon != null)
                 SetTipLine(_weaponText, _weaponTip, $"무기: {merc.Weapon.Name}", merc.Weapon.DescribeFor(merc.Class.Kind));

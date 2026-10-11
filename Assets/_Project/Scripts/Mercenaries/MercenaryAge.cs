@@ -11,6 +11,7 @@ namespace GN3.Mercenaries
     /// 45세(GrowthTuning.DeclineStartAge)부터는 생일마다 성장 2회만큼 쇠퇴하고, 55세(RetireAge)가 되면 은퇴한다
     /// (파견 중이면 마을로 돌아온 뒤 자정에). 은퇴는 중요 알림(게임을 멈추고 알림창).
     /// 등급(전투력 구간)이 오르내리면 승급·강등 토스트도 여기서 낸다(Mercenary.GradeChanged).
+    /// 매달 1일 자정에는 이번 달 기준값을 다시 찍는다(Mercenary.SnapshotMonth — 정보창 괄호 정산).
     /// </summary>
     public static class MercenaryAge
     {
@@ -51,6 +52,12 @@ namespace GN3.Mercenaries
 
         private static void HandleNewDay()
         {
+            // 매달 1일: 정보창 능력치 옆 괄호(이번 달 변화)를 원래 수치에 더해 정산한다. 생일 쇠퇴보다 먼저(그날 쇠퇴는 다음 달 괄호에 보이게).
+            if (GameCalendar.Today.Day == 1)
+            {
+                foreach (var merc in PlayerParty.Instance.Members.Where(m => m.IsAlive)) merc.SnapshotMonth();
+                DailyLog.Add($"{GameCalendar.Today.Month}월이 되어 지난달 능력치 변화를 정리했다.");
+            }
             int today = TodayIndex;
             foreach (var merc in PlayerParty.Instance.Members.Where(m => m.IsAlive).ToList())
             {

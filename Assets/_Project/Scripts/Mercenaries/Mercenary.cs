@@ -380,6 +380,35 @@ namespace GN3.Mercenaries
             return string.Join(" · ", parts);
         }
 
+        // ---------- 이번 달 기준값 (정보창 "공격 20 (+3 −2)"의 20, 매달 1일에 정산) ----------
+
+        /// <summary>피로·사기·부상을 뺀 영구 능력치(성장·쇠퇴·무기·수련 포함).</summary>
+        public CombatStats PermanentStats => ComputeStats(null, includeCondition: false);
+
+        public int MonthBaseAttack { get; private set; }
+        public int MonthBaseDefense { get; private set; }
+        public int MonthBaseSpeed { get; private set; }
+        public int MonthBasePower { get; private set; }
+
+        /// <summary>이번 달 기준값을 지금 영구 수치로 찍는다(매달 1일 자정·고용 시장에서 만들 때·예전 저장 불러올 때).</summary>
+        public void SnapshotMonth()
+        {
+            var s = PermanentStats;
+            MonthBaseAttack = s.Attack;
+            MonthBaseDefense = s.Defense;
+            MonthBaseSpeed = s.MoveSpeed;
+            MonthBasePower = GradeTable.CombatPower(s);
+        }
+
+        /// <summary>저장 파일에서 불러올 때 이번 달 기준값을 되돌린다.</summary>
+        public void RestoreMonthBase(int attack, int defense, int speed, int power)
+        {
+            MonthBaseAttack = attack;
+            MonthBaseDefense = defense;
+            MonthBaseSpeed = speed;
+            MonthBasePower = power;
+        }
+
         /// <summary>한 살 먹는다(MercenaryAge가 생일 자정에).</summary>
         public void GrowOlder() => Age++;
 

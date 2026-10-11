@@ -87,6 +87,11 @@ namespace GN3.Save
                     growthHealth = merc.GrowthHealth,
                     growthSpeed = merc.GrowthSpeed,
                     growthProgress = merc.GrowthProgress,
+                    hasMonthBase = true,
+                    monthAttack = merc.MonthBaseAttack,
+                    monthDefense = merc.MonthBaseDefense,
+                    monthSpeed = merc.MonthBaseSpeed,
+                    monthPower = merc.MonthBasePower,
                     personality = (int)merc.Personality,
                     rarePassive = merc.HasRarePassive,
                     health = merc.CurrentHealth,
@@ -201,6 +206,8 @@ namespace GN3.Save
                     merc.MatchLegacyPower(LegacyRng); // 재능 능력치 배율이 빠진 만큼 성장으로 메운다
                     merc.SetHealth(m.health);
                 }
+                if (m.hasMonthBase) merc.RestoreMonthBase(m.monthAttack, m.monthDefense, m.monthSpeed, m.monthPower);
+                else merc.SnapshotMonth(); // 예전 저장: 지금 값을 이번 달 기준으로
                 merc.RestoreCondition(m.fatigue, m.morale);
                 if (m.ailments != null)
                     foreach (var ailment in m.ailments)
