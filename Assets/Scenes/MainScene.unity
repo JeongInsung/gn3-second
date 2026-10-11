@@ -127,6 +127,86 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: lampGlows.Array.size
+      value: 13
+      objectReference: {fileID: 0}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: lampLights.Array.size
+      value: 13
+      objectReference: {fileID: 0}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[4]'
+      value: 
+      objectReference: {fileID: 1495893737}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[5]'
+      value: 
+      objectReference: {fileID: 500768714}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[6]'
+      value: 
+      objectReference: {fileID: 1669037906}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[7]'
+      value: 
+      objectReference: {fileID: 274265876}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[8]'
+      value: 
+      objectReference: {fileID: 1646405772}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[9]'
+      value: 
+      objectReference: {fileID: 1911736290}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[10]'
+      value: 
+      objectReference: {fileID: 236853336}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[11]'
+      value: 
+      objectReference: {fileID: 717003575}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampGlows.Array.data[12]'
+      value: 
+      objectReference: {fileID: 1773406032}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[4]'
+      value: 
+      objectReference: {fileID: 1902969204}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[5]'
+      value: 
+      objectReference: {fileID: 1465613856}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[6]'
+      value: 
+      objectReference: {fileID: 543332285}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[7]'
+      value: 
+      objectReference: {fileID: 1073036762}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[8]'
+      value: 
+      objectReference: {fileID: 895277947}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[9]'
+      value: 
+      objectReference: {fileID: 1021484358}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[10]'
+      value: 
+      objectReference: {fileID: 2033972579}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[11]'
+      value: 
+      objectReference: {fileID: 720336437}
+    - target: {fileID: 1683075550931507031, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+      propertyPath: 'lampLights.Array.data[12]'
+      value: 
+      objectReference: {fileID: 1181071089}
     - target: {fileID: 2161075965307653649, guid: d1c207afe720ae543a813995aab03b26, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -169,7 +249,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2659069557603633921, guid: d1c207afe720ae543a813995aab03b26, type: 3}
       propertyPath: m_Intensity
-      value: 0.38602522
+      value: 0.45879593
       objectReference: {fileID: 0}
     - target: {fileID: 5122668262708042418, guid: d1c207afe720ae543a813995aab03b26, type: 3}
       propertyPath: m_Name
@@ -259,6 +339,28 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 20}
   m_SizeDelta: {x: -40, y: 140}
   m_Pivot: {x: 0.5, y: 0}
+--- !u!114 &236853336 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 8848259575382898254, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &274265876 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 5856491242084070537, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1 &299801593
 GameObject:
   m_ObjectHideFlags: 0
@@ -337,6 +439,17 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 299801593}
   m_CullTransparentMesh: 1
+--- !u!114 &500768714 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7579663981154197741, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -474,6 +587,17 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &543332285 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 5668859021426158439, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1 &565890335
 GameObject:
   m_ObjectHideFlags: 0
@@ -630,6 +754,28 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!114 &717003575 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 6933326089229139261, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &720336437 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 6333550311121678634, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1 &741685858
 GameObject:
   m_ObjectHideFlags: 0
@@ -1025,6 +1171,50 @@ MonoBehaviour:
   maxEnemyCount: 5
   minDifficulty: 1
   maxDifficulty: 3
+--- !u!114 &895277947 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 9167512162518106789, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &1021484358 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 9124072964474805902, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &1073036762 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 6113652615031099060, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &1181071089 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2429175662844393683, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1 &1200927553
 GameObject:
   m_ObjectHideFlags: 0
@@ -1261,6 +1451,28 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1337681055}
   m_CullTransparentMesh: 1
+--- !u!114 &1465613856 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 657037359341433873, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &1495893737 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 6951122704402395881, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1 &1582770815
 GameObject:
   m_ObjectHideFlags: 0
@@ -1415,6 +1627,28 @@ MonoBehaviour:
   m_ChildScaleWidth: 0
   m_ChildScaleHeight: 0
   m_ReverseArrangement: 0
+--- !u!114 &1646405772 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2289282017984643404, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &1669037906 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 4841179007153080725, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1 &1679592988
 GameObject:
   m_ObjectHideFlags: 0
@@ -1614,6 +1848,39 @@ RectTransform:
   m_AnchoredPosition: {x: -124.7, y: -43.9}
   m_SizeDelta: {x: 140, y: 44}
   m_Pivot: {x: 1, y: 1}
+--- !u!114 &1773406032 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 7803062372843130666, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &1902969204 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 5044926124726413175, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
+--- !u!114 &1911736290 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2439176836816113007, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1 &1919957194
 GameObject:
   m_ObjectHideFlags: 0
@@ -1735,6 +2002,17 @@ RectTransform:
   m_AnchoredPosition: {x: -124.7, y: -23}
   m_SizeDelta: {x: 140, y: 44}
   m_Pivot: {x: 1, y: 1}
+--- !u!114 &2033972579 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 9098343950969498548, guid: d1c207afe720ae543a813995aab03b26, type: 3}
+  m_PrefabInstance: {fileID: 143256332}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 073797afb82c5a1438f328866b10b3f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.2D.Runtime::UnityEngine.Rendering.Universal.Light2D
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
