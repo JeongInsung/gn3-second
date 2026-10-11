@@ -261,8 +261,13 @@ namespace GN3.UI
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 100;
 
-            string status = training ? "  · 훈련 중" : hospitalized ? "  · 입원 중" : bathing ? $"  · {venue.Name} 중" : onExpedition ? "  · 파견 중"
-                : merc.CurrentHealth < stats.MaxHealth ? $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}" : "";
+            // 위치(항상): 마을 / 훈련소 / 병원 / 쉼터 이름 / 파견: 퀘스트 / 귀환 중 — 마을 캐릭터 이동은 알림 대신 여기서 본다
+            // (onExpedition은 훈련·입원·쉼터까지 '마을에 없음'으로 묶은 값이라 실제 파견은 따로 본다)
+            string where = ExpeditionLog.Instance.IsOnExpedition(merc)
+                ? (ExpeditionLog.Instance.IsReturning(merc) ? "귀환 중" : $"파견: {ExpeditionLog.Instance.FindQuest(merc)?.Title}")
+                : training ? "훈련소" : hospitalized ? "병원" : bathing ? venue.Name : "마을";
+            string status = $"  · {where}";
+            if (merc.CurrentHealth < stats.MaxHealth) status += $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}";
             // 피로·사기: 지치면 파견 불가, 피로 50↑·사기 30↓은 능력치가 깎이니 눈에 띄게
             if (merc.IsExhausted) status += $"  · 지침(피로 {merc.Fatigue})";
             else if (merc.Fatigue >= Mercenary.TiredFatigue) status += $"  · 피로 {merc.Fatigue}";

@@ -196,7 +196,7 @@ namespace GN3.Mercenaries
                 if (morale > 0) parts.Add($"사기 +{morale}");
                 if (relief > 0) parts.Add($"피로 -{relief}");
                 else if (relief < 0) parts.Add($"피로 +{-relief}");
-                ToastLog.Show($"{merc.Name} {Name}에서 나왔다" + (parts.Count > 0 ? $" ({string.Join(" · ", parts)})" : ""));
+                DailyLog.Add($"{merc.Name}이(가) {Name}에서 쉬었다" + (parts.Count > 0 ? $" ({string.Join(" · ", parts)})." : "."));
             }
             OnChanged?.Invoke();
         }

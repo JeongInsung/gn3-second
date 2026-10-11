@@ -52,6 +52,7 @@ namespace GN3.World
         // 시간을 빨리 넘기면 들어가다 다시 나오는 일이 겹쳐 옛 인형이 쌓였다(일주일 넘기기 한 번에 7명 파티가 66개) → 따로 들고 있다가 정리한다.
         private readonly HashSet<VillageWanderer> _leaving = new HashSet<VillageWanderer>();
         private bool _wasAdvancing;
+        private bool _wasSkippingDays;
         private readonly Dictionary<string, Mercenary> _mercById = new Dictionary<string, Mercenary>();
         private readonly System.Random _rng = new System.Random();
         private Rect _area;
@@ -214,6 +215,11 @@ namespace GN3.World
             bool advancing = TimeAdvanceController.IsAdvancing;
             if (_wasAdvancing && !advancing) SweepStrays();
             _wasAdvancing = advancing;
+            // 하루·4일·일주일 건너뛰기: 그동안은 캐릭터를 숨기고, 끝나면 마을 아무 곳에 무작위로 둔다(문·성문에서 나오기 없음)
+            bool skippingDays = TimeAdvanceController.IsSkippingDays;
+            if (skippingDays) HideAllForSkip();
+            else if (_wasSkippingDays) PlaceAllRandomlyAfterSkip();
+            _wasSkippingDays = skippingDays;
             bool hidden = IsBedtime();
             if (hidden != _hidden)
             {
@@ -342,7 +348,7 @@ namespace GN3.World
                 if (!TrainingHall.TryAdd(merc, hours)) continue;
                 // 친한 동료가 밖에 있으면 관계 단계의 동행 확률로 같이 훈련하러 간다(정원·피로는 TrainingHall이 거절).
                 if (buddy.merc != null && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && TrainingHall.TryAdd(buddy.merc, hours))
-                    ToastLog.Show($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 훈련하러 간다");
+                    DailyLog.Add($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 훈련했다."); // 이동 알림은 띄우지 않는다(위치는 파티 구성)
                 return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
             }
         }
@@ -376,7 +382,7 @@ namespace GN3.World
                 if (!venue.TryAdd(merc, hours)) continue;
                 if (buddy.merc != null && venue.VisitChance(buddy.merc) > 0f
                     && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && venue.TryAdd(buddy.merc, hours))
-                    ToastLog.Show($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 {venue.Name}에 간다");
+                    DailyLog.Add($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 {venue.Name}에 갔다.");
                 return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
             }
         }
@@ -652,6 +658,7 @@ namespace GN3.World
         private void ShuffleAfterTimeSkip()
         {
             SweepStrays();
+            if (TimeAdvanceController.IsSkippingDays) return; // 날짜 건너뛰기는 끝날 때 한 번에 무작위 배치(PlaceAllRandomlyAfterSkip)
             if (_hidden || _grid == null) return;
             float now = Time.time;
             foreach (var pair in _wanderers)
@@ -686,6 +693,37 @@ namespace GN3.World
             }
             _leaving.Add(wanderer);
             wanderer.ReturnInto(exit, door, () => { _leaving.Remove(wanderer); if (wanderer != null) Destroy(wanderer.gameObject); });
+        }
+
+        /// <summary>날짜 건너뛰기 중: 모든 캐릭터를 숨기고 걸어 들어가던 인형은 지운다.</summary>
+        private void HideAllForSkip()
+        {
+            foreach (var w in _leaving.ToList())
+                if (w != null) Destroy(w.gameObject);
+            _leaving.Clear();
+            foreach (var w in _wanderers.Values)
+                if (w != null && w.gameObject.activeSelf) w.gameObject.SetActive(false);
+        }
+
+        /// <summary>날짜 건너뛰기가 끝난 순간: 마을에 있는 캐릭터를 모두 무작위 자리에 둔다(밤이 아니면 여관 시간이어도 밖에).</summary>
+        private void PlaceAllRandomlyAfterSkip()
+        {
+            SweepStrays();
+            if (_grid == null) return;
+            float now = Time.time;
+            foreach (var pair in _wanderers.ToList())
+            {
+                var wanderer = pair.Value;
+                if (wanderer == null) continue;
+                Dissolve(pair.Key);
+                wanderer.gameObject.SetActive(!_hidden);
+                wanderer.PlaceAt(_grid.RandomWalkablePoint(_rng));
+                _nextDecision[pair.Key] = now + RandomRange(OutsideWanderMin, OutsideWanderMax);
+            }
+            _trainingIds.Clear();
+            _hospitalIds.Clear();
+            _restingIn.Clear();
+            _awayIds.Clear();
         }
 
         /// <summary>이 용병의 들어가는·나가는 중인 옛 인형을 지운다.</summary>
@@ -777,8 +815,6 @@ namespace GN3.World
             }
             if (departing.Count > 0)
             {
-                ToastLog.Show($"파견대 출발: {string.Join(", ", departing.Select(w => w.gameObject.name.Replace("Wanderer_", "")))}"
-                              + (departingQuest != null ? $" → {departingQuest}" : ""));
                 StartCoroutine(MarchOut(departing));
             }
 
@@ -795,7 +831,16 @@ namespace GN3.World
                 wanderer.OwnerId = merc.Id;
                 _mercById[merc.Id] = merc;
                 // 여관이 있으면 새로 온 용병은 여관 안에서 시작해 곧 무작위로 나온다.
-                if (_trainingIds.Remove(merc.Id) && _hasTrainingHall && !_hidden)
+                if (TimeAdvanceController.IsSkippingDays)
+                {
+                    // 날짜 건너뛰기 중: 숨겨 두었다가 끝날 때 무작위 자리에 둔다
+                    _trainingIds.Remove(merc.Id);
+                    _hospitalIds.Remove(merc.Id);
+                    _restingIn.Remove(merc.Id);
+                    _awayIds.Remove(merc.Id);
+                    go.SetActive(false);
+                }
+                else if (_trainingIds.Remove(merc.Id) && _hasTrainingHall && !_hidden)
                 {
                     // 훈련을 마친 용병: 훈련소 문에서 걸어 나온다.
                     go.SetActive(true);

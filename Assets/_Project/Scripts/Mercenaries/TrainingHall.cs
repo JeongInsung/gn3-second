@@ -168,7 +168,7 @@ namespace GN3.Mercenaries
                 string gained = _sessionGains.TryGetValue(merc.Id, out var session) && session.Count > 0 ? string.Join(", ", session) : "오른 능력치 없음";
                 _traineeIds.Remove(merc.Id);
                 Forget(merc.Id);
-                ToastLog.Show($"{merc.Name} 훈련을 마쳤다 ({gained})");
+                DailyLog.Add($"{merc.Name}이(가) 훈련을 마쳤다 ({gained})."); // 이동 알림은 띄우지 않는다
             }
             OnChanged?.Invoke();
         }

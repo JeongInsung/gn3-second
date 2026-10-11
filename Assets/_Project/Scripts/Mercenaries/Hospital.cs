@@ -83,7 +83,7 @@ namespace GN3.Mercenaries
                 if (_patientIds.Count >= Capacity) break;
                 _patientIds.Add(merc.Id);
                 _admittedHours[merc.Id] = 0f;
-                ToastLog.Show($"{merc.Name}이(가) 병원에 입원했다 ({merc.AilmentSummary()})");
+                DailyLog.Add($"{merc.Name}이(가) 병원에 입원했다 ({merc.AilmentSummary()})."); // 이동 알림은 띄우지 않는다
                 changed = true;
             }
             if (changed) OnChanged?.Invoke();
@@ -133,12 +133,10 @@ namespace GN3.Mercenaries
                 _admittedHours.Remove(merc.Id);
                 if (fee <= 0 || Wallet.TrySpend(fee))
                 {
-                    ToastLog.Show($"{merc.Name}이(가) 퇴원했다 (치료비 -{fee}G)");
                     DailyLog.Add($"{merc.Name}이(가) 병원에서 퇴원했다. 치료비 {fee}G");
                 }
                 else
                 {
-                    ToastLog.Show($"{merc.Name}이(가) 퇴원했다. 골드가 모자라 치료비 {fee}G를 받지 않았다.");
                     DailyLog.Add($"{merc.Name}이(가) 퇴원했다(치료비 {fee}G 미납).");
                 }
             }

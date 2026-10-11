@@ -39,6 +39,7 @@ namespace GN3.UI
         {
             Midpoint = null;
             IsAdvancing = false;
+            IsSkippingDays = false;
         }
 
         // 건너뛰기 연출: 하루 1.4초, 하루 더할 때마다 0.5초, 최대 3초(4일 2.9초 · 일주일 3초)
@@ -59,6 +60,8 @@ namespace GN3.UI
         private bool _isAdvancing;
         /// <summary>진행·건너뛰기 연출 중인지(그 사이 마을은 걸어 들어가기·나가기 연출을 하지 않는다 — VillagePartyPresenter).</summary>
         public static bool IsAdvancing { get; private set; }
+        /// <summary>하루·4일·일주일 건너뛰기 중인지(그 사이 마을 캐릭터를 숨기고, 끝나면 무작위 자리에 둔다 — VillagePartyPresenter).</summary>
+        public static bool IsSkippingDays { get; private set; }
         private Mailbox.Mail _stopMail; // 진행·건너뛰기 중 처음 생긴 중요 편지(도착·전멸·사망·주급 미지급…). 생기면 거기서 멈춘다
 
         /// <summary>진행 버튼·스페이스바가 한 번에 넘길 시간(시). 슬라이더로 1~24시간.</summary>
@@ -196,6 +199,7 @@ namespace GN3.UI
         private IEnumerator SkipRoutine(int days)
         {
             _isAdvancing = IsAdvancing = true;
+            IsSkippingDays = true;
             SetLocked(true);
             int startDay = GameClock.CurrentDay;
             float hour = GameClock.CurrentHour;
@@ -276,6 +280,7 @@ namespace GN3.UI
             _bannerFade = StartCoroutine(FadeBanner());
             SetLocked(false);
             _isAdvancing = IsAdvancing = false;
+            IsSkippingDays = false;
 
             // 자정을 넘겼으면 넘긴 날들(파견 진행·있었던 일)을 보고서 한 통으로 우편함에 넣고 자동 저장한다.
             if (GameClock.CurrentDay != dayBefore)
