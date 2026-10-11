@@ -90,8 +90,7 @@ namespace GN3.UI
             nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
             nameText.gameObject.AddComponent<LayoutElement>().minWidth = 220;
 
-            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세 · 재능 {GradeTable.RichLabel(merc.Talent)} · {GrowthTuning.RateLabel(merc.Age)}", 18, TextAnchor.MiddleLeft);
-            classText.supportRichText = true; // 재능 등급 색
+            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세 · {GrowthTuning.RateLabel(merc.Age)}", 18, TextAnchor.MiddleLeft); // 재능은 숨은 값
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 140;
 

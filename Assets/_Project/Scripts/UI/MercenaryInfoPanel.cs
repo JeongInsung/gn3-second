@@ -350,11 +350,9 @@ namespace GN3.UI
             }
 
             // 나이·성장: 성장 속도는 나이가 정한다(GrowthTuning). 지금까지 훈련·실전으로 오른 능력치.
+            // 재능(성장 배율)과 다음 등급까지는 일부러 보여 주지 않는다(숨은 값 — 키워 보며 느끼게).
             string grown = merc.GrowthSummary();
-            int toNext = GradeTable.PowerToNextGrade(merc.GradePower);
-            _growthText.supportRichText = true; // 재능 등급 색
-            _growthText.text = $"{merc.Age}세 ({MercenaryAge.BirthdayText(merc)}생) · 재능 {GradeTable.RichLabel(merc.Talent)} · {GrowthTuning.RateLabel(merc.Age)}(×{merc.GrowthRate:0.##})"
-                               + (toNext > 0 ? $" · 다음 등급까지 전투력 {toNext}" : "")
+            _growthText.text = $"{merc.Age}세 ({MercenaryAge.BirthdayText(merc)}생) · {GrowthTuning.RateLabel(merc.Age)}"
                                + (grown.Length > 0 ? $"\n성장 {grown}" : "\n아직 성장 없음");
 
             // 부상·질병으로 떨어진 능력치는 빨간색, 마우스를 올리면 얼마에서 떨어졌는지
