@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GN3.UI;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Tilemaps;
@@ -25,6 +26,9 @@ namespace GN3.World
 
         private readonly List<VillageDog> _dogs = new List<VillageDog>();
         private bool _hidden;
+        private bool _wasSkipping;
+        private VillageNavGrid _grid;
+        private System.Random _rng;
 
         public void Configure(Sprite[] frames, Material shadow, int count)
         {
@@ -42,8 +46,8 @@ namespace GN3.World
                 return;
             }
 
-            var grid = VillageNavGrid.Build(area, VillageNavGrid.CollectObstacles());
-            var rng = new System.Random();
+            var grid = _grid = VillageNavGrid.Build(area, VillageNavGrid.CollectObstacles());
+            var rng = _rng = new System.Random();
             for (int i = 0; i < dogCount; i++)
             {
                 var go = new GameObject($"강아지 {i + 1}");
@@ -58,13 +62,29 @@ namespace GN3.World
             foreach (var dog in _dogs) dog.gameObject.SetActive(!_hidden);
         }
 
+        private void OnEnable() => TimeAdvanceController.Midpoint += RespawnAll;
+        private void OnDisable() => TimeAdvanceController.Midpoint -= RespawnAll;
+
         private void Update()
         {
-            bool hidden = !IsDaytime();
+            // 하루·4일·일주일 건너뛰기 중에는 숨고, 끝나면 마을 아무 곳에 다시 나타난다(용병과 같은 규칙)
+            bool skipping = TimeAdvanceController.IsSkippingDays;
+            if (_wasSkipping && !skipping) RespawnAll();
+            _wasSkipping = skipping;
+
+            bool hidden = !IsDaytime() || skipping;
             if (hidden == _hidden) return;
             _hidden = hidden;
             foreach (var dog in _dogs)
                 if (dog != null) dog.gameObject.SetActive(!_hidden);
+        }
+
+        /// <summary>시간을 넘긴 뒤(몇 시간 진행의 가장 어두운 순간, 건너뛰기 끝): 강아지를 걸을 수 있는 무작위 자리에 둔다.</summary>
+        private void RespawnAll()
+        {
+            if (_grid == null) return;
+            foreach (var dog in _dogs)
+                if (dog != null) dog.PlaceAt(_grid.RandomWalkablePoint(_rng));
         }
 
         private static bool IsDaytime() => DayNightCycle.NightLightFactor <= HideNightLightFactor;
@@ -158,6 +178,14 @@ namespace GN3.World
                 shadow.heightScale = ShadowHeightScale;
             }
 
+            StartIdle();
+        }
+
+        /// <summary>이 자리로 옮겨 서 있게 한다(걷던 길은 버린다).</summary>
+        public void PlaceAt(Vector2 point)
+        {
+            transform.position = new Vector3(point.x, point.y, transform.position.z);
+            _renderer.flipX = _rng.NextDouble() < 0.5;
             StartIdle();
         }
 

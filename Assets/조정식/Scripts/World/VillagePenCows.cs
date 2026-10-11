@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GN3.UI;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -23,6 +24,8 @@ namespace GN3.World
 
         private readonly List<VillagePenCow> _cows = new List<VillagePenCow>();
         private bool _hidden;
+        private bool _wasSkipping;
+        private System.Random _rng;
 
         public void Configure(Sprite[] frames, Sprite idle, Material shadow, int count, Rect penArea, Rect[] avoidRects)
         {
@@ -38,14 +41,11 @@ namespace GN3.World
         {
             if (walkFrames == null || walkFrames.Length == 0 || area.width <= 0f || area.height <= 0f) return;
 
-            var rng = new System.Random();
+            var rng = _rng = new System.Random();
             var placed = new List<Vector2>();
             for (int i = 0; i < cowCount; i++)
             {
-                Vector2 start = RandomPoint(rng);
-                for (int attempt = 0; attempt < SpawnAttempts && placed.Exists(p => Vector2.Distance(p, start) < MinSpawnSpacing); attempt++)
-                    start = RandomPoint(rng);
-                placed.Add(start);
+                Vector2 start = SpacedPoint(rng, placed);
 
                 var go = new GameObject($"소 {i + 1}");
                 go.transform.SetParent(transform, false);
@@ -58,13 +58,44 @@ namespace GN3.World
             foreach (var cow in _cows) cow.gameObject.SetActive(!_hidden);
         }
 
+        private void OnEnable() => TimeAdvanceController.Midpoint += RespawnAll;
+        private void OnDisable() => TimeAdvanceController.Midpoint -= RespawnAll;
+
         private void Update()
         {
-            bool hidden = !IsDaytime();
+            // 하루·4일·일주일 건너뛰기 중에는 숨고, 끝나면 우리 안 아무 곳에 다시 나타난다(용병과 같은 규칙)
+            bool skipping = TimeAdvanceController.IsSkippingDays;
+            if (_wasSkipping && !skipping) RespawnAll();
+            _wasSkipping = skipping;
+
+            bool hidden = !IsDaytime() || skipping;
             if (hidden == _hidden) return;
             _hidden = hidden;
             foreach (var cow in _cows)
                 if (cow != null) cow.gameObject.SetActive(!_hidden);
+        }
+
+        /// <summary>시간을 넘긴 뒤(몇 시간 진행의 가장 어두운 순간, 건너뛰기 끝): 소를 우리 안 무작위 자리에 서로 떨어뜨려 둔다.</summary>
+        private void RespawnAll()
+        {
+            if (_rng == null) return;
+            var placed = new List<Vector2>();
+            foreach (var cow in _cows)
+            {
+                if (cow == null) continue;
+                Vector2 point = SpacedPoint(_rng, placed);
+                placed.Add(point);
+                cow.PlaceAt(point);
+            }
+        }
+
+        /// <summary>이미 둔 소들과 MinSpawnSpacing 이상 떨어진 무작위 지점(못 찾으면 마지막 후보).</summary>
+        private Vector2 SpacedPoint(System.Random rng, List<Vector2> placed)
+        {
+            Vector2 point = RandomPoint(rng);
+            for (int attempt = 0; attempt < SpawnAttempts && placed.Exists(p => Vector2.Distance(p, point) < MinSpawnSpacing); attempt++)
+                point = RandomPoint(rng);
+            return point;
         }
 
         private static bool IsDaytime() => DayNightCycle.NightLightFactor <= HideNightLightFactor;
@@ -139,6 +170,14 @@ namespace GN3.World
                 shadow.heightScale = ShadowHeightScale;
             }
 
+            StartIdle();
+        }
+
+        /// <summary>이 자리로 옮겨 서 있게 한다(가던 곳은 버린다).</summary>
+        public void PlaceAt(Vector2 point)
+        {
+            transform.position = new Vector3(point.x, point.y, transform.position.z);
+            _renderer.flipX = _rng.NextDouble() < 0.5;
             StartIdle();
         }
 
