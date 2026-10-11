@@ -18,10 +18,15 @@ namespace GN3.UI
     {
         private const float RefreshInterval = 0.5f;
         private const float PanelWidth = 400f;
-        private const float PanelHeight = 382f; // 아래 30px은 버튼 자리(관계 보기·개발 빌드 테스트)
+        private const float PanelHeight = 382f; // 최소 높이. 아래 30px은 버튼 자리(관계 보기·개발 빌드 테스트)
+        private const float BottomSpace = 58f; // 마지막 줄 아래 ~ 창 아래(버튼 자리 포함)
         private const int PortraitSize = 110;
 
         private GameObject _panel;
+        private RectTransform _panelRect;
+        private RectTransform _healthBarRect;
+        private float _infoX;
+        private float _infoWidth;
         private Transform _portraitSlot;
         private Text _nameText;
         private Text _classText;
@@ -80,7 +85,8 @@ namespace GN3.UI
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);
             var rect = _panel.GetComponent<RectTransform>();
-            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one; // 화면 오른쪽 위
+            _panelRect = rect;
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one; // 화면 오른쪽 위(글이 길면 아래로 늘어난다 — LayoutRows)
             rect.anchoredPosition = new Vector2(-16f, -16f);
             rect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
             _panel.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.13f, 0.92f);
@@ -96,14 +102,15 @@ namespace GN3.UI
             _portraitSlot = slot.transform;
 
             // 오른쪽 위: 이름·클래스·상태
-            float infoX = 14f + PortraitSize + 14f;
-            float infoWidth = PanelWidth - infoX - 44f;
+            float infoX = _infoX = 14f + PortraitSize + 14f;
+            float infoWidth = _infoWidth = PanelWidth - infoX - 44f;
             _nameText = CreateText("Name", 20, FontStyle.Bold, new Vector2(infoX, -14f), new Vector2(infoWidth, 26f));
             _classText = CreateText("Class", 15, FontStyle.Normal, new Vector2(infoX, -42f), new Vector2(infoWidth, 20f));
             _statusText = CreateText("Status", 14, FontStyle.Normal, new Vector2(infoX, -64f), new Vector2(infoWidth, 20f));
 
             // 체력 막대
             _healthFill = CreateBar("HealthBar", new Vector2(infoX, -92f), new Vector2(infoWidth + 30f, 12f));
+            _healthBarRect = (RectTransform)_healthFill.transform.parent;
             _healthText = CreateText("Health", 13, FontStyle.Normal, new Vector2(infoX, -106f), new Vector2(infoWidth + 30f, 18f));
 
             // 나이·생일 한 줄(예전 경험치 막대 자리)
@@ -419,6 +426,56 @@ namespace GN3.UI
             // 건강(고용된 용병만): 앓는 것 이름·진행도 한 줄, 마우스를 올리면 떨어진 능력치
             _healthStatusText.gameObject.SetActive(hired);
             if (hired) SetTipLine(_healthStatusText, _healthStatusTip, HealthLine(merc), HealthTip(merc, ailmentTip));
+
+            LayoutRows();
+        }
+
+        /// <summary>
+        /// 글이 창 폭을 넘으면 줄을 바꾸고, 줄 높이만큼 아래 줄들을 내려 쌓은 뒤 창 높이를 늘린다(최소 PanelHeight).
+        /// 짧은 글이 한 줄일 때의 자리는 예전과 같다.
+        /// </summary>
+        private void LayoutRows()
+        {
+            // 오른쪽 위 칸(초상 옆): 이름·클래스·상태·체력 막대·체력·나이
+            float rightWidth = _infoWidth + 30f; // 체력 막대와 같은 폭(오른쪽 여백 14)
+            float y = -14f;
+            y = Place(_nameText, _infoX, y, _infoWidth, 26f, false) - 2f; // 이름 줄 오른쪽은 X 버튼
+            y = Place(_classText, _infoX, y, _infoWidth, 20f, false) - 2f;
+            y = Place(_statusText, _infoX, y, rightWidth, 20f, true) - 8f;
+            _healthBarRect.anchoredPosition = new Vector2(_infoX, y);
+            y -= _healthBarRect.sizeDelta.y + 2f;
+            y = Place(_healthText, _infoX, y, rightWidth, 18f, false) - 4f;
+            y = Place(_growthText, _infoX, y, rightWidth, 18f, false) - 4f;
+
+            // 아래 칸(전체 폭): 초상 아래부터
+            y = Mathf.Min(y, -14f - PortraitSize - 26f);
+            float bottomWidth = PanelWidth - 28f;
+            y = Place(_statsText, 14f, y, bottomWidth, 38f, true) - 2f;
+            foreach (var row in new[] { _weaponText, _personalityText, _passiveText, _friendsText, _healthStatusText })
+            {
+                if (!row.gameObject.activeSelf) continue;
+                y = Place(row, 14f, y, bottomWidth, 22f, true) - 6f;
+            }
+            _panelRect.sizeDelta = new Vector2(PanelWidth, Mathf.Max(PanelHeight, -(y + 6f) + BottomSpace));
+        }
+
+        /// <summary>
+        /// 줄 하나를 (x, top)에 둔다. 최대 폭을 넘으면 줄을 바꾸고 높이를 늘린다. 이 줄 아래 끝 y를 돌려준다.
+        /// tight: 툴팁 줄은 마우스 판정이 글자 위에서만 되도록 짧으면 칸 폭을 글자 폭에 맞춘다.
+        /// </summary>
+        private static float Place(Text text, float x, float top, float maxWidth, float minHeight, bool tight)
+        {
+            var rect = text.rectTransform;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            float width = text.preferredWidth;
+            bool wraps = width > maxWidth;
+            if (wraps) text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            rect.anchoredPosition = new Vector2(x, top);
+            rect.sizeDelta = new Vector2(wraps || !tight ? maxWidth : width + 4f, minHeight);
+            float height = Mathf.Max(minHeight, text.preferredHeight); // 폭을 정한 뒤에 재야 줄바꿈 높이가 나온다
+            rect.sizeDelta = new Vector2(rect.sizeDelta.x, height);
+            return top - height;
         }
 
         /// <summary>"건강: 양호" 또는 "건강: 골절 45% · 감기 10% (입원 중)". 이름은 에셋의 표시 색, 중하면 빨강.</summary>
@@ -449,12 +506,10 @@ namespace GN3.UI
             return text.gameObject.AddComponent<TooltipTrigger>();
         }
 
-        /// <summary>이름만 쓰고, 설명은 툴팁으로. 마우스 판정이 글자 위에서만 되도록 칸 폭을 글자 폭에 맞춘다.</summary>
+        /// <summary>이름만 쓰고, 설명은 툴팁으로. 칸 폭·줄바꿈은 LayoutRows(Place)가 맞춘다.</summary>
         private static void SetTipLine(Text text, TooltipTrigger tip, string label, string tooltip)
         {
             text.text = label;
-            var rect = text.rectTransform;
-            rect.sizeDelta = new Vector2(text.preferredWidth + 4f, rect.sizeDelta.y);
             tip.Text = tooltip;
             tip.enabled = !string.IsNullOrEmpty(tooltip);
             text.raycastTarget = tip.enabled;
