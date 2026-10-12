@@ -32,8 +32,29 @@ namespace GN3.UI
         {
             if (string.IsNullOrEmpty(message)) return;
             if (mail) Mailbox.Post(MailKind.Notice, message);
+            // 날짜 건너뛰기 중엔 띄우지 않고 세기만 한다(끝나면 FlushHeld가 한 줄로). 우편함·하루 보고서엔 그대로 남는다.
+            if (TimeAdvanceController.IsSkippingDays)
+            {
+                _heldCount++;
+                return;
+            }
             if (_instance == null) _instance = Create();
             _instance.Add(message);
+        }
+
+        private static int _heldCount;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlaySession() => _heldCount = 0;
+
+        /// <summary>날짜 건너뛰기가 끝날 때: 그동안 모아 둔 알림 수를 한 줄로 띄운다("일주일 동안 알림 12건 · 우편함에서 확인").</summary>
+        public static void FlushHeld(string period)
+        {
+            int count = _heldCount;
+            _heldCount = 0;
+            if (count <= 0) return;
+            if (_instance == null) _instance = Create();
+            _instance.Add($"{period} 동안 알림 {count}건 · 우편함에서 확인");
         }
 
         private static ToastLog Create()

@@ -62,7 +62,8 @@ namespace GN3.UI
         public static bool IsAdvancing { get; private set; }
         /// <summary>하루·4일·일주일 건너뛰기 중인지(그 사이 마을 캐릭터를 숨기고, 끝나면 무작위 자리에 둔다 — VillagePartyPresenter).</summary>
         public static bool IsSkippingDays { get; private set; }
-        private Mailbox.Mail _stopMail; // 진행·건너뛰기 중 처음 생긴 중요 편지(도착·전멸·사망·주급 미지급…). 생기면 거기서 멈춘다
+        private string _skipPeriod = "하루"; // 건너뛰기 기간 글자("하루"/"4일"/"일주일") — 모아 둔 알림 한 줄에 쓴다
+        private Mailbox.Mail _stopMail;// 진행·건너뛰기 중 처음 생긴 중요 편지(도착·전멸·사망·주급 미지급…). 생기면 거기서 멈춘다
 
         /// <summary>진행 버튼·스페이스바가 한 번에 넘길 시간(시). 슬라이더로 1~24시간.</summary>
         public int AdvanceHours => _advanceHours;
@@ -207,7 +208,8 @@ namespace GN3.UI
             EnsureOverlay();
             if (_bannerFade != null) StopCoroutine(_bannerFade);
             _bannerFade = null;
-            _bannerTitle.text = days == 1 ? "하루 후…" : days == 7 ? "일주일 후…" : $"{days}일 후…";
+            _skipPeriod = days == 1 ? "하루" : days == 7 ? "일주일" : $"{days}일";
+            _bannerTitle.text = $"{_skipPeriod} 후…";
             _bannerSub.text = $"{GameCalendar.Format(startDay)} {DayNightCycle.FormatTime(hour)}  →  {GameCalendar.Format(startDay + days)} {DayNightCycle.FormatTime(hour)}";
             _banner.alpha = 1f;
 
@@ -280,6 +282,7 @@ namespace GN3.UI
             _bannerFade = StartCoroutine(FadeBanner());
             SetLocked(false);
             _isAdvancing = IsAdvancing = false;
+            if (IsSkippingDays) ToastLog.FlushHeld(_skipPeriod); // 넘기는 동안 모아 둔 알림을 한 줄로(자동 저장 알림보다 먼저)
             IsSkippingDays = false;
 
             // 자정을 넘겼으면 넘긴 날들(파견 진행·있었던 일)을 보고서 한 통으로 우편함에 넣고 자동 저장한다.

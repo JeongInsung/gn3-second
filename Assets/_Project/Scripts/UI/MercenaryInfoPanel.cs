@@ -50,6 +50,7 @@ namespace GN3.UI
         private GameObject _relationsButton;
 
         private Mercenary _shown;
+        private bool _shownWasHired; // 열 때 파티원이었는지(그 뒤 이탈·사망하면 창을 닫는다)
         private GameObject _debugButton;
         private float _refreshTimer;
 
@@ -295,6 +296,7 @@ namespace GN3.UI
                 portraitRect.sizeDelta = new Vector2(PortraitSize, PortraitSize); // 레이아웃 그룹 밖이라 크기를 직접 준다
             }
             _shown = mercenary;
+            _shownWasHired = PlayerParty.Instance.Members.Contains(mercenary);
             _panel.SetActive(true);
             Refresh();
         }
@@ -318,6 +320,14 @@ namespace GN3.UI
         {
             _refreshTimer = RefreshInterval;
             var merc = _shown;
+            bool hired = PlayerParty.Instance.Members.Contains(merc);
+            if (_shownWasHired && !hired)
+            {
+                // 보던 파티원이 이탈·사망으로 떠났다 — "고용 전 · 고용비"로 잘못 보이지 않게 닫는다
+                Hide();
+                return;
+            }
+            if (hired) _shownWasHired = true; // 시장에서 보다가 고용한 경우
             var stats = merc.CurrentStats;
 
             _nameText.supportRichText = true; // 등급 글자 색
@@ -325,7 +335,6 @@ namespace GN3.UI
             _classText.text = $"{merc.Class.ClassName}  {merc.Age}세";
 
             bool wounded = merc.CurrentHealth < stats.MaxHealth;
-            bool hired = PlayerParty.Instance.Members.Contains(merc);
             if (_debugButton != null) _debugButton.SetActive(hired); // 고용 전 용병은 테스트로 다치게 하지 않는다
             if (!hired)
                 _statusText.text = $"상태: 고용 전 · 고용비 {Pricing.HireCost(merc)}G";
