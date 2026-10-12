@@ -82,7 +82,7 @@ namespace GN3.Quests
             int before = quest.RemainingDays;
             quest.Shorten(QuestDifficulty.DaysSaved(QuestDifficulty.Rate(QuestDifficulty.TeamPower(members), quest)));
             if (quest.RemainingDays < before)
-                OnTravelEvent?.Invoke($"[{quest.Title}] 전투력이 넉넉해 빠르게 진군한다 (소요 {before}일 → {quest.RemainingDays}일)");
+                OnTravelEvent?.Invoke($"{quest.Title} — 전투력이 넉넉해 빠르게 진군한다 (소요 {before}일 → {quest.RemainingDays}일)");
 
             OnChanged?.Invoke();
             return expedition;
@@ -131,7 +131,7 @@ namespace GN3.Quests
         {
             if (!_active.Contains(expedition)) return;
             expedition.BeginReturn();
-            OnTravelEvent?.Invoke($"[{expedition.Quest.Title}] 귀환길에 오른다 (소요 {expedition.ReturnDaysLeft}일)");
+            OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 귀환길에 오른다 (소요 {expedition.ReturnDaysLeft}일)");
             OnChanged?.Invoke();
         }
 
@@ -142,14 +142,14 @@ namespace GN3.Quests
 
             expedition.Rest();
             string which = expedition.IsReturning ? "귀환" : "남은 일수";
-            OnTravelEvent?.Invoke($"[{expedition.Quest.Title}] 휴식을 취해 체력을 회복했다. ({which} +1일)");
+            OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 휴식을 취해 체력을 회복했다. ({which} +1일)");
             OnChanged?.Invoke();
         }
 
         private void FinishReturn(Expedition expedition)
         {
             string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
-            OnTravelEvent?.Invoke($"[{expedition.Quest.Title}] 마을로 돌아왔다 (귀환: {survivors})");
+            OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 마을로 돌아왔다 (귀환: {survivors})");
             Complete(expedition);
         }
 
@@ -216,7 +216,7 @@ namespace GN3.Quests
             bool hasGuide = aliveMembers.Any(m => m.Class.Kind == MercenaryClassKind.Guide);
             if (hasGuide && _eventRng.NextDouble() < GuideAvoidChance)
             {
-                OnTravelEvent?.Invoke($"[{expedition.Quest.Title}] 길잡이 덕분에 습격을 피했다.");
+                OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 길잡이 덕분에 습격을 피했다.");
                 return false;
             }
 
@@ -233,7 +233,7 @@ namespace GN3.Quests
 
             string raiderNames = string.Join("·", enemies.Select(e => e.Name).Distinct());
             var sb = new StringBuilder();
-            sb.Append($"[{expedition.Quest.Title}] {(expedition.IsReturning ? "귀환" : "이동")} 중 {raiderNames}의 습격!");
+            sb.Append($"{expedition.Quest.Title} — {(expedition.IsReturning ? "귀환" : "이동")} 중 {raiderNames}의 습격!");
 
             for (int i = 0; i < aliveMembers.Count; i++)
             {

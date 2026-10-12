@@ -63,12 +63,12 @@ namespace GN3.Quests
                 int reward = Pricing.QuestReward(quest);
                 Wallet.Add(reward);
                 int rep = Guild.VictoryReputation(questGrade);
-                summary = $"[{quest.Title}] 임무 완료! 보상 +{reward}G · 명성 +{rep}";
+                summary = $"{quest.Title} — 임무 완료! 보상 +{reward}G · 명성 +{rep}";
                 Guild.Add(rep);
             }
             else
             {
-                summary = $"[{quest.Title}] 임무 실패... 명성 -{Guild.FailPenalty}";
+                summary = $"{quest.Title} — 임무 실패... 명성 -{Guild.FailPenalty}";
                 Guild.Add(-Guild.FailPenalty);
             }
 
@@ -95,7 +95,7 @@ namespace GN3.Quests
             string body = summary.Replace(" · ", "\n");
             if (levelUps.Count > 0) body += "\n\n" + string.Join("\n", levelUps);
             var mail = Mailbox.Post(MailKind.QuestResult,
-                battle.Victory ? $"[{quest.Title}] 임무 완료!" : $"[{quest.Title}] 임무 실패...", body, important: true);
+                battle.Victory ? $"{quest.Title} — 임무 완료!" : $"{quest.Title} — 임무 실패...", body, important: true);
             if (alertShown) Mailbox.Acknowledge(mail);
             Mailbox.ResolveArrival(expedition);
 

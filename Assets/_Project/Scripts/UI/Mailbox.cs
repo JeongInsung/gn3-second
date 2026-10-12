@@ -28,7 +28,7 @@ namespace GN3.UI
             public int Day;
             public float Hour;
             public string Title;
-            /// <summary>목록에 보이는 짧은 제목("용병 고용", "임무 완료!"). 누르면 Title·Body 전체가 펼쳐진다.</summary>
+            /// <summary>목록에 보이는 짧은 제목("용병 고용", "눈보라 도적단 3마리 처치 — 임무 완료!"). 누르면 Title·Body 전체가 펼쳐진다.</summary>
             public string ShortTitle;
             public string Body;
             public bool Read;
@@ -106,7 +106,7 @@ namespace GN3.UI
                           $"파견대: {string.Join(", ", members.Select(m => m.Name))}\n" +
                           $"{QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(members))}\n\n" +
                           "전투를 어떻게 진행할까요?";
-            var mail = Post(MailKind.Arrival, $"[{quest.Title}] 목적지 도착", body, important: true);
+            var mail = Post(MailKind.Arrival, $"{quest.Title} — 목적지 도착", body, important: true);
             mail.Expedition = expedition;
         }
 
@@ -226,7 +226,7 @@ namespace GN3.UI
         private const int ShortTitleFallbackLength = 14;
 
         /// <summary>
-        /// 목록용 짧은 제목. 퀘스트 결과·도착은 앞의 "[퀘스트명] "을 떼고, 일반 알림은 낱말 표(NoticeTitles)로,
+        /// 목록용 짧은 제목. 퀘스트 결과·도착("[북쪽] 퀘스트명 — 임무 완료!")은 앞의 지역 태그 "[북쪽] "만 떼고, 일반 알림은 낱말 표(NoticeTitles)로,
         /// 맞는 게 없으면 앞 14자 + "…". 보고·중요 소식은 이미 짧아 그대로.
         /// </summary>
         public static string ShortTitleFor(MailKind kind, string title)

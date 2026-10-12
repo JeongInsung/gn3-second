@@ -214,6 +214,8 @@ namespace GN3.World
             // 진행·건너뛰기가 막 끝났으면 남은 옛 인형을 한 번 더 정리한다(가운데 Midpoint 뒤에 생긴 것까지)
             bool advancing = TimeAdvanceController.IsAdvancing;
             if (_wasAdvancing && !advancing) SweepStrays();
+            // 넘기기가 막 시작됐으면 성문·건물로 걸어가던 인형은 지운다(몇 시간 뒤면 이미 나갔거나 들어갔다)
+            if (!_wasAdvancing && advancing) DropAllLeaving();
             _wasAdvancing = advancing;
             // 하루·4일·일주일 건너뛰기: 그동안은 캐릭터를 숨기고, 끝나면 마을 아무 곳에 무작위로 둔다(문·성문에서 나오기 없음)
             bool skippingDays = TimeAdvanceController.IsSkippingDays;
@@ -567,7 +569,7 @@ namespace GN3.World
             foreach (var wanderer in party)
             {
                 if (wanderer == null) continue;
-                if (_hidden)
+                if (_hidden || TimeAdvanceController.IsAdvancing) // 자는 시간이거나 넘기는 중: 걷지 않고 바로
                 {
                     Destroy(wanderer.gameObject);
                     continue;
@@ -698,9 +700,7 @@ namespace GN3.World
         /// <summary>날짜 건너뛰기 중: 모든 캐릭터를 숨기고 걸어 들어가던 인형은 지운다.</summary>
         private void HideAllForSkip()
         {
-            foreach (var w in _leaving.ToList())
-                if (w != null) Destroy(w.gameObject);
-            _leaving.Clear();
+            DropAllLeaving();
             foreach (var w in _wanderers.Values)
                 if (w != null && w.gameObject.activeSelf) w.gameObject.SetActive(false);
         }
@@ -724,6 +724,14 @@ namespace GN3.World
             _hospitalIds.Clear();
             _restingIn.Clear();
             _awayIds.Clear();
+        }
+
+        /// <summary>걸어 나가는·들어가는 중인 인형(_leaving)을 모두 지운다.</summary>
+        private void DropAllLeaving()
+        {
+            foreach (var w in _leaving.ToList())
+                if (w != null) Destroy(w.gameObject);
+            _leaving.Clear();
         }
 
         /// <summary>이 용병의 들어가는·나가는 중인 옛 인형을 지운다.</summary>
