@@ -16,6 +16,7 @@ namespace GN3.Mercenaries
                 case MercenaryClassKind.Archer: return new PiercingShotSkill();
                 case MercenaryClassKind.Healer: return new HealSkill();
                 case MercenaryClassKind.Assassin: return new FinishingBlowSkill();
+                case MercenaryClassKind.Mage: return new FireballSkill();
                 default: return null;
             }
         }

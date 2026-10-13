@@ -21,6 +21,7 @@ namespace GN3.World
         private ParticleSystem _rain;
         private ParticleSystem _snow;
         private SpriteRenderer _veil;
+        private bool _clearedForSkip; // 이번 건너뛰기에서 입자를 이미 지웠는지
 
         private const int VeilSortingOrder = 98;   // 비·눈(97) 위, UI 아래 — 빗줄기도 같이 가라앉는다
         private const float VeilMaxAlpha = 0.12f; // 0.3은 비·흐림에서 화면이 너무 뿌옇게 떠 보였다
@@ -76,9 +77,18 @@ namespace GN3.World
         {
             Weather.Tick(Time.unscaledDeltaTime);
 
+            // 날짜 건너뛰기 중엔 날마다 비·눈이 켜졌다 꺼지며 깜빡이지 않게 멈추고 내리던 것도 지운다(끝나면 그날 날씨로 다시 내린다).
+            bool skipping = GN3.UI.TimeAdvanceController.IsSkippingDays;
+            if (skipping && !_clearedForSkip)
+            {
+                _rain.Clear();
+                _snow.Clear();
+            }
+            _clearedForSkip = skipping;
+
             var kind = Weather.Today.Kind;
             float areaScale = ViewArea() / _referenceArea;
-            float rate = Rate(kind) * areaScale;
+            float rate = skipping ? 0f : Rate(kind) * areaScale;
             Fit(_rain, RainSpeed, Weather.IsRain(kind) ? rate : 0f);
             Fit(_snow, SnowSpeed, Weather.IsSnow(kind) ? rate : 0f);
             UpdateVeil();

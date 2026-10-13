@@ -27,7 +27,7 @@ namespace GN3.UI
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             var prompt = go.GetComponent<ContinuePrompt>();
             prompt.Build();
-            EscapeCloser.Register(go, () => false); // 반드시 고른다: ESC는 먹기만 해 뒤 창이 닫히지 않게
+            EscapeCloser.Register(go, () => false, WindowRole.Popup); // 반드시 고른다: ESC는 먹기만 해 뒤 창이 닫히지 않게
             return prompt;
         }
 

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using GN3.Economy;
 using GN3.Mercenaries;
@@ -17,18 +18,22 @@ namespace GN3.UI
     {
         private const float RefreshInterval = 0.5f;
         private const float PanelWidth = 400f;
-        private const float PanelHeight = 382f; // 아래 30px은 버튼 자리(관계 보기·개발 빌드 테스트)
+        private const float PanelHeight = 382f; // 최소 높이. 아래 30px은 버튼 자리(관계 보기·개발 빌드 테스트)
+        private const float BottomSpace = 58f; // 마지막 줄 아래 ~ 창 아래(버튼 자리 포함)
         private const int PortraitSize = 110;
 
         private GameObject _panel;
+        private RectTransform _panelRect;
+        private RectTransform _healthBarRect;
+        private float _infoX;
+        private float _infoWidth;
         private Transform _portraitSlot;
         private Text _nameText;
         private Text _classText;
         private Text _statusText;
         private Image _healthFill;
         private Text _healthText;
-        private Image _xpFill;
-        private Text _xpText;
+        private Text _growthText; // "23세 (5월 12일생) · 성장 빠름 · 성장 공격 +6 · 체력 +12"
         private Text _statsText;
         private Text _weaponText;
         private Text _personalityText;
@@ -45,6 +50,7 @@ namespace GN3.UI
         private GameObject _relationsButton;
 
         private Mercenary _shown;
+        private bool _shownWasHired; // 열 때 파티원이었는지(그 뒤 이탈·사망하면 창을 닫는다)
         private GameObject _debugButton;
         private float _refreshTimer;
 
@@ -80,7 +86,8 @@ namespace GN3.UI
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);
             var rect = _panel.GetComponent<RectTransform>();
-            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one; // 화면 오른쪽 위
+            _panelRect = rect;
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one; // 화면 오른쪽 위(글이 길면 아래로 늘어난다 — LayoutRows)
             rect.anchoredPosition = new Vector2(-16f, -16f);
             rect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
             _panel.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.13f, 0.92f);
@@ -96,24 +103,24 @@ namespace GN3.UI
             _portraitSlot = slot.transform;
 
             // 오른쪽 위: 이름·클래스·상태
-            float infoX = 14f + PortraitSize + 14f;
-            float infoWidth = PanelWidth - infoX - 44f;
+            float infoX = _infoX = 14f + PortraitSize + 14f;
+            float infoWidth = _infoWidth = PanelWidth - infoX - 44f;
             _nameText = CreateText("Name", 20, FontStyle.Bold, new Vector2(infoX, -14f), new Vector2(infoWidth, 26f));
             _classText = CreateText("Class", 15, FontStyle.Normal, new Vector2(infoX, -42f), new Vector2(infoWidth, 20f));
             _statusText = CreateText("Status", 14, FontStyle.Normal, new Vector2(infoX, -64f), new Vector2(infoWidth, 20f));
 
             // 체력 막대
             _healthFill = CreateBar("HealthBar", new Vector2(infoX, -92f), new Vector2(infoWidth + 30f, 12f));
+            _healthBarRect = (RectTransform)_healthFill.transform.parent;
             _healthText = CreateText("Health", 13, FontStyle.Normal, new Vector2(infoX, -106f), new Vector2(infoWidth + 30f, 18f));
 
-            // 경험치 막대(파랑)
-            _xpFill = CreateBar("XpBar", new Vector2(infoX, -128f), new Vector2(infoWidth + 30f, 8f));
-            _xpFill.color = new Color(0.35f, 0.6f, 0.95f);
-            _xpText = CreateText("Xp", 13, FontStyle.Normal, new Vector2(infoX, -138f), new Vector2(infoWidth + 30f, 18f));
+            // 나이·생일 한 줄(예전 경험치 막대 자리)
+            _growthText = CreateText("Growth", 13, FontStyle.Normal, new Vector2(infoX, -128f), new Vector2(infoWidth + 30f, 18f));
 
             // 아래: 능력치·성격·패시브 (전체 폭)
             float bottomWidth = PanelWidth - 28f;
-            _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -162f), new Vector2(bottomWidth, 22f));
+            // 능력치 두 줄: 공격·방어·속도 / 전투력 — 괄호(이번 달 변화)가 붙어도 잘리지 않게
+            _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -150f), new Vector2(bottomWidth, 38f));
             // 무기·성격·패시브는 이름만 쓰고, 마우스를 올리면 설명이 툴팁으로 뜬다.
             _weaponText = CreateText("Weapon", 15, FontStyle.Normal, new Vector2(14f, -190f), new Vector2(bottomWidth, 22f));
             _personalityText = CreateText("Personality", 15, FontStyle.Normal, new Vector2(14f, -218f), new Vector2(bottomWidth, 22f));
@@ -135,7 +142,7 @@ namespace GN3.UI
             CreateDebugDamageButton();
 #endif
             _panel.SetActive(false);
-            EscapeCloser.Register(_panel, Hide);
+            EscapeCloser.Register(_panel, Hide, WindowRole.Linked); // 목록 줄을 눌러 여는 창: 부모 창을 닫지 않는다
         }
 
         /// <summary>어두운 바탕 + 가로로 채워지는 막대. 채움 Image를 돌려준다.</summary>
@@ -289,6 +296,7 @@ namespace GN3.UI
                 portraitRect.sizeDelta = new Vector2(PortraitSize, PortraitSize); // 레이아웃 그룹 밖이라 크기를 직접 준다
             }
             _shown = mercenary;
+            _shownWasHired = PlayerParty.Instance.Members.Contains(mercenary);
             _panel.SetActive(true);
             Refresh();
         }
@@ -312,14 +320,21 @@ namespace GN3.UI
         {
             _refreshTimer = RefreshInterval;
             var merc = _shown;
+            bool hired = PlayerParty.Instance.Members.Contains(merc);
+            if (_shownWasHired && !hired)
+            {
+                // 보던 파티원이 이탈·사망으로 떠났다 — "고용 전 · 고용비"로 잘못 보이지 않게 닫는다
+                Hide();
+                return;
+            }
+            if (hired) _shownWasHired = true; // 시장에서 보다가 고용한 경우
             var stats = merc.CurrentStats;
 
             _nameText.supportRichText = true; // 등급 글자 색
             _nameText.text = $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}";
-            _classText.text = $"{merc.Class.ClassName}  Lv.{merc.Level}";
+            _classText.text = $"{merc.Class.ClassName}  {merc.Age}세";
 
             bool wounded = merc.CurrentHealth < stats.MaxHealth;
-            bool hired = PlayerParty.Instance.Members.Contains(merc);
             if (_debugButton != null) _debugButton.SetActive(hired); // 고용 전 용병은 테스트로 다치게 하지 않는다
             if (!hired)
                 _statusText.text = $"상태: 고용 전 · 고용비 {Pricing.HireCost(merc)}G";
@@ -327,6 +342,8 @@ namespace GN3.UI
                 _statusText.text = $"상태: 파견 중 ({ExpeditionLog.Instance.FindQuest(merc)?.Title})";
             else if (TrainingHall.IsTraining(merc))
                 _statusText.text = $"상태: 훈련소에서 훈련 중 (남은 약 {TrainingHall.RemainingHours(merc):0.#}시간)";
+            else if (RestVenues.Find(merc) is RestVenue venue)
+                _statusText.text = $"상태: {venue.Name}에서 쉬는 중 (남은 약 {venue.RemainingHours(merc):0.#}시간)";
             else if (Hospital.IsAdmitted(merc))
                 _statusText.text = $"상태: 병원에서 치료 중 (남은 약 {Hospital.RemainingHours(merc):0.#}시간)";
             else if (merc.HasAilment)
@@ -350,24 +367,43 @@ namespace GN3.UI
                 if (condition < 1f) _healthText.text += $" (공·방 -{Mathf.RoundToInt((1f - condition) * 100f)}%)";
             }
 
-            if (merc.Level >= Mercenary.MaxLevel)
-            {
-                _xpFill.fillAmount = 1f;
-                _xpText.text = "경험치 최대 레벨";
-            }
-            else
-            {
-                _xpFill.fillAmount = (float)merc.Experience / merc.XpToNext;
-                _xpText.text = $"경험치 {merc.Experience} / {merc.XpToNext}";
-            }
+            // 나이 칸: 나이와 생일만(성장 속도·재능은 숨은 값)
+            _growthText.text = $"{merc.Age}세 · {MercenaryAge.BirthdayText(merc)}생";
 
-            // 부상·질병으로 떨어진 능력치는 빨간색, 마우스를 올리면 얼마에서 떨어졌는지
-            var healthy = merc.StatsWithoutAilments;
-            string Stat(string label, int value, int normal) => value < normal ? $"{label} <color=#e06050>{value}</color>" : $"{label} {value}";
+            // 능력치: "공격 23 (+3 −2)" — 23 = 지금 영구 수치(성장·쇠퇴·무기·수련이 바로 반영),
+            // +3/−1 = 이번 달 오른·내린 양(참고용, 왼쪽에 이미 들어 있음, 매달 1일 Mercenary.SnapshotMonth로 0부터),
+            // −2 = 부상·질병·피로·사기로 잠깐 깎인 양(빨강, 나으면 돌아옴).
+            var permanent = merc.PermanentStats;
+            int permanentPower = GradeTable.CombatPower(permanent);
+            string Stat(string label, int monthBase, int perm, int now)
+            {
+                int grew = perm - monthBase, temp = now - perm;
+                var parts = new List<string>();
+                if (grew != 0) parts.Add(grew > 0 ? $"<color=#7fd36a>+{grew}</color>" : $"<color=#e06050>−{-grew}</color>");
+                if (temp != 0) parts.Add(temp > 0 ? $"<color=#7fd36a>+{temp}</color>" : $"<color=#e06050>−{-temp}</color>");
+                return parts.Count > 0 ? $"{label} {perm} ({string.Join(" ", parts)})" : $"{label} {perm}";
+            }
             _statsText.supportRichText = true;
+            int grewSum = permanentPower - merc.MonthBasePower, tempSum = merc.CombatPower - permanentPower;
+            string monthTip = "괄호: 이번 달 변화(왼쪽 수치에 이미 반영)" + (grewSum != 0 ? $" · 성장·무기 등 전투력 {grewSum:+0;−0}" : "")
+                              + (tempSum != 0 ? $" · 부상·피로 등으로 잠깐 전투력 {tempSum:+0;−0}(나으면 돌아옴)" : "")
+                              + "\n매달 1일에 괄호가 0부터 다시 셉니다.";
+            // 연구소(마법사)·성당(힐러) 수련 보너스는 수치에 이미 들어 있다 — 마우스를 올리면 단계와 다음 단계까지 남은 시간
+            string bonusText = merc.ResearchBonusText();
+            bool studies = merc.Class.Kind == MercenaryClassKind.Mage || merc.Class.Kind == MercenaryClassKind.Healer;
+            string place = merc.Class.Kind == MercenaryClassKind.Healer ? "성당" : "마법 연구소";
+            string researchTip = !studies ? null
+                : (merc.CanResearchMore
+                    ? $"{place} {merc.ResearchLabel} {merc.ResearchLevel}/{Mercenary.MaxResearchLevel}단계 · 다음 단계까지 {Mercenary.ResearchHoursPerBonus - merc.ResearchHours:0.#}시간"
+                    : $"{place} {merc.ResearchLabel} {merc.ResearchLevel}/{Mercenary.MaxResearchLevel}단계 (최대)")
+                  + (bonusText.Length > 0 ? $" · {bonusText}" : "");
+            string statsTip = monthTip;
+            if (!string.IsNullOrEmpty(ailmentTip)) statsTip += "\n" + ailmentTip;
+            if (researchTip != null) statsTip += "\n" + researchTip;
             SetTipLine(_statsText, _statsTip,
-                $"{Stat("공격", stats.Attack, healthy.Attack)}  ·  {Stat("방어", stats.Defense, healthy.Defense)}  ·  {Stat("속도", stats.MoveSpeed, healthy.MoveSpeed)}  ·  전투력 {merc.CombatPower}",
-                ailmentTip);
+                $"{Stat("공격", merc.MonthBaseAttack, permanent.Attack, stats.Attack)}  ·  {Stat("방어", merc.MonthBaseDefense, permanent.Defense, stats.Defense)}  ·  "
+                + $"{Stat("속도", merc.MonthBaseSpeed, permanent.MoveSpeed, stats.MoveSpeed)}\n{Stat("전투력", merc.MonthBasePower, permanentPower, merc.CombatPower)}",
+                statsTip);
             if (merc.Weapon != null)
                 SetTipLine(_weaponText, _weaponTip, $"무기: {merc.Weapon.Name}", merc.Weapon.DescribeFor(merc.Class.Kind));
             else
@@ -399,6 +435,56 @@ namespace GN3.UI
             // 건강(고용된 용병만): 앓는 것 이름·진행도 한 줄, 마우스를 올리면 떨어진 능력치
             _healthStatusText.gameObject.SetActive(hired);
             if (hired) SetTipLine(_healthStatusText, _healthStatusTip, HealthLine(merc), HealthTip(merc, ailmentTip));
+
+            LayoutRows();
+        }
+
+        /// <summary>
+        /// 글이 창 폭을 넘으면 줄을 바꾸고, 줄 높이만큼 아래 줄들을 내려 쌓은 뒤 창 높이를 늘린다(최소 PanelHeight).
+        /// 짧은 글이 한 줄일 때의 자리는 예전과 같다.
+        /// </summary>
+        private void LayoutRows()
+        {
+            // 오른쪽 위 칸(초상 옆): 이름·클래스·상태·체력 막대·체력·나이
+            float rightWidth = _infoWidth + 30f; // 체력 막대와 같은 폭(오른쪽 여백 14)
+            float y = -14f;
+            y = Place(_nameText, _infoX, y, _infoWidth, 26f, false) - 2f; // 이름 줄 오른쪽은 X 버튼
+            y = Place(_classText, _infoX, y, _infoWidth, 20f, false) - 2f;
+            y = Place(_statusText, _infoX, y, rightWidth, 20f, true) - 8f;
+            _healthBarRect.anchoredPosition = new Vector2(_infoX, y);
+            y -= _healthBarRect.sizeDelta.y + 2f;
+            y = Place(_healthText, _infoX, y, rightWidth, 18f, false) - 4f;
+            y = Place(_growthText, _infoX, y, rightWidth, 18f, false) - 4f;
+
+            // 아래 칸(전체 폭): 초상 아래부터
+            y = Mathf.Min(y, -14f - PortraitSize - 26f);
+            float bottomWidth = PanelWidth - 28f;
+            y = Place(_statsText, 14f, y, bottomWidth, 38f, true) - 2f;
+            foreach (var row in new[] { _weaponText, _personalityText, _passiveText, _friendsText, _healthStatusText })
+            {
+                if (!row.gameObject.activeSelf) continue;
+                y = Place(row, 14f, y, bottomWidth, 22f, true) - 6f;
+            }
+            _panelRect.sizeDelta = new Vector2(PanelWidth, Mathf.Max(PanelHeight, -(y + 6f) + BottomSpace));
+        }
+
+        /// <summary>
+        /// 줄 하나를 (x, top)에 둔다. 최대 폭을 넘으면 줄을 바꾸고 높이를 늘린다. 이 줄 아래 끝 y를 돌려준다.
+        /// tight: 툴팁 줄은 마우스 판정이 글자 위에서만 되도록 짧으면 칸 폭을 글자 폭에 맞춘다.
+        /// </summary>
+        private static float Place(Text text, float x, float top, float maxWidth, float minHeight, bool tight)
+        {
+            var rect = text.rectTransform;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            float width = text.preferredWidth;
+            bool wraps = width > maxWidth;
+            if (wraps) text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            rect.anchoredPosition = new Vector2(x, top);
+            rect.sizeDelta = new Vector2(wraps || !tight ? maxWidth : width + 4f, minHeight);
+            float height = Mathf.Max(minHeight, text.preferredHeight); // 폭을 정한 뒤에 재야 줄바꿈 높이가 나온다
+            rect.sizeDelta = new Vector2(rect.sizeDelta.x, height);
+            return top - height;
         }
 
         /// <summary>"건강: 양호" 또는 "건강: 골절 45% · 감기 10% (입원 중)". 이름은 에셋의 표시 색, 중하면 빨강.</summary>
@@ -429,12 +515,10 @@ namespace GN3.UI
             return text.gameObject.AddComponent<TooltipTrigger>();
         }
 
-        /// <summary>이름만 쓰고, 설명은 툴팁으로. 마우스 판정이 글자 위에서만 되도록 칸 폭을 글자 폭에 맞춘다.</summary>
+        /// <summary>이름만 쓰고, 설명은 툴팁으로. 칸 폭·줄바꿈은 LayoutRows(Place)가 맞춘다.</summary>
         private static void SetTipLine(Text text, TooltipTrigger tip, string label, string tooltip)
         {
             text.text = label;
-            var rect = text.rectTransform;
-            rect.sizeDelta = new Vector2(text.preferredWidth + 4f, rect.sizeDelta.y);
             tip.Text = tooltip;
             tip.enabled = !string.IsNullOrEmpty(tooltip);
             text.raycastTarget = tip.enabled;

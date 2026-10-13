@@ -9,13 +9,15 @@ using UnityEngine;
 
 namespace GN3.Quests
 {
-    /// <summary>현재 진행 중인 모든 파견대를 관리하는 싱글턴. GameClock이 하루 지날 때마다
-    /// 모든 파견의 남은 일수(Quest.RemainingDays)를 함께 줄이고, 아직 이동 중인 파견에는
-    /// 확률적으로 습격(도적단 등) 이벤트를 굴려 용병 체력을 깎거나 사망시킬 수 있다.</summary>
+    /// <summary>현재 진행 중인 모든 파견대를 관리하는 싱글턴. 게임 시간이 흐를 때마다(GameClock.OnHoursPassed)
+    /// 모든 파견의 남은 시간(Quest.RemainingHours · Expedition.ReturnHoursLeft)을 함께 줄인다. 출발한 순간부터 세므로
+    /// 몇 시에 떠나든 '1일' 퀘스트는 24시간 걸린다. 이동한 시간이 24시간 쌓일 때마다 습격(도적단 등)을 한 번 굴려
+    /// 용병 체력을 깎거나 사망시킬 수 있다(예전 '자정마다 25%'와 같은 빈도).
+    /// 전투를 마친 파견도 귀환 일수가 다 지나 마을에 도착할 때까지 여기 남는다(귀환길에도 습격이 있다).</summary>
     public class ExpeditionLog
     {
         private const double AmbushChance = 0.25;
-        private const int AmbushSurvivalXp = 10;
+
 
         /// <summary>파견대에 길잡이(Guide)가 한 명이라도 있으면, 발생한 습격을 이 확률로 통째로 무효화한다.</summary>
         private const double GuideAvoidChance = 0.5;
@@ -33,17 +35,43 @@ namespace GN3.Quests
         /// <summary>습격 등 이동 중 이벤트가 발생했을 때 결과 문구를 전달한다. UI가 구독해서 표시한다.</summary>
         public event Action<string> OnTravelEvent;
 
-        /// <summary>파견대가 목적지에 막 도착했을 때(남은 일수가 0이 된 순간). 도착 알림창이 구독한다.</summary>
+        /// <summary>파견대가 목적지에 막 도착했을 때(남은 시간이 0이 된 순간). 도착 알림창이 구독한다.</summary>
         public event Action<Expedition> OnArrived;
+
+        /// <summary>
+        /// 남은 시간 표시(정수 시간)가 바뀌었을 때. 상태(출발·도착·귀환·전멸)가 바뀌는 OnChanged와 달리 실시간에도 자주 오므로
+        /// 남은 시간 글자만 고치는 곳이 구독한다(마을 연출·패널 전체 다시 만들기는 OnChanged로).
+        /// </summary>
+        public event Action OnProgress;
 
         private ExpeditionLog()
         {
-            GameClock.OnDayAdvanced += HandleDayAdvanced;
+            GameClock.OnHoursPassed += HandleHoursPassed;
         }
 
         public bool IsOnExpedition(Mercenary mercenary) => FindExpedition(mercenary) != null;
 
         public Quest FindQuest(Mercenary mercenary) => FindExpedition(mercenary)?.Quest;
+
+        /// <summary>가는 중인 파견대 중 가장 먼저 도착할 때까지 남은 시간. 가는 중인 파견이 없으면 null.
+        /// 진행·건너뛰기가 도착 시각을 넘지 않게 끊어 흘릴 때 쓴다(TimeAdvanceController).</summary>
+        public float? HoursUntilNextArrival
+        {
+            get
+            {
+                float? next = null;
+                foreach (var expedition in _active)
+                {
+                    if (expedition.IsReturning || expedition.IsReady) continue;
+                    float left = expedition.Quest.RemainingHours;
+                    if (next == null || left < next) next = left;
+                }
+                return next;
+            }
+        }
+
+        /// <summary>전투를 마치고 마을로 돌아오는 중인지.</summary>
+        public bool IsReturning(Mercenary mercenary) => FindExpedition(mercenary)?.IsReturning == true;
 
         public Expedition Dispatch(Quest quest, IReadOnlyList<Mercenary> members)
         {
@@ -54,7 +82,7 @@ namespace GN3.Quests
             int before = quest.RemainingDays;
             quest.Shorten(QuestDifficulty.DaysSaved(QuestDifficulty.Rate(QuestDifficulty.TeamPower(members), quest)));
             if (quest.RemainingDays < before)
-                OnTravelEvent?.Invoke($"[{quest.Title}] 전투력이 넉넉해 빠르게 진군한다 (소요 {before}일 → {quest.RemainingDays}일)");
+                OnTravelEvent?.Invoke($"{quest.Title} — 전투력이 넉넉해 빠르게 진군한다 (소요 {before}일 → {quest.RemainingDays}일)");
 
             OnChanged?.Invoke();
             return expedition;
@@ -91,14 +119,38 @@ namespace GN3.Quests
             OnArrived?.Invoke(expedition);
         }
 
+        /// <summary>테스트·디버그용(게임 상태 조정 창). 귀환 중인 파견대를 바로 마을에 도착시킨다.</summary>
+        public void DebugReturnNow(Expedition expedition)
+        {
+            if (!_active.Contains(expedition) || !expedition.IsReturning) return;
+            FinishReturn(expedition);
+        }
+
+        /// <summary>전투를 마친 파견대가 귀환길에 오른다(ExpeditionBattle.Conclude). 마을에 도착할 때까지 파견 중으로 남는다.</summary>
+        public void BeginReturn(Expedition expedition)
+        {
+            if (!_active.Contains(expedition)) return;
+            expedition.BeginReturn();
+            OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 귀환길에 오른다 (소요 {expedition.ReturnDaysLeft}일)");
+            OnChanged?.Invoke();
+        }
+
         /// <summary>파견대가 하루를 더 들여 휴식하며 체력을 회복한다.</summary>
         public void Rest(Expedition expedition)
         {
             if (!_active.Contains(expedition)) return;
 
             expedition.Rest();
-            OnTravelEvent?.Invoke($"[{expedition.Quest.Title}] 휴식을 취해 체력을 회복했다. (남은 일수 +1일)");
+            string which = expedition.IsReturning ? "귀환" : "남은 일수";
+            OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 휴식을 취해 체력을 회복했다. ({which} +1일)");
             OnChanged?.Invoke();
+        }
+
+        private void FinishReturn(Expedition expedition)
+        {
+            string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
+            OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 마을로 돌아왔다 (귀환: {survivors})");
+            Complete(expedition);
         }
 
         private Expedition FindExpedition(Mercenary mercenary)
@@ -106,40 +158,66 @@ namespace GN3.Quests
             return _active.FirstOrDefault(e => e.Members.Any(m => m.Id == mercenary.Id));
         }
 
-        private void HandleDayAdvanced()
+        private void HandleHoursPassed(float hours)
         {
-            // TryTriggerAmbush가 전멸한 파견을 _active에서 제거할 수 있어 스냅샷을 순회한다.
+            if (_active.Count == 0 || hours <= 0f) return;
+            // TryTriggerAmbush·FinishReturn이 _active에서 제거할 수 있어 스냅샷을 순회한다.
             var arrived = new List<Expedition>();
+            bool changed = false, progressed = false;
             foreach (var expedition in _active.ToList())
             {
-                bool wasTraveling = !expedition.Quest.IsReady;
-                expedition.Quest.AdvanceDay();
+                if (expedition.IsReady) continue; // 도착해 전투를 기다리는 중
+                float before = expedition.IsReturning ? expedition.ReturnHoursLeft : expedition.Quest.RemainingHours;
+                float moved = Math.Min(hours, before);
 
-                if (wasTraveling)
+                if (expedition.IsReturning) expedition.AdvanceReturn(moved);
+                else
                 {
-                    TryTriggerAmbush(expedition);
-                    if (expedition.IsReady && _active.Contains(expedition)) arrived.Add(expedition);
+                    expedition.CountOutbound(moved);
+                    expedition.Quest.Advance(moved);
                 }
+
+                // 이동한 시간이 하루치 쌓일 때마다 습격 판정(돌아오는 길도 마찬가지, 전멸하면 TryTriggerAmbush가 Complete한다).
+                expedition.HoursSinceAmbushRoll += moved;
+                while (expedition.HoursSinceAmbushRoll >= Quest.HoursPerDay && _active.Contains(expedition))
+                {
+                    expedition.HoursSinceAmbushRoll -= Quest.HoursPerDay;
+                    if (TryTriggerAmbush(expedition)) changed = true;
+                }
+                if (!_active.Contains(expedition))
+                {
+                    changed = true;
+                    continue;
+                }
+
+                float after = expedition.IsReturning ? expedition.ReturnHoursLeft : expedition.Quest.RemainingHours;
+                if (Math.Ceiling(after) != Math.Ceiling(before)) progressed = true;
+                if (after > 0f) continue;
+                changed = true;
+                if (expedition.IsReturning) FinishReturn(expedition);
+                else arrived.Add(expedition);
             }
 
-            OnChanged?.Invoke();
+            if (changed || arrived.Count > 0) OnChanged?.Invoke();
+            else if (progressed) OnProgress?.Invoke();
             // 순회가 끝난 뒤 알린다(자동 진행이 바로 Complete해도 목록이 안전하다).
             foreach (var expedition in arrived)
                 if (_active.Contains(expedition)) OnArrived?.Invoke(expedition);
         }
 
-        private void TryTriggerAmbush(Expedition expedition)
+        /// <summary>습격을 굴린다. 습격이 실제로 일어났으면(피했어도 길잡이 문구가 나가면) true.</summary>
+        private bool TryTriggerAmbush(Expedition expedition)
         {
             var aliveMembers = expedition.Members.Where(m => m.IsAlive).ToList();
-            if (aliveMembers.Count == 0) return;
+            if (aliveMembers.Count == 0) return false;
 
-            if (_eventRng.NextDouble() >= AmbushChance) return;
+            if (_eventRng.NextDouble() >= AmbushChance) return false;
 
             bool hasGuide = aliveMembers.Any(m => m.Class.Kind == MercenaryClassKind.Guide);
             if (hasGuide && _eventRng.NextDouble() < GuideAvoidChance)
             {
-                OnTravelEvent?.Invoke($"[{expedition.Quest.Title}] 길잡이 덕분에 습격을 피했다.");
-                return;
+                OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 길잡이 덕분에 습격을 피했다.");
+                return false;
             }
 
             // 습격 규모/강도를 퀘스트 자체의 난이도·적 숫자에 맞춰 키운다 — 난이도가 높은 원정일수록
@@ -155,7 +233,7 @@ namespace GN3.Quests
 
             string raiderNames = string.Join("·", enemies.Select(e => e.Name).Distinct());
             var sb = new StringBuilder();
-            sb.Append($"[{expedition.Quest.Title}] 이동 중 {raiderNames}의 습격!");
+            sb.Append($"{expedition.Quest.Title} — {(expedition.IsReturning ? "귀환" : "이동")} 중 {raiderNames}의 습격!");
 
             for (int i = 0; i < aliveMembers.Count; i++)
             {
@@ -182,13 +260,13 @@ namespace GN3.Quests
             }
             else
             {
-                // 습격에서 살아남으면 경험치 +10.
-                sb.Append($" 생존자 경험치 +{AmbushSurvivalXp}.");
-                foreach (var line in ExpeditionBattle.GrantExperience(expedition.Members.Where(m => m.IsAlive), AmbushSurvivalXp))
+                // 습격에서 살아남으면 조금 성장한다(GrowthTuning.AmbushGrowth × 나이 배율).
+                foreach (var line in ExpeditionBattle.GrantGrowth(expedition.Members.Where(m => m.IsAlive), GrowthTuning.AmbushGrowth))
                     sb.Append($" {line}");
             }
 
             OnTravelEvent?.Invoke(sb.ToString());
+            return true;
         }
 
         // GameClock과 마찬가지로 Domain Reload가 꺼져 있어도 Play 진입마다 상태를 초기화하기 위한 지점.

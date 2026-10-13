@@ -74,7 +74,7 @@ namespace GN3.UI
             ShopListUI.BeginList(_panel);
 
             var trainees = TrainingHall.Trainees;
-            CreateHeaderRow($"훈련 중 ({trainees.Count}/{TrainingHall.Capacity}) · 1시간마다 경험치 +{TrainingHall.XpPerHour:0}");
+            CreateHeaderRow($"훈련 중 ({trainees.Count}/{TrainingHall.Capacity}) · {1f / GrowthTuning.TrainingGrowthPerHour:0}시간마다 능력치 성장 (나이가 어릴수록 빠름)");
             if (trainees.Count == 0) ShopListUI.CreateEmptyRow(_panel, "지금 훈련 중인 용병이 없습니다. 용병들이 가끔 스스로 훈련하러 옵니다.");
             foreach (var merc in trainees)
             {
@@ -97,13 +97,13 @@ namespace GN3.UI
             _labels[merc.Id] = (merc, texts[0], texts[1], training);
         }
 
-        private static string Title(Mercenary merc) => $"[{merc.Grade}] {merc.Name} · {merc.Class.ClassName} Lv {merc.Level}";
+        private static string Title(Mercenary merc) => $"[{merc.Grade}] {merc.Name} · {merc.Class.ClassName} {merc.Age}세";
 
         private static string Progress(Mercenary merc, bool training)
         {
-            if (merc.Level >= Mercenary.MaxLevel) return "최대 레벨";
-            string xp = $"경험치 {merc.Experience} / {merc.XpToNext}";
-            return training ? $"{xp} · 남은 훈련 약 {TrainingHall.RemainingHours(merc):0.#}시간" : $"{xp} · 전투력 {merc.CombatPower}";
+            if (!merc.CanGrow) return $"{GrowthTuning.RateLabel(merc.Age)} · 전투력 {merc.CombatPower}";
+            string next = $"{GrowthTuning.RateLabel(merc.Age)} · 다음 성장까지 훈련 약 {TrainingHall.HoursToNextGrowth(merc):0.#}시간";
+            return training ? $"{next} · 남은 훈련 약 {TrainingHall.RemainingHours(merc):0.#}시간" : $"{next} · 전투력 {merc.CombatPower}";
         }
 
         private void CreateHeaderRow(string title)

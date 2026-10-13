@@ -70,6 +70,7 @@ namespace GN3.Economy
             MercenaryClassKind.Healer => "힐러",
             MercenaryClassKind.Assassin => "암살자",
             MercenaryClassKind.Guide => "길잡이",
+            MercenaryClassKind.Mage => "마법사",
             _ => kind.ToString(),
         };
     }

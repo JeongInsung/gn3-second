@@ -3,20 +3,40 @@ using UnityEngine;
 
 namespace GN3.Mercenaries
 {
-    /// <summary>용병의 타고난 등급. 시장에서 생길 때 정해지고, 높을수록 드물고 강하다.</summary>
+    /// <summary>
+    /// 등급 F~S. 용병의 '등급'은 지금 전투력 구간(GradeTable.ForCombatPower — 키우면 승급),
+    /// '재능'은 타고난 값(시장에서 생길 때 정해지고 높을수록 드묾, 성장 속도 배율 GrowthTuning.TalentRate). 퀘스트 등급에도 같은 글자를 쓴다.
+    /// </summary>
     public enum MercenaryGrade { F, E, D, C, B, A, S }
 
-    /// <summary>등급별 능력치 배율·등장 확률·고용비 배율·표시 색.</summary>
+    /// <summary>재능 등장 확률·재능 고용비 배율·전투력 등급 구간·표시 색.</summary>
     public static class GradeTable
     {
         //                                         F      E      D      C      B      A      S
         private static readonly float[] StatMultipliers  = { 0.80f, 0.90f, 1.00f, 1.12f, 1.25f, 1.45f, 1.70f };
         private static readonly float[] Chances          = { 0.20f, 0.25f, 0.22f, 0.15f, 0.10f, 0.06f, 0.02f };
-        private static readonly float[] PriceMultipliers = { 0.6f,  0.8f,  1.0f,  1.3f,  1.7f,  2.3f,  3.2f };
+        private static readonly float[] PriceMultipliers = { 0.7f,  0.85f, 1.0f,  1.2f,  1.45f, 1.8f,  2.3f }; // 재능 고용비 배율(전투력에 곱한다)
         private static readonly string[] HexColors = { "8a8a8a", "b8b8b8", "6fbf5a", "5a9be0", "a66be0", "f08a3c", "ffd34a" };
 
-        public static float StatMultiplier(MercenaryGrade grade) => StatMultipliers[(int)grade];
-        public static float PriceMultiplier(MercenaryGrade grade) => PriceMultipliers[(int)grade];
+        /// <summary>예전(저장 버전 3 이하) 재능 능력치 배율. 예전 저장을 불러올 때 전투력을 맞추는 데만 쓴다.</summary>
+        public static float LegacyStatMultiplier(MercenaryGrade grade) => StatMultipliers[(int)grade];
+        public static float PriceMultiplier(MercenaryGrade talent) => PriceMultipliers[(int)talent];
+
+        /// <summary>전투력 → 등급(GrowthTuning.GradePowerThresholds 구간).</summary>
+        public static MercenaryGrade ForCombatPower(int power)
+        {
+            var thresholds = GrowthTuning.GradePowerThresholds;
+            for (int i = thresholds.Length - 1; i > 0; i--)
+                if (power >= thresholds[i]) return (MercenaryGrade)i;
+            return MercenaryGrade.F;
+        }
+
+        /// <summary>다음 등급까지 필요한 전투력(S면 0).</summary>
+        public static int PowerToNextGrade(int power)
+        {
+            int next = (int)ForCombatPower(power) + 1;
+            return next < GrowthTuning.GradePowerThresholds.Length ? GrowthTuning.GradePowerThresholds[next] - power : 0;
+        }
         public static string Label(MercenaryGrade grade) => grade.ToString();
 
         public static Color Color(MercenaryGrade grade) =>
@@ -41,10 +61,10 @@ namespace GN3.Mercenaries
             return MercenaryGrade.F;
         }
 
-        /// <summary>클래스·레벨 기본 능력치에 등급 배율(공격·방어·체력)을 건다. 이동 속도는 회피율이 깨지지 않게 그대로.</summary>
-        public static CombatStats Apply(CombatStats stats, MercenaryGrade grade)
+        /// <summary>예전 공식: 기본 능력치에 재능 배율(공격·방어·체력)을 건다. 저장 버전 3 이하를 불러올 때 예전 전투력을 재는 데만 쓴다.</summary>
+        public static CombatStats ApplyLegacyTalent(CombatStats stats, MercenaryGrade talent)
         {
-            float m = StatMultiplier(grade);
+            float m = LegacyStatMultiplier(talent);
             return new CombatStats(
                 attack: Mathf.Max(1, Mathf.RoundToInt(stats.Attack * m)),
                 defense: Mathf.Max(0, Mathf.RoundToInt(stats.Defense * m)),

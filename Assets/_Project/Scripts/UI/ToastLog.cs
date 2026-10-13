@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using GN3.World;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -8,36 +7,16 @@ namespace GN3.UI
 {
     /// <summary>
     /// 화면 왼쪽 아래에 잠깐 떴다 사라지는 알림(파견 출발·귀환, 보상, 회복, 습격, 골드 부족 등).
-    /// 최대 4줄을 아래에서 위로 쌓고, 각 줄은 3초 뒤 서서히 사라진다. 클릭을 막지 않는다.
-    /// 띄운 알림은 우편함(Mailbox)에 일반 알림 편지로 남아 다시 볼 수 있다(한 판 동안, 저장 안 함).
+    /// 최대 4줄을 아래에서 위로 쌓고, 각 줄은 3초 뒤 서서히 사라진다. 판은 글씨 길이에 맞추고(최대 Width), 클릭을 막지 않는다.
+    /// 띄운 알림은 우편함(Mailbox)에 일반 알림 편지로 남아 다시 볼 수 있다.
     /// </summary>
     public class ToastLog : MonoBehaviour
     {
         private const int MaxLines = 4;
         private const float LifeSeconds = 3f;
-        private const int MaxHistory = 200;
-
-        public struct Entry
-        {
-            public int Day;
-            public float Hour;
-            public string Message;
-        }
-
-        private static readonly List<Entry> _history = new List<Entry>();
-        /// <summary>지금까지 띄운 알림(오래된 것부터, 최근 200개).</summary>
-        public static IReadOnlyList<Entry> History => _history;
-        public static event System.Action Added;
-
-        // Domain Reload가 꺼져 있어도 Play마다 기록을 비운다(GameClock과 같은 방식).
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForPlaySession()
-        {
-            _history.Clear();
-            Added = null;
-        }
         private const float FadeSeconds = 0.6f;
-        private const float Width = 520f;
+        private const float Width = 520f; // 알림 판 최대 폭(짧은 알림은 글씨 길이만큼)
+        private const int PaddingX = 16;
 
         private static ToastLog _instance;
         private RectTransform _stack;
@@ -52,12 +31,30 @@ namespace GN3.UI
         public static void Show(string message, bool mail)
         {
             if (string.IsNullOrEmpty(message)) return;
-            _history.Add(new Entry { Day = GameClock.CurrentDay, Hour = GameClock.CurrentHour, Message = message });
-            if (_history.Count > MaxHistory) _history.RemoveAt(0);
             if (mail) Mailbox.Post(MailKind.Notice, message);
+            // 날짜 건너뛰기 중엔 띄우지 않고 세기만 한다(끝나면 FlushHeld가 한 줄로). 우편함·하루 보고서엔 그대로 남는다.
+            if (TimeAdvanceController.IsSkippingDays)
+            {
+                _heldCount++;
+                return;
+            }
             if (_instance == null) _instance = Create();
             _instance.Add(message);
-            Added?.Invoke();
+        }
+
+        private static int _heldCount;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlaySession() => _heldCount = 0;
+
+        /// <summary>날짜 건너뛰기가 끝날 때: 그동안 모아 둔 알림 수를 한 줄로 띄운다("일주일 동안 알림 12건 · 우편함에서 확인").</summary>
+        public static void FlushHeld(string period)
+        {
+            int count = _heldCount;
+            _heldCount = 0;
+            if (count <= 0) return;
+            if (_instance == null) _instance = Create();
+            _instance.Add($"{period} 동안 알림 {count}건 · 우편함에서 확인");
         }
 
         private static ToastLog Create()
@@ -81,7 +78,7 @@ namespace GN3.UI
             layout.spacing = 6f;
             layout.childControlWidth = true;
             layout.childControlHeight = true;
-            layout.childForceExpandWidth = true;
+            layout.childForceExpandWidth = false; // 줄마다 글씨 길이만큼(Add의 LayoutElement), 최대 Width
             layout.childForceExpandHeight = false;
 
             var toast = go.GetComponent<ToastLog>();
@@ -97,14 +94,14 @@ namespace GN3.UI
                 _lines.RemoveAt(0);
             }
 
-            var line = new GameObject("Toast", typeof(RectTransform), typeof(Image), typeof(CanvasGroup), typeof(VerticalLayoutGroup));
+            var line = new GameObject("Toast", typeof(RectTransform), typeof(Image), typeof(CanvasGroup), typeof(VerticalLayoutGroup), typeof(LayoutElement));
             line.transform.SetParent(_stack, false);
             var background = line.GetComponent<Image>();
             background.sprite = UITheme.Panel;
             background.type = Image.Type.Sliced;
             background.raycastTarget = false;
             var padding = line.GetComponent<VerticalLayoutGroup>();
-            padding.padding = new RectOffset(16, 16, 10, 10);
+            padding.padding = new RectOffset(PaddingX, PaddingX, 10, 10);
             padding.childControlWidth = true;
             padding.childControlHeight = true;
             line.GetComponent<CanvasGroup>().blocksRaycasts = false;
@@ -121,6 +118,13 @@ namespace GN3.UI
             text.raycastTarget = false;
             text.supportRichText = false;
             textGO.GetComponent<Shadow>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+
+            // 판 폭 = 글씨 한 줄 길이 + 좌우 여백. 길면 최대 Width에서 줄바꿈되고 높이가 늘어난다.
+            // flexible 0: 줄 안의 레이아웃 그룹(childForceExpand 기본값)이 늘어날 수 있다고 알려 스택이 폭·높이를 꽉 채우던 것을 막는다.
+            var size = line.GetComponent<LayoutElement>();
+            size.preferredWidth = Mathf.Min(text.preferredWidth + PaddingX * 2, Width);
+            size.flexibleWidth = 0f;
+            size.flexibleHeight = 0f;
 
             line.transform.SetAsLastSibling(); // 새 알림이 맨 아래(가장 최근)
             _lines.Add(line);

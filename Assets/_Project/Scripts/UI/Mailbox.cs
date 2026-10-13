@@ -28,7 +28,7 @@ namespace GN3.UI
             public int Day;
             public float Hour;
             public string Title;
-            /// <summary>목록에 보이는 짧은 제목("용병 고용", "임무 완료!"). 누르면 Title·Body 전체가 펼쳐진다.</summary>
+            /// <summary>목록에 보이는 짧은 제목("용병 고용", "눈보라 도적단 3마리 처치 — 임무 완료!"). 누르면 Title·Body 전체가 펼쳐진다.</summary>
             public string ShortTitle;
             public string Body;
             public bool Read;
@@ -50,6 +50,8 @@ namespace GN3.UI
         /// <summary>오래된 것부터.</summary>
         public static IReadOnlyList<Mail> All => _mails;
         public static event System.Action Changed;
+        /// <summary>중요 편지(게임을 멈추고 알림창에 뜨는 것)가 새로 생겼을 때. 진행·건너뛰기가 그 시각에서 멈추는 데 쓴다(TimeAdvanceController).</summary>
+        public static event System.Action<Mail> ImportantPosted;
 
         public static bool HasUnread => _mails.Any(m => !m.Read);
         public static int UnreadCount => _mails.Count(m => !m.Read);
@@ -62,6 +64,7 @@ namespace GN3.UI
             _nextId = 0;
             _subscribed = false;
             Changed = null;
+            ImportantPosted = null;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -89,6 +92,7 @@ namespace GN3.UI
             _mails.Add(mail);
             Trim();
             Changed?.Invoke();
+            if (important) ImportantPosted?.Invoke(mail);
             return mail;
         }
 
@@ -102,7 +106,7 @@ namespace GN3.UI
                           $"파견대: {string.Join(", ", members.Select(m => m.Name))}\n" +
                           $"{QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(members))}\n\n" +
                           "전투를 어떻게 진행할까요?";
-            var mail = Post(MailKind.Arrival, $"[{quest.Title}] 목적지 도착", body, important: true);
+            var mail = Post(MailKind.Arrival, $"{quest.Title} — 목적지 도착", body, important: true);
             mail.Expedition = expedition;
         }
 
@@ -222,7 +226,7 @@ namespace GN3.UI
         private const int ShortTitleFallbackLength = 14;
 
         /// <summary>
-        /// 목록용 짧은 제목. 퀘스트 결과·도착은 앞의 "[퀘스트명] "을 떼고, 일반 알림은 낱말 표(NoticeTitles)로,
+        /// 목록용 짧은 제목. 퀘스트 결과·도착("[북쪽] 퀘스트명 — 임무 완료!")은 앞의 지역 태그 "[북쪽] "만 떼고, 일반 알림은 낱말 표(NoticeTitles)로,
         /// 맞는 게 없으면 앞 14자 + "…". 보고·중요 소식은 이미 짧아 그대로.
         /// </summary>
         public static string ShortTitleFor(MailKind kind, string title)

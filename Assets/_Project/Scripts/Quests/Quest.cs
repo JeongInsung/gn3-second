@@ -17,10 +17,15 @@ namespace GN3.Quests
         /// (난이도 1~3이 계층 0~2에 정확히 1:1 대응) - QuestClearHistory가 "어느 계층을 얼마나 깼는지" 셀 때 쓴다.</summary>
         public int Tier => Math.Clamp(Difficulty - 1, 0, 2);
 
-        /// <summary>게임 내 임무 소요 일수. 하루가 지날 때마다(자정) 줄어드는 RemainingDays의 초기값.</summary>
+        public const float HoursPerDay = 24f;
+
+        /// <summary>게임 내 임무 소요 일수(게시판·보상 계산용). 실제 이동은 출발 순간부터 DurationDays × 24시간(RemainingHours).</summary>
         public int DurationDays { get; }
-        public int RemainingDays { get; private set; }
-        public bool IsReady => RemainingDays <= 0;
+        /// <summary>목적지까지 남은 게임 시간. 게임 시간이 흐를 때마다(ExpeditionLog) 줄어든다.</summary>
+        public float RemainingHours { get; private set; }
+        /// <summary>표시용: 남은 시간을 일로 올림.</summary>
+        public int RemainingDays => (int)System.Math.Ceiling(RemainingHours / HoursPerDay);
+        public bool IsReady => RemainingHours <= 0f;
 
         /// <summary>전투 로그 연출 재생 시간(초). DurationDays(게임 내 일수)와는 별개로, 전투 결과를 화면에 뿌리는 속도 조절용.</summary>
         public float EstimatedDurationSeconds => 3f + Difficulty * 1.5f + EnemyCount * 0.5f;
@@ -39,33 +44,34 @@ namespace GN3.Quests
             EnemyCount = enemyCount;
             Difficulty = difficulty;
             DurationDays = durationDays;
-            RemainingDays = durationDays;
+            RemainingHours = durationDays * HoursPerDay;
         }
 
-        /// <summary>저장 파일에서 불러올 때 남은 일수를 되돌린다.</summary>
-        public void SetRemainingDays(int days) => RemainingDays = System.Math.Max(0, days);
+        /// <summary>저장 파일에서 불러올 때 남은 시간을 되돌린다.</summary>
+        public void SetRemainingHours(float hours) => RemainingHours = System.Math.Max(0f, hours);
 
-        public void AdvanceDay()
+        /// <summary>이동한 시간만큼 남은 시간을 줄인다.</summary>
+        public void Advance(float hours)
         {
-            if (RemainingDays > 0)
-                RemainingDays--;
+            if (hours > 0f)
+                RemainingHours = System.Math.Max(0f, RemainingHours - hours);
         }
 
         /// <summary>테스트·디버그용(게임 상태 조정 창). 바로 도착한 것으로 만든다.</summary>
-        public void ArriveNow() => RemainingDays = 0;
+        public void ArriveNow() => RemainingHours = 0f;
 
-        /// <summary>전투력이 넉넉해 빨리 도착할 때 남은 일수를 줄인다(최소 1일).</summary>
+        /// <summary>전투력이 넉넉해 빨리 도착할 때 남은 시간을 days일만큼 줄인다(최소 1일 남김).</summary>
         public void Shorten(int days)
         {
             if (days > 0)
-                RemainingDays = System.Math.Max(1, RemainingDays - days);
+                RemainingHours = System.Math.Max(HoursPerDay, RemainingHours - days * HoursPerDay);
         }
 
-        /// <summary>휴식 등으로 도착이 늦어질 때 남은 일수를 늘린다.</summary>
+        /// <summary>휴식 등으로 도착이 늦어질 때 남은 시간을 days일만큼 늘린다.</summary>
         public void Delay(int days)
         {
             if (days > 0)
-                RemainingDays += days;
+                RemainingHours += days * HoursPerDay;
         }
     }
 }

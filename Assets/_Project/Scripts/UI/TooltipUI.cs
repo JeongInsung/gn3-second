@@ -28,6 +28,8 @@ namespace GN3.UI
         private RectTransform _canvasRect;
         private RectTransform _rect;
         private Text _text;
+        private LayoutElement _layout;
+        private const float MaxWidth = 520f; // 이보다 긴 줄은 아래로 줄바꿈
 
         private static TooltipUI Create()
         {
@@ -69,6 +71,7 @@ namespace GN3.UI
             instance._canvasRect = canvasGO.GetComponent<RectTransform>();
             instance._rect = rect;
             instance._text = text;
+            instance._layout = textGO.AddComponent<LayoutElement>();
             tooltipGO.SetActive(false);
             return instance;
         }
@@ -77,6 +80,11 @@ namespace GN3.UI
         {
             if (string.IsNullOrEmpty(text)) return;
             _text.text = text;
+            // 너무 긴 줄은 MaxWidth에서 아래로 줄을 바꾼다(짧으면 글자 폭만큼)
+            _text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            bool wraps = _text.preferredWidth > MaxWidth;
+            _text.horizontalOverflow = wraps ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow;
+            _layout.preferredWidth = wraps ? MaxWidth : -1f;
             gameObject.SetActive(true);
             LayoutRebuilder.ForceRebuildLayoutImmediate(_rect); // 새 글자 크기로 바로 맞춰야 첫 프레임부터 화면 안에 둔다
             UpdatePosition();

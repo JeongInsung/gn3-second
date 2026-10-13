@@ -160,6 +160,7 @@ namespace GN3.Mercenaries
         {
             foreach (var merc in members.Where(m => m.HasAilment).ToList())
             {
+                if (!PlayerParty.Instance.Members.Contains(merc)) continue; // 앞사람의 죽음으로 슬퍼하다 길드를 떠났으면 건너뛴다
                 bool admitted = Hospital.IsAdmitted(merc);
                 AilmentSO fatal = null;
                 foreach (var ailment in merc.Ailments)
@@ -178,6 +179,7 @@ namespace GN3.Mercenaries
         private static void Die(Mercenary merc, AilmentSO cause)
         {
             merc.SetHealth(0);
+            MercenaryCondition.AfterDeath(merc); // 친한 동료가 슬퍼한다(떠날 수도). 친밀도를 읽어야 해서 파티에서 빼기 전에
             PlayerParty.Instance.Remove(merc);
             string line = $"{merc.Name}이(가) {cause.displayName}을(를) 치료받지 못해 세상을 떠났다.";
             ToastLog.Show(line, false);

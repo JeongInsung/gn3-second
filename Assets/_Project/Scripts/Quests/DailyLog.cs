@@ -93,12 +93,14 @@ namespace GN3.Quests
                 string members = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
                 bool wasTraveling = !_lastRemaining.TryGetValue(quest.Id, out int before) || before > 0;
 
-                if (!expedition.IsReady)
-                    Add($"[{quest.Title}] 이동 중 — 남은 {quest.RemainingDays}일 (파견: {members})");
+                if (expedition.IsReturning)
+                    Add($"{quest.Title} — 귀환 중 · 남은 {GameClock.FormatDuration(expedition.ReturnHoursLeft)} (파견: {members})");
+                else if (!expedition.IsReady)
+                    Add($"{quest.Title} — 이동 중 · 남은 {GameClock.FormatDuration(quest.RemainingHours)} (파견: {members})");
                 else if (wasTraveling)
-                    Add($"[{quest.Title}] 목적지 도착! 파티 패널에서 전투를 시작하세요 (파견: {members})");
+                    Add($"{quest.Title} — 목적지 도착! 파티 패널에서 전투를 시작하세요 (파견: {members})");
                 else
-                    Add($"[{quest.Title}] 도착해 전투 대기 중 (파견: {members})");
+                    Add($"{quest.Title} — 도착해 전투 대기 중 (파견: {members})");
 
                 _lastRemaining[quest.Id] = quest.RemainingDays;
             }

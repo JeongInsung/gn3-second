@@ -19,6 +19,9 @@ namespace GN3.UI
         [SerializeField] private Text resultText;
 
         private readonly List<GameObject> _rows = new List<GameObject>();
+        // 용병 줄과 그 위치·상태 글자. 글자가 줄바꿈돼 넘치면 RefreshList가 줄 높이를 늘린다.
+        private readonly List<(LayoutElement layout, Text text)> _wrappedRows = new List<(LayoutElement, Text)>();
+        private const int MemberRowPadding = 8;
         private readonly HashSet<string> _selectedForDispatch = new HashSet<string>();
         private Font _font;
         private Transform _panelTransform;
@@ -41,7 +44,9 @@ namespace GN3.UI
 
             PlayerParty.Instance.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnChanged += RefreshList;
+            ExpeditionLog.Instance.OnProgress += RefreshList; // 남은 시간(게임 1시간마다)
             TrainingHall.OnChanged += RefreshList;
+            RestVenues.OnAnyChanged += RefreshList;
             Hospital.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnTravelEvent += HandleTravelEvent;
         }
@@ -50,7 +55,9 @@ namespace GN3.UI
         {
             PlayerParty.Instance.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnChanged -= RefreshList;
+            ExpeditionLog.Instance.OnProgress -= RefreshList;
             TrainingHall.OnChanged -= RefreshList;
+            RestVenues.OnAnyChanged -= RefreshList;
             Hospital.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnTravelEvent -= HandleTravelEvent;
         }
@@ -89,6 +96,7 @@ namespace GN3.UI
             foreach (var row in _rows)
                 Destroy(row);
             _rows.Clear();
+            _wrappedRows.Clear();
 
             var expeditions = ExpeditionLog.Instance.Active;
             if (expeditions.Count > 0)
@@ -103,7 +111,8 @@ namespace GN3.UI
                 var selected = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id));
                 int teamPower = QuestDifficulty.TeamPower(selected);
                 string power = $"{QuestDifficulty.DescribeTeam(_pendingQuest, teamPower)} · {QuestDifficulty.DurationText(_pendingQuest, teamPower)}";
-                _rows.Add(CreateSectionHeader($"파견 편성 — {QuestDifficulty.RichTitle(_pendingQuest)} ({_selectedForDispatch.Count}/{_pendingQuest.MaxDispatchSize}명)  {power}"));
+                // 한 줄에 다 넣으면 창 폭을 넘어 난이도·소요가 잘린다 → 두 줄
+                _rows.Add(CreateSectionHeader($"파견 편성 — {QuestDifficulty.RichTitle(_pendingQuest)} ({_selectedForDispatch.Count}/{_pendingQuest.MaxDispatchSize}명)\n{power}", 2));
             }
 
             _rows.Add(CreateSectionHeader("보유 용병"));
@@ -111,17 +120,30 @@ namespace GN3.UI
                 _rows.Add(CreateMemberRow(merc));
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
+            // 위치·상태 글자가 줄바꿈돼 줄 안에 안 들어가면 줄을 늘리고 다시 배치한다
+            bool grew = false;
+            foreach (var (layout, text) in _wrappedRows)
+            {
+                float needed = text.preferredHeight + MemberRowPadding * 2;
+                if (needed > layout.preferredHeight)
+                {
+                    layout.minHeight = layout.preferredHeight = Mathf.Ceil(needed);
+                    grew = true;
+                }
+            }
+            if (grew) LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
             RefreshDispatchButton();
         }
 
-        private GameObject CreateSectionHeader(string label)
+        /// <summary>굵은 머리줄. lines는 label의 줄 수(높이를 맞춘다).</summary>
+        private GameObject CreateSectionHeader(string label, int lines = 1)
         {
             var go = new GameObject("Header", typeof(RectTransform), typeof(LayoutElement));
             go.transform.SetParent(listContainer, false);
 
             var layout = go.GetComponent<LayoutElement>();
-            layout.minHeight = 26;
-            layout.preferredHeight = 26;
+            layout.minHeight = 26 + 18 * (lines - 1);
+            layout.preferredHeight = layout.minHeight;
 
             var text = CreateText(go.transform, label, 15, TextAnchor.MiddleLeft);
             text.fontStyle = FontStyle.Bold;
@@ -141,7 +163,7 @@ namespace GN3.UI
 
             var row = new GameObject(quest.Title, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
             row.transform.SetParent(listContainer, false);
-            row.GetComponent<Image>().color = new Color(0.2f, 0.35f, 0.25f, 0.4f);
+            row.GetComponent<Image>().color = expedition.IsReturning ? new Color(0.2f, 0.28f, 0.4f, 0.4f) : new Color(0.2f, 0.35f, 0.25f, 0.4f);
 
             var layoutElement = row.GetComponent<LayoutElement>();
             layoutElement.minHeight = 56;
@@ -157,12 +179,16 @@ namespace GN3.UI
             hLayout.childControlHeight = true;
 
             string members = string.Join(", ", expedition.Members.Select(m => m.IsAlive ? m.Name : $"{m.Name}(사망)"));
-            string status = expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {quest.RemainingDays}일)";
+            string status = expedition.IsReturning ? $"귀환 중 (남은 {GameClock.FormatDuration(expedition.ReturnHoursLeft)})"
+                : expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {GameClock.FormatDuration(quest.RemainingHours)})";
             string info = $"{QuestDifficulty.RichTitle(quest)}    {status}    파견: {members}    {QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(expedition.Members))}";
             var infoText = CreateText(row.transform, info, 15, TextAnchor.MiddleLeft);
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
             infoLayout.flexibleWidth = 1;
             infoLayout.minWidth = 100;
+            infoLayout.preferredWidth = 0; // 버튼 앞까지만 쓰고 줄을 바꾼다(넘치면 RefreshList가 줄 높이를 늘림)
+            infoText.verticalOverflow = VerticalWrapMode.Overflow;
+            _wrappedRows.Add((layoutElement, infoText));
 
             bool anyWounded = expedition.Members.Any(m => m.IsAlive && m.CurrentHealth < m.CurrentStats.MaxHealth);
 
@@ -213,7 +239,9 @@ namespace GN3.UI
         {
             bool training = TrainingHall.IsTraining(merc);
             bool hospitalized = Hospital.IsAdmitted(merc);
-            bool onExpedition = ExpeditionLog.Instance.IsOnExpedition(merc) || training || hospitalized; // 훈련·입원 중도 마을에 없음(선택·해고 불가)
+            var venue = RestVenues.Find(merc);
+            bool bathing = venue != null;
+            bool onExpedition = ExpeditionLog.Instance.IsOnExpedition(merc) || training || hospitalized || bathing; // 훈련·입원·쉼터(온천·도박장) 중도 마을에 없음(선택·해고 불가)
             bool selected = _selectedForDispatch.Contains(merc.Id);
 
             var row = new GameObject(merc.Name, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
@@ -229,7 +257,7 @@ namespace GN3.UI
             layoutElement.preferredHeight = 56;
 
             var hLayout = row.GetComponent<HorizontalLayoutGroup>();
-            hLayout.padding = new RectOffset(12, 12, 8, 8);
+            hLayout.padding = new RectOffset(12, 12, MemberRowPadding, MemberRowPadding);
             hLayout.spacing = 8;
             hLayout.childAlignment = TextAnchor.MiddleLeft;
             hLayout.childForceExpandWidth = false;
@@ -249,24 +277,32 @@ namespace GN3.UI
             nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
             nameText.gameObject.AddComponent<LayoutElement>().minWidth = 150;
 
-            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  Lv.{merc.Level}", 15, TextAnchor.MiddleLeft);
+            var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세", 15, TextAnchor.MiddleLeft);
             classText.color = textColor;
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 100;
 
-            string status = training ? "  · 훈련 중" : hospitalized ? "  · 입원 중" : onExpedition ? "  · 파견 중"
-                : merc.CurrentHealth < stats.MaxHealth ? $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}" : "";
+            // 위치(항상): 마을 / 훈련소 / 병원 / 쉼터 이름 / 파견: 퀘스트 / 귀환 중 — 마을 캐릭터 이동은 알림 대신 여기서 본다
+            // (onExpedition은 훈련·입원·쉼터까지 '마을에 없음'으로 묶은 값이라 실제 파견은 따로 본다)
+            string where = ExpeditionLog.Instance.IsOnExpedition(merc)
+                ? (ExpeditionLog.Instance.IsReturning(merc) ? "귀환 중" : $"파견: {ExpeditionLog.Instance.FindQuest(merc)?.Title}")
+                : training ? "훈련소" : hospitalized ? "병원" : bathing ? venue.Name : "마을";
+            string status = where; // 둘째 줄(좁은 칸에서 "전투력 233 ·"처럼 어중간하게 끊기지 않게)
+            if (merc.CurrentHealth < stats.MaxHealth) status += $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}";
             // 피로·사기: 지치면 파견 불가, 피로 50↑·사기 30↓은 능력치가 깎이니 눈에 띄게
             if (merc.IsExhausted) status += $"  · 지침(피로 {merc.Fatigue})";
             else if (merc.Fatigue >= Mercenary.TiredFatigue) status += $"  · 피로 {merc.Fatigue}";
             if (merc.Morale < Mercenary.LowMorale) status += "  · 사기 낮음";
             foreach (var ailment in merc.Ailments) status += $"  · {ailment.Def.displayName}"; // 부상·질병(중하면 파견 불가)
-            var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
+            var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}\n<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
             powerText.color = onExpedition ? new Color(UITheme.TitleText.r, UITheme.TitleText.g, UITheme.TitleText.b, 0.5f) : UITheme.TitleText;
-            powerText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            powerText.horizontalOverflow = HorizontalWrapMode.Wrap; // 길면 버튼 앞에서 줄을 바꾼다(줄 높이는 RefreshList가 늘림)
+            powerText.verticalOverflow = VerticalWrapMode.Overflow;
             var powerLayout = powerText.gameObject.AddComponent<LayoutElement>();
             powerLayout.minWidth = 100;
+            powerLayout.preferredWidth = 0; // 글자 길이로 폭을 요구하지 않는다(버튼이 눌려 줄지 않게)
             powerLayout.flexibleWidth = 1; // 남는 폭을 차지해 버튼을 오른쪽 끝으로 민다
+            _wrappedRows.Add((layoutElement, powerText));
             string ailmentTip = Ailments.EffectTooltip(merc); // 부상·질병: 떨어진 능력치는 마우스를 올리면
             if (ailmentTip != null)
             {
@@ -427,7 +463,7 @@ namespace GN3.UI
                 RenderResultText(string.Join("\n", lines));
             }
 
-            AppendLine($"[{expedition.Quest.Title}] 전투 진행 중...");
+            AppendLine($"{expedition.Quest.Title} — 전투 진행 중...");
 
             int eventCount = Mathf.Max(1, result.Log.Count);
             float delayPerEvent = expedition.Quest.EstimatedDurationSeconds / eventCount;

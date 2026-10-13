@@ -18,6 +18,8 @@ namespace GN3.Save
     /// </summary>
     public static class SaveSystem
     {
+        private static readonly System.Random LegacyRng = new System.Random(); // 레벨제(버전 2 이하) 저장의 나이·생일 정하기
+
         public static string FilePath => Path.Combine(Application.persistentDataPath, "save.json");
 
         public static bool HasSave => File.Exists(FilePath);
@@ -77,15 +79,27 @@ namespace GN3.Save
                     id = merc.Id,
                     name = merc.Name,
                     className = merc.Class != null ? merc.Class.ClassName : "",
-                    grade = (int)merc.Grade,
-                    level = merc.Level,
-                    experience = merc.Experience,
+                    grade = (int)merc.Talent,
+                    age = merc.Age,
+                    birthday = merc.BirthdayIndex,
+                    growthAttack = merc.GrowthAttack,
+                    growthDefense = merc.GrowthDefense,
+                    growthHealth = merc.GrowthHealth,
+                    growthSpeed = merc.GrowthSpeed,
+                    growthProgress = merc.GrowthProgress,
+                    hasMonthBase = true,
+                    monthAttack = merc.MonthBaseAttack,
+                    monthDefense = merc.MonthBaseDefense,
+                    monthSpeed = merc.MonthBaseSpeed,
+                    monthPower = merc.MonthBasePower,
                     personality = (int)merc.Personality,
                     rarePassive = merc.HasRarePassive,
                     health = merc.CurrentHealth,
                     weapon = merc.Weapon != null ? merc.Weapon.Name : "",
                     fatigue = merc.Fatigue,
                     morale = merc.Morale,
+                    researchHours = merc.ResearchHours,
+                    researchBonus = merc.ResearchLevel,
                     bodyCharacter = merc.Appearance.BodyCharacter,
                 };
                 foreach (var pair in merc.Appearance.PartSources)
@@ -111,14 +125,27 @@ namespace GN3.Save
                     difficulty = q.Difficulty,
                     durationDays = q.DurationDays,
                     remainingDays = q.RemainingDays,
+                    outboundDays = (int)System.Math.Ceiling(expedition.OutboundHours / Quest.HoursPerDay),
+                    returning = expedition.IsReturning,
+                    returnDaysLeft = expedition.ReturnDaysLeft,
+                    remainingHours = q.RemainingHours,
+                    outboundHours = expedition.OutboundHours,
+                    returnHoursLeft = expedition.ReturnHoursLeft,
                 };
                 e.memberIds.AddRange(expedition.Members.Where(m => m.IsAlive).Select(m => m.Id));
                 data.expeditions.Add(e);
             }
             data.trainees = TrainingHall.SaveIds();
             data.patients = Hospital.SaveIds();
+            data.bathers = RestVenues.HotSpring.SaveIds();
+            data.gamblers = RestVenues.GamblingDen.SaveIds();
+            data.researchers = RestVenues.MagicLab.SaveIds();
+            data.prayers = RestVenues.Cathedral.SaveIds();
             data.affinities = Affinity.SaveEntries();
             data.questClears = QuestClearHistory.SaveEntries();
+            data.leaving = MercenaryCondition.SaveLeaving();
+            data.storageWeapons = GuildStorage.WeaponNames();
+            data.storageItems = GuildStorage.ItemNames();
             return data;
         }
 
@@ -161,10 +188,27 @@ namespace GN3.Save
                     sources.Add(new KeyValuePair<string, string>(m.partNames[i], m.partSources[i]));
                 var appearance = RandomCharacterComposer.Rebuild(sources, m.bodyCharacter);
 
-                var merc = new Mercenary(m.name, cls, Math.Max(1, m.level), appearance, (Personality)m.personality, m.rarePassive,
+                var merc = new Mercenary(m.name, cls, m.age, m.birthday, appearance, (Personality)m.personality, m.rarePassive,
                     (MercenaryGrade)m.grade, m.id);
                 var weapon = string.IsNullOrEmpty(m.weapon) ? null : WeaponCatalog.All.FirstOrDefault(w => w.Name == m.weapon);
-                merc.RestoreState(m.experience, m.health, weapon);
+                // 성장·수련은 최대 체력을 바꾸므로 체력보다 먼저
+                if (data.version >= 3)
+                    merc.RestoreGrowth(m.age, m.birthday, m.growthAttack, m.growthDefense, m.growthHealth, m.growthSpeed, m.growthProgress);
+                else
+                {
+                    // 레벨제 저장: Lv N = 네 능력치 모두 N-1회 성장(능력치 그대로). 나이·생일은 새로 정한다.
+                    int grown = Math.Max(1, m.level) - 1;
+                    merc.RestoreGrowth(LegacyRng.Next(20, 30), LegacyRng.Next(GN3.World.GameCalendar.DaysPerYear), grown, grown, grown, grown, 0f);
+                }
+                merc.RestoreResearch(m.researchHours, m.researchBonus);
+                merc.RestoreState(m.health, weapon);
+                if (data.version < 4)
+                {
+                    merc.MatchLegacyPower(LegacyRng); // 재능 능력치 배율이 빠진 만큼 성장으로 메운다
+                    merc.SetHealth(m.health);
+                }
+                if (m.hasMonthBase) merc.RestoreMonthBase(m.monthAttack, m.monthDefense, m.monthSpeed, m.monthPower);
+                else merc.SnapshotMonth(); // 예전 저장: 지금 값을 이번 달 기준으로
                 merc.RestoreCondition(m.fatigue, m.morale);
                 if (m.ailments != null)
                     foreach (var ailment in m.ailments)
@@ -189,16 +233,27 @@ namespace GN3.Save
                 var members = e.memberIds.Select(id => mercs.FirstOrDefault(m => m.Id == id)).Where(m => m != null).ToList();
                 if (members.Count == 0) continue;
                 var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays);
-                quest.SetRemainingDays(e.remainingDays);
-                ExpeditionLog.Instance.Restore(new Expedition(quest, members));
+                // 버전 1 저장은 일 단위뿐이라 × 24시간으로 읽는다.
+                bool hours = data.version >= 2;
+                quest.SetRemainingHours(hours ? e.remainingHours : e.remainingDays * Quest.HoursPerDay);
+                var expedition = new Expedition(quest, members);
+                expedition.RestoreState(hours ? e.outboundHours : e.outboundDays * Quest.HoursPerDay, e.returning,
+                    hours ? e.returnHoursLeft : e.returnDaysLeft * Quest.HoursPerDay);
+                ExpeditionLog.Instance.Restore(expedition);
             }
 
             foreach (var merc in mercs)
                 PlayerParty.Instance.RestoreAdd(merc);
             TrainingHall.Restore(data.trainees);
             Hospital.Restore(data.patients);
+            RestVenues.HotSpring.Restore(data.bathers);
+            RestVenues.GamblingDen.Restore(data.gamblers);
+            RestVenues.MagicLab.Restore(data.researchers);
+            RestVenues.Cathedral.Restore(data.prayers);
             Affinity.Restore(data.affinities);
             QuestClearHistory.Restore(data.questClears);
+            MercenaryCondition.RestoreLeaving(data.leaving);
+            GuildStorage.Restore(data.storageWeapons, data.storageItems);
 
             OnLoaded?.Invoke();
             return true;

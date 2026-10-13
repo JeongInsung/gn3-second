@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GN3.UI;
 using UnityEngine;
 
 namespace GN3.World
@@ -66,6 +67,7 @@ namespace GN3.World
         private Sprite[] _butterflyFrames;
         private Rect _view;
         private float _nextFlock;
+        private bool _wasSkipping;
 
         public void Configure(Material lit) => litMaterial = lit;
 
@@ -99,8 +101,26 @@ namespace GN3.World
             _nextFlock = Time.time + Random.Range(2f, birdInterval.x); // 첫 무리는 조금 일찍
         }
 
+        private void OnEnable() => TimeAdvanceController.Midpoint += ScatterButterflies;
+        private void OnDisable() => TimeAdvanceController.Midpoint -= ScatterButterflies;
+
         private void Update()
         {
+            // 하루·4일·일주일 건너뛰기 중: 새·나비를 숨기고(새 무리는 지움), 끝나면 나비를 무작위 꽃에 다시 둔다
+            bool skipping = TimeAdvanceController.IsSkippingDays;
+            if (skipping)
+            {
+                if (!_wasSkipping) HideForSkip();
+                _wasSkipping = true;
+                return;
+            }
+            if (_wasSkipping)
+            {
+                _wasSkipping = false;
+                ScatterButterflies();
+                _nextFlock = Time.time + Random.Range(2f, birdInterval.x);
+            }
+
             float day = 1f - DayNightCycle.NightLightFactor;
 
             if (Time.time >= _nextFlock)
@@ -110,6 +130,31 @@ namespace GN3.World
             }
             UpdateFlocks(day);
             UpdateButterflies(day);
+        }
+
+        private void HideForSkip()
+        {
+            foreach (var flock in _flocks)
+                foreach (var bird in flock.Birds)
+                {
+                    Destroy(bird.Body.gameObject);
+                    Destroy(bird.Shadow.gameObject);
+                }
+            _flocks.Clear();
+            foreach (var butterfly in _butterflies) butterfly.Renderer.enabled = false;
+        }
+
+        /// <summary>시간을 넘긴 뒤(몇 시간 진행의 가장 어두운 순간, 건너뛰기 끝): 나비를 무작위 꽃 위에 다시 둔다.</summary>
+        private void ScatterButterflies()
+        {
+            if (_flowers.Count == 0) return;
+            foreach (var butterfly in _butterflies)
+            {
+                butterfly.Home = _flowers[Random.Range(0, _flowers.Count)];
+                butterfly.NextMove = Time.time + Random.Range(6f, 15f);
+                butterfly.Renderer.transform.position = butterfly.Home;
+                butterfly.Renderer.enabled = !TimeAdvanceController.IsSkippingDays; // 건너뛰기 가운데(Midpoint)에서는 숨긴 채로 자리만
+            }
         }
 
         private void FindFlowers()

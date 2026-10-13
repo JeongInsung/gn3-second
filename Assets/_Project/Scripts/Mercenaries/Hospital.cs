@@ -62,7 +62,7 @@ namespace GN3.Mercenaries
         /// <summary>입원할 수 있는 사람: 살아 있고, 상태이상이 있고, 파견·훈련·입원 중이 아님.</summary>
         public static bool CanAdmit(Mercenary merc) =>
             merc != null && merc.IsAlive && merc.HasAilment && !IsAdmitted(merc)
-            && !ExpeditionLog.Instance.IsOnExpedition(merc) && !TrainingHall.IsTraining(merc);
+            && !ExpeditionLog.Instance.IsOnExpedition(merc) && !TrainingHall.IsTraining(merc) && !RestVenues.IsResting(merc);
 
         /// <summary>지금까지 쌓인 치료비(퇴원할 때 낸다).</summary>
         public static int Fee(Mercenary merc) =>
@@ -83,7 +83,7 @@ namespace GN3.Mercenaries
                 if (_patientIds.Count >= Capacity) break;
                 _patientIds.Add(merc.Id);
                 _admittedHours[merc.Id] = 0f;
-                ToastLog.Show($"{merc.Name}이(가) 병원에 입원했다 ({merc.AilmentSummary()})");
+                DailyLog.Add($"{merc.Name}이(가) 병원에 입원했다 ({merc.AilmentSummary()})."); // 이동 알림은 띄우지 않는다
                 changed = true;
             }
             if (changed) OnChanged?.Invoke();
@@ -133,12 +133,10 @@ namespace GN3.Mercenaries
                 _admittedHours.Remove(merc.Id);
                 if (fee <= 0 || Wallet.TrySpend(fee))
                 {
-                    ToastLog.Show($"{merc.Name}이(가) 퇴원했다 (치료비 -{fee}G)");
                     DailyLog.Add($"{merc.Name}이(가) 병원에서 퇴원했다. 치료비 {fee}G");
                 }
                 else
                 {
-                    ToastLog.Show($"{merc.Name}이(가) 퇴원했다. 골드가 모자라 치료비 {fee}G를 받지 않았다.");
                     DailyLog.Add($"{merc.Name}이(가) 퇴원했다(치료비 {fee}G 미납).");
                 }
             }

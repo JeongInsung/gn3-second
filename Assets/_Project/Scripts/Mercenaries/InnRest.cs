@@ -12,7 +12,7 @@ namespace GN3.Mercenaries
     /// </summary>
     public static class InnRest
     {
-        private const float HealRatio = 0.5f;
+        private const float HealRatio = ConditionTuning.InnHealRatio;
 
         // GameClock.ResetForPlaySession(SubsystemRegistration)이 이벤트를 비운 뒤에 구독한다.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -29,7 +29,6 @@ namespace GN3.Mercenaries
                 healed++;
             }
             if (healed == 0) return;
-            ToastLog.Show($"여관에서 하룻밤 쉬어 체력을 회복했다 ({healed}명)");
             DailyLog.Add($"여관에서 쉬어 {healed}명이 체력을 회복했다.");
         }
     }

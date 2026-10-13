@@ -18,7 +18,8 @@ namespace GN3.World
     /// 9시가 되면 안에 있던 용병이 모두 문에서 차례로 나오고, 자정까지는 아무도 들어가지 않는다.
     /// 자정~아침(어두운 동안)에는 모두 안에서 잔다.
     /// 여관이 없으면 밝을 때 전원이 숨기 전 자리에서 나타난다.
-    /// 친밀도(Affinity)가 높은 용병끼리는 가끔 짝을 지어 같이 걷고, 여관·훈련소에도 같이 드나든다.
+    /// 친밀도(Affinity)가 높은 용병끼리는 가끔 짝을 지어 같이 걷고, 여관·훈련소·쉼터에도 같이 드나든다.
+    /// 피로가 쌓이거나 사기가 떨어진 용병은 가끔 스스로 쉼터(온천·도박장, RestVenues)에 들어가 쉬고 나온다.
     /// MainMenuBootstrapper가 MainScene에서 만든다.
     /// </summary>
     public class VillagePartyPresenter : MonoBehaviour
@@ -47,6 +48,11 @@ namespace GN3.World
         private const float AllOutHour = 9f;              // 이 시각부터 자정까지는 전원 여관 밖
 
         private readonly Dictionary<string, VillageWanderer> _wanderers = new Dictionary<string, VillageWanderer>();
+        // 건물·출구로 걸어 들어가는 중인 인형(이미 _wanderers에서 빠짐). 도착하면 지운다.
+        // 시간을 빨리 넘기면 들어가다 다시 나오는 일이 겹쳐 옛 인형이 쌓였다(일주일 넘기기 한 번에 7명 파티가 66개) → 따로 들고 있다가 정리한다.
+        private readonly HashSet<VillageWanderer> _leaving = new HashSet<VillageWanderer>();
+        private bool _wasAdvancing;
+        private bool _wasSkippingDays;
         private readonly Dictionary<string, Mercenary> _mercById = new Dictionary<string, Mercenary>();
         private readonly System.Random _rng = new System.Random();
         private Rect _area;
@@ -78,8 +84,16 @@ namespace GN3.World
         private const float TrainingRollMax = 120f;
         private const float FirstTrainingRollMin = 30f;
         private const float FirstTrainingRollMax = 90f;
-        private const float TrainingChance = 0.15f;
+        private const float TrainingChance = ConditionTuning.TrainingVisitChance;
         private readonly Dictionary<string, float> _nextTrainingRoll = new Dictionary<string, float>();
+        // 쉼터(온천·도박장): 밖에서 걷는 용병마다 RestRoll초마다 쉼터를 무작위 순서로 하나씩 RestVenue.VisitChance 확률로 굴려 처음 걸린 곳에 간다.
+        private const float RestRollMin = 40f;
+        private const float RestRollMax = 90f;
+        private const float FirstRestRollMin = 20f;
+        private const float FirstRestRollMax = 60f;
+        private readonly Dictionary<RestVenue, (Vector2 door, Vector2 exit)> _venueDoors = new Dictionary<RestVenue, (Vector2, Vector2)>(); // 마을에 그림이 있는 쉼터만
+        private readonly Dictionary<string, RestVenue> _restingIn = new Dictionary<string, RestVenue>(); // 쉼터에 들어간 용병(다 쉬면 그 문에서 나온다)
+        private readonly Dictionary<string, float> _nextRestRoll = new Dictionary<string, float>();
         private const float MarchGap = 0.4f;                          // 파견대가 한 줄로 나가는 간격
         private const float ReturnSpacing = 2f;                       // 귀환대 간격 = MarchGap × 이 값(유닛, 성문 밖에서 한 명씩 더 뒤에서 출발)
         private readonly Dictionary<string, float> _nextDecision = new Dictionary<string, float>();
@@ -136,12 +150,15 @@ namespace GN3.World
             FindInnDoor();
             FindTrainingHallDoor();
             FindHospitalDoor();
+            FindVenueDoors();
+            VillageSkipVisits.SetBuildings(_venueDoors.Keys, _hasTrainingHall); // '진행'으로 건너뛸 때도 같은 건물에만 간다
             _infoPanel = MercenaryInfoPanel.Create(transform);
 
             PlayerParty.Instance.OnChanged += Refresh;
             ExpeditionLog.Instance.OnChanged += Refresh;
             TrainingHall.OnChanged += Refresh;
             Hospital.OnChanged += Refresh;
+            RestVenues.OnAnyChanged += Refresh;
             TimeAdvanceController.Midpoint += ShuffleAfterTimeSkip;
             _subscribed = true;
             Refresh();
@@ -194,6 +211,17 @@ namespace GN3.World
         private void Update()
         {
             if (!_subscribed) return;
+            // 진행·건너뛰기가 막 끝났으면 남은 옛 인형을 한 번 더 정리한다(가운데 Midpoint 뒤에 생긴 것까지)
+            bool advancing = TimeAdvanceController.IsAdvancing;
+            if (_wasAdvancing && !advancing) SweepStrays();
+            // 넘기기가 막 시작됐으면 성문·건물로 걸어가던 인형은 지운다(몇 시간 뒤면 이미 나갔거나 들어갔다)
+            if (!_wasAdvancing && advancing) DropAllLeaving();
+            _wasAdvancing = advancing;
+            // 하루·4일·일주일 건너뛰기: 그동안은 캐릭터를 숨기고, 끝나면 마을 아무 곳에 무작위로 둔다(문·성문에서 나오기 없음)
+            bool skippingDays = TimeAdvanceController.IsSkippingDays;
+            if (skippingDays) HideAllForSkip();
+            else if (_wasSkippingDays) PlaceAllRandomlyAfterSkip();
+            _wasSkippingDays = skippingDays;
             bool hidden = IsBedtime();
             if (hidden != _hidden)
             {
@@ -218,6 +246,7 @@ namespace GN3.World
                 else UpdateInnVisits();
             }
             if (!_hidden && _hasTrainingHall) UpdateTrainingVisits();
+            if (!_hidden && _venueDoors.Count > 0) UpdateVenueVisits();
 
             UpdateHoverAndClick();
             CloseInfoIfGone();
@@ -265,6 +294,19 @@ namespace GN3.World
             _hasHospital = true;
         }
 
+        /// <summary>쉼터(온천·도박장) 그림마다 문(아래쪽, RestVenue.DoorU)과 그 아래 처음 걸을 수 있는 지점을 정한다. 그림이 없는 쉼터는 드나들기 없음.</summary>
+        private void FindVenueDoors()
+        {
+            foreach (var venue in RestVenues.All)
+            {
+                var renderer = VillageProps.FindRenderer(venue.SpritePrefix);
+                if (renderer == null) continue;
+                var bounds = renderer.bounds;
+                var door = new Vector2(Mathf.Lerp(bounds.min.x, bounds.max.x, venue.DoorU), bounds.min.y + bounds.size.y * 0.08f);
+                _venueDoors[venue] = (door, _grid.FirstWalkableBelow(door));
+            }
+        }
+
         /// <summary>9시~자정: 전원 밖. 게임 시계 기준이라 "진행" 전환이 끝나 9시가 된 뒤에 나온다(새벽은 _hidden이 먼저 처리).</summary>
         private static bool IsAllOutTime() => GameClock.CurrentHour >= AllOutHour;
 
@@ -308,7 +350,41 @@ namespace GN3.World
                 if (!TrainingHall.TryAdd(merc, hours)) continue;
                 // 친한 동료가 밖에 있으면 관계 단계의 동행 확률로 같이 훈련하러 간다(정원·피로는 TrainingHall이 거절).
                 if (buddy.merc != null && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && TrainingHall.TryAdd(buddy.merc, hours))
-                    ToastLog.Show($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 훈련하러 간다");
+                    DailyLog.Add($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 훈련했다."); // 이동 알림은 띄우지 않는다(위치는 파티 구성)
+                return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
+            }
+        }
+
+        /// <summary>
+        /// 밖에 나와 걷는 용병이 가끔 스스로 쉼터(온천·도박장)에 간다. 사람마다 결정 시각이 되면 마을에 있는 쉼터를 무작위 순서로
+        /// 하나씩 RestVenue.VisitChance(온천은 피로, 도박장은 낮은 사기·피로 비례) 확률로 굴려 처음 걸린 곳에 등록하고,
+        /// 등록되면 Refresh가 그 문까지 걸어 들어가게 한다. 친한 동료도 그 쉼터에 갈 만하면(VisitChance > 0) 같이 갈 수 있다.
+        /// </summary>
+        private void UpdateVenueVisits()
+        {
+            float now = Time.time;
+            foreach (var pair in _wanderers.ToList())
+            {
+                var wanderer = pair.Value;
+                if (wanderer == null || !wanderer.gameObject.activeSelf || wanderer.IsEntering) continue;
+                if (!_nextRestRoll.TryGetValue(pair.Key, out float at))
+                {
+                    _nextRestRoll[pair.Key] = now + RandomRange(FirstRestRollMin, FirstRestRollMax);
+                    continue;
+                }
+                if (now < at) continue;
+                _nextRestRoll[pair.Key] = now + RandomRange(RestRollMin, RestRollMax);
+                if (!_mercById.TryGetValue(pair.Key, out var merc)) continue;
+
+                var venue = _venueDoors.Keys.OrderBy(_ => _rng.Next())
+                    .FirstOrDefault(v => v.IsOpen && !v.IsFull && _rng.NextDouble() < v.VisitChance(merc));
+                if (venue == null) continue;
+                float hours = RandomRange(venue.MinSessionHours, venue.MaxSessionHours);
+                var buddy = ClosestOutsideFriend(merc, pair.Key); // Refresh가 _wanderers를 바꾸기 전에 고른다
+                if (!venue.TryAdd(merc, hours)) continue;
+                if (buddy.merc != null && venue.VisitChance(buddy.merc) > 0f
+                    && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && venue.TryAdd(buddy.merc, hours))
+                    DailyLog.Add($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 {venue.Name}에 갔다.");
                 return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
             }
         }
@@ -493,7 +569,7 @@ namespace GN3.World
             foreach (var wanderer in party)
             {
                 if (wanderer == null) continue;
-                if (_hidden)
+                if (_hidden || TimeAdvanceController.IsAdvancing) // 자는 시간이거나 넘기는 중: 걷지 않고 바로
                 {
                     Destroy(wanderer.gameObject);
                     continue;
@@ -505,8 +581,9 @@ namespace GN3.World
                 }
                 var leaving = wanderer;
                 var gate = CastleGate.Expedition;
+                _leaving.Add(leaving);
                 // 성문이 있으면 출구를 지나 성문으로 성벽 밖까지 걸어 나간다(가까이 가면 성문이 열린다).
-                wanderer.WalkAndVanish(_villageExit, () => { if (leaving != null) Destroy(leaving.gameObject); },
+                wanderer.WalkAndVanish(_villageExit, () => { _leaving.Remove(leaving); if (leaving != null) Destroy(leaving.gameObject); },
                     gate != null ? gate.OutwardSteps : null);
                 if (gate != null) gate.Pass(wanderer.transform);
                 yield return new WaitForSeconds(MarchGap);
@@ -525,6 +602,9 @@ namespace GN3.World
             {
                 bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
                 if (!overUI) target = VillageWanderer.Pick(cam.ScreenToWorldPoint(mouse.position.ReadValue()));
+                // 건물로 들어가는 중인(등록 안 된) 인형은 고르지 않는다 — 눌러도 창이 안 열리고 뒤의 진짜 인형을 가렸다
+                if (target != null && (target.OwnerId == null || !_wanderers.TryGetValue(target.OwnerId, out var registered) || registered != target))
+                    target = null;
             }
 
             if (target != _hovered)
@@ -568,7 +648,9 @@ namespace GN3.World
             ExpeditionLog.Instance.OnChanged -= Refresh;
             TrainingHall.OnChanged -= Refresh;
             Hospital.OnChanged -= Refresh;
+            RestVenues.OnAnyChanged -= Refresh;
             TimeAdvanceController.Midpoint -= ShuffleAfterTimeSkip;
+            VillageSkipVisits.SetBuildings(null, false);
         }
 
         /// <summary>
@@ -577,6 +659,8 @@ namespace GN3.World
         /// </summary>
         private void ShuffleAfterTimeSkip()
         {
+            SweepStrays();
+            if (TimeAdvanceController.IsSkippingDays) return; // 날짜 건너뛰기는 끝날 때 한 번에 무작위 배치(PlaceAllRandomlyAfterSkip)
             if (_hidden || _grid == null) return;
             float now = Time.time;
             foreach (var pair in _wanderers)
@@ -598,10 +682,81 @@ namespace GN3.World
             }
         }
 
+        /// <summary>
+        /// 건물·출구로 들어가게 한다(도착하면 지움). 시간을 넘기는 중이거나 안 보이는 인형이면 걷지 않고 바로 지운다
+        /// (빨리 넘기면 들어가다 나오기가 겹쳐 옛 인형이 쌓였다).
+        /// </summary>
+        private void SendInto(VillageWanderer wanderer, Vector2 exit, Vector2 door)
+        {
+            if (TimeAdvanceController.IsAdvancing || !wanderer.gameObject.activeSelf)
+            {
+                Destroy(wanderer.gameObject);
+                return;
+            }
+            _leaving.Add(wanderer);
+            wanderer.ReturnInto(exit, door, () => { _leaving.Remove(wanderer); if (wanderer != null) Destroy(wanderer.gameObject); });
+        }
+
+        /// <summary>날짜 건너뛰기 중: 모든 캐릭터를 숨기고 걸어 들어가던 인형은 지운다.</summary>
+        private void HideAllForSkip()
+        {
+            DropAllLeaving();
+            foreach (var w in _wanderers.Values)
+                if (w != null && w.gameObject.activeSelf) w.gameObject.SetActive(false);
+        }
+
+        /// <summary>날짜 건너뛰기가 끝난 순간: 마을에 있는 캐릭터를 모두 무작위 자리에 둔다(밤이 아니면 여관 시간이어도 밖에).</summary>
+        private void PlaceAllRandomlyAfterSkip()
+        {
+            SweepStrays();
+            if (_grid == null) return;
+            float now = Time.time;
+            foreach (var pair in _wanderers.ToList())
+            {
+                var wanderer = pair.Value;
+                if (wanderer == null) continue;
+                Dissolve(pair.Key);
+                wanderer.gameObject.SetActive(!_hidden);
+                wanderer.PlaceAt(_grid.RandomWalkablePoint(_rng));
+                _nextDecision[pair.Key] = now + RandomRange(OutsideWanderMin, OutsideWanderMax);
+            }
+            _trainingIds.Clear();
+            _hospitalIds.Clear();
+            _restingIn.Clear();
+            _awayIds.Clear();
+        }
+
+        /// <summary>걸어 나가는·들어가는 중인 인형(_leaving)을 모두 지운다.</summary>
+        private void DropAllLeaving()
+        {
+            foreach (var w in _leaving.ToList())
+                if (w != null) Destroy(w.gameObject);
+            _leaving.Clear();
+        }
+
+        /// <summary>이 용병의 들어가는·나가는 중인 옛 인형을 지운다.</summary>
+        private void DropLeaving(string mercId)
+        {
+            foreach (var w in _leaving.Where(w => w == null || w.OwnerId == mercId).ToList())
+            {
+                _leaving.Remove(w);
+                if (w != null) Destroy(w.gameObject);
+            }
+        }
+
+        /// <summary>등록(_wanderers)도 안 되고 걸어 나가는 중(_leaving)도 아닌 인형을 모두 지운다(시간 넘기기 뒤 안전망).</summary>
+        private void SweepStrays()
+        {
+            _leaving.RemoveWhere(w => w == null);
+            var keep = new HashSet<VillageWanderer>(_wanderers.Values);
+            foreach (var w in FindObjectsByType<VillageWanderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (!keep.Contains(w) && !_leaving.Contains(w)) Destroy(w.gameObject);
+        }
+
         private void Refresh()
         {
             var present = PlayerParty.Instance.Members
-                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m) && !Hospital.IsAdmitted(m))
+                .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m) && !Hospital.IsAdmitted(m) && !RestVenues.IsResting(m))
                 .ToList();
 
             var departing = new List<VillageWanderer>();
@@ -624,10 +779,8 @@ namespace GN3.World
                     if (wanderer != null)
                     {
                         var entering = wanderer;
-                        if (_hasTrainingHall && entering.gameObject.activeSelf)
-                            entering.ReturnInto(_trainingExit, _trainingDoor, () => { if (entering != null) Destroy(entering.gameObject); });
-                        else
-                            Destroy(entering.gameObject);
+                        if (_hasTrainingHall) SendInto(entering, _trainingExit, _trainingDoor);
+                        else Destroy(entering.gameObject);
                     }
                 }
                 else if (merc != null && merc.IsAlive && Hospital.IsAdmitted(merc))
@@ -637,10 +790,19 @@ namespace GN3.World
                     if (wanderer != null)
                     {
                         var entering = wanderer;
-                        if (_hasHospital && entering.gameObject.activeSelf)
-                            entering.ReturnInto(_hospitalExit, _hospitalDoor, () => { if (entering != null) Destroy(entering.gameObject); });
-                        else
-                            Destroy(entering.gameObject);
+                        if (_hasHospital) SendInto(entering, _hospitalExit, _hospitalDoor);
+                        else Destroy(entering.gameObject);
+                    }
+                }
+                else if (merc != null && merc.IsAlive && RestVenues.Find(merc) is RestVenue venue)
+                {
+                    // 쉼터(온천·도박장): 밖에 나와 있으면 그 문으로 걸어 들어가 사라진다.
+                    _restingIn[id] = venue;
+                    if (wanderer != null)
+                    {
+                        var entering = wanderer;
+                        if (_venueDoors.TryGetValue(venue, out var doors)) SendInto(entering, doors.exit, doors.door);
+                        else Destroy(entering.gameObject);
                     }
                 }
                 else if (wanderer != null)
@@ -652,11 +814,15 @@ namespace GN3.World
                 _mercById.Remove(id);
                 _nextDecision.Remove(id);
                 _nextCompanionRoll.Remove(id);
+                _nextRestRoll.Remove(id);
+            }
+            if (departing.Count > 0 && TimeAdvanceController.IsAdvancing)
+            {
+                foreach (var w in departing) Destroy(w.gameObject); // 넘기는 중: 걸어 나가는 연출 없이 바로
+                departing.Clear();
             }
             if (departing.Count > 0)
             {
-                ToastLog.Show($"파견대 출발: {string.Join(", ", departing.Select(w => w.gameObject.name.Replace("Wanderer_", "")))}"
-                              + (departingQuest != null ? $" → {departingQuest}" : ""));
                 StartCoroutine(MarchOut(departing));
             }
 
@@ -664,6 +830,7 @@ namespace GN3.World
             foreach (var merc in present)
             {
                 if (_wanderers.ContainsKey(merc.Id)) continue;
+                DropLeaving(merc.Id); // 아직 들어가던 옛 인형이 있으면 지운다(같은 사람이 둘 보이지 않게)
 
                 var go = new GameObject($"Wanderer_{merc.Name}");
                 go.transform.position = _grid.RandomWalkablePoint(_rng);
@@ -672,7 +839,16 @@ namespace GN3.World
                 wanderer.OwnerId = merc.Id;
                 _mercById[merc.Id] = merc;
                 // 여관이 있으면 새로 온 용병은 여관 안에서 시작해 곧 무작위로 나온다.
-                if (_trainingIds.Remove(merc.Id) && _hasTrainingHall && !_hidden)
+                if (TimeAdvanceController.IsSkippingDays)
+                {
+                    // 날짜 건너뛰기 중: 숨겨 두었다가 끝날 때 무작위 자리에 둔다
+                    _trainingIds.Remove(merc.Id);
+                    _hospitalIds.Remove(merc.Id);
+                    _restingIn.Remove(merc.Id);
+                    _awayIds.Remove(merc.Id);
+                    go.SetActive(false);
+                }
+                else if (_trainingIds.Remove(merc.Id) && _hasTrainingHall && !_hidden)
                 {
                     // 훈련을 마친 용병: 훈련소 문에서 걸어 나온다.
                     go.SetActive(true);
@@ -684,6 +860,13 @@ namespace GN3.World
                     // 퇴원한 용병: 병원 문에서 걸어 나온다.
                     go.SetActive(true);
                     wanderer.ExitBuilding(_hospitalDoor, _hospitalExit);
+                    _nextDecision[merc.Id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
+                }
+                else if (_restingIn.Remove(merc.Id, out var leftVenue) && _venueDoors.TryGetValue(leftVenue, out var leftDoors) && !_hidden)
+                {
+                    // 쉼터에서 다 쉰 용병: 들어간 문에서 걸어 나온다.
+                    go.SetActive(true);
+                    wanderer.ExitBuilding(leftDoors.door, leftDoors.exit);
                     _nextDecision[merc.Id] = Time.time + RandomRange(OutsideWanderMin, OutsideWanderMax);
                 }
                 else if (_awayIds.Remove(merc.Id) && !_hidden)

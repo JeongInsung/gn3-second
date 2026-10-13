@@ -68,8 +68,10 @@ namespace GN3.UI
             ConnectBuildings(canvas.transform, partyPanel, questPanel);
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
+            new GameObject("GuildStorageUI", typeof(GuildStorageUI)); // 길드 창 "창고" → 건물 패널에 창고 목록
             new GameObject("TrainingHallUI", typeof(TrainingHallUI)); // 훈련소 패널에 훈련 중·맡길 용병 목록
             new GameObject("HospitalUI", typeof(HospitalUI));         // 병원 패널에 입원 환자·대기 환자 목록
+            new GameObject("RestVenueUI", typeof(RestVenueUI));       // 온천·도박장 패널에 쉬는 중인 용병 목록
             QuestInfoPanel.Create();                              // 퀘스트 줄 클릭 → 상세 창
             GuildPanel.Create();                                  // 길드 건물·길드 글자 클릭 → 티어·수용 인원 창
             RelationsPanel.Create();                              // 오른쪽 아래 "관계" 버튼 → 용병 친밀도 창
@@ -139,7 +141,13 @@ namespace GN3.UI
             var board = VillageProps.FindRenderer(QuestBoardSpritePrefix);
             if (board != null) VillageProps.EnsureClickable(board);
             var guildHall = VillageProps.FindRenderer(GuildHallSpritePrefix);
-            if (guildHall != null) VillageProps.EnsureClickable(guildHall);
+            SelectableBuilding guildBuilding = null;
+            if (guildHall != null)
+            {
+                // 클릭은 길드 창, 길드 창의 "창고" 버튼이 이 건물로 건물 패널을 연다(GuildStorageUI가 "창고" 이름을 보고 채운다)
+                guildBuilding = VillageProps.EnsureClickable(guildHall);
+                guildBuilding.SetInfo("길드 창고", "용병의 무기와 사 둔 약을 보관합니다. 길드 등급이 오르면 칸이 늘어납니다.");
+            }
             var blacksmith = VillageProps.FindRenderer(BlacksmithSpritePrefix);
             if (blacksmith != null)
             {
@@ -164,6 +172,13 @@ namespace GN3.UI
                 Hospital.AdmitWaiting();
             }
 
+            // 쉼터(찻집 → 온천, 주사위 간판 도박장 → 도박장, 마법사 연구소 → 마법 연구소, 성당 → 성당) → 건물 패널(RestVenueUI가 쉼터 이름을 보고 목록을 채운다)
+            foreach (var venue in RestVenues.All)
+            {
+                var renderer = VillageProps.FindRenderer(venue.SpritePrefix);
+                if (renderer != null) VillageProps.EnsureClickable(renderer).SetInfo(venue.Name, venue.Description);
+            }
+
             var buildingPanel = BuildingPanel.Create(canvasTransform);
             foreach (var building in Object.FindObjectsByType<SelectableBuilding>(FindObjectsSortMode.None))
             {
@@ -172,26 +187,40 @@ namespace GN3.UI
                 else if (VillageProps.IsProp(building, GuildHallSpritePrefix)) building.onClicked.AddListener(_ => GuildPanel.ShowGlobal());
                 else building.onClicked.AddListener(buildingPanel.Open);
             }
+            if (guildBuilding != null) GuildPanel.SetStorageOpener(() => buildingPanel.Open(guildBuilding));
+            else GuildPanel.SetStorageOpener(null);
         }
 
         /// <summary>일차·시각 표시 + 오른쪽 위 "진행" 버튼(AdvanceButton, 우클릭 → 며칠 진행). 누르면 GameClock을 3시간 진행시키고 마을 낮/밤도 함께 흐른다
         /// (TimeAdvanceController). 자정을 넘으면 하루가 지나 진행 중인 파견들의 남은 일수가 줄어든다(ExpeditionLog).
         /// MarketPanel/PartyPanel/QuestPanel은 전부 화면 우측에 붙어 있어서(우상단 anchor),
-        /// 패널 안쪽 버튼(예: PartyUI의 파견 시작 버튼)과 겹치지 않도록 좌상단 메뉴 버튼바 바로 아래에 둔다.</summary>
+        /// 패널 안쪽 버튼(예: PartyUI의 파견 시작 버튼)과 겹치지 않도록 좌상단 메뉴 버튼바의 [퀘스트] 버튼 오른쪽, 같은 줄에 둔다.</summary>
         private static void CreateDayControls(Transform canvasTransform)
         {
-            var barGO = new GameObject("DayControlBar", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(TimeAdvanceController));
+            var barGO = new GameObject("DayControlBar", typeof(RectTransform), typeof(Image), typeof(ContentSizeFitter),
+                typeof(HorizontalLayoutGroup), typeof(TimeAdvanceController));
             barGO.transform.SetParent(canvasTransform, false);
+
+            // 다른 창과 같은 숯빛 판(청동 테두리)으로 글씨 줄을 감싼다. 판은 클릭을 막지 않는다(툴팁·길드 클릭은 글씨가 받는다).
+            var background = barGO.GetComponent<Image>();
+            background.sprite = UITheme.Panel;
+            background.type = Image.Type.Sliced;
+            background.raycastTarget = false;
+            var fitter = barGO.GetComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             var rect = barGO.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(16f, -64f);
+            float menuBarWidth = MenuButtonCount * MenuButtonWidth + (MenuButtonCount - 1) * MenuSpacing;
+            rect.anchoredPosition = new Vector2(MenuBarMargin + menuBarWidth + MenuBarMargin, -MenuBarMargin);
 
             var layout = barGO.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 8f;
-            layout.childAlignment = TextAnchor.MiddleLeft;
+            layout.spacing = 16f; // 칸 폭은 글씨에 딱 맞추고(최소 폭 없음) 칸 사이만 띄운다. 글씨가 길어지면 판도 같이 늘어난다
+            layout.padding = new RectOffset(14, 14, 0, 0); // 위아래 0 → 판 높이 40 = 메뉴 버튼 높이
+            layout.childAlignment = TextAnchor.UpperLeft; // 메뉴 버튼(높이 40, 위 맞춤)과 같은 줄에 오도록 위로 붙인다
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
             layout.childControlWidth = true;
@@ -201,7 +230,6 @@ namespace GN3.UI
             var dayTextGO = new GameObject("DayText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(TooltipTrigger));
             dayTextGO.transform.SetParent(barGO.transform, false);
             var dayTextLayout = dayTextGO.GetComponent<LayoutElement>();
-            dayTextLayout.minWidth = 430f;
             dayTextLayout.minHeight = 40f;
             var dayText = dayTextGO.GetComponent<Text>();
             dayText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -316,7 +344,6 @@ namespace GN3.UI
             var go = new GameObject("GoldText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(Shadow));
             go.transform.SetParent(group.transform, false);
             var layout = go.GetComponent<LayoutElement>();
-            layout.minWidth = 80f;
             layout.minHeight = 40f;
             var text = go.GetComponent<Text>();
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -343,7 +370,6 @@ namespace GN3.UI
             var go = new GameObject("GuildText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(Shadow), typeof(TooltipTrigger), typeof(Button));
             go.transform.SetParent(parent, false);
             var layout = go.GetComponent<LayoutElement>();
-            layout.minWidth = 190f;
             layout.minHeight = 40f;
             var text = go.GetComponent<Text>();
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -377,6 +403,13 @@ namespace GN3.UI
             if (text != null) text.color = UITheme.TitleText;
         }
 
+        // 좌상단 메뉴 버튼바. 날짜·골드·명성 줄(DayControlBar)이 이 값으로 [퀘스트] 버튼 오른쪽 자리를 계산한다.
+        private const float MenuBarMargin = 16f;
+        private const float MenuButtonWidth = 120f;
+        private const float MenuButtonHeight = 40f;
+        private const float MenuSpacing = 8f;
+        private const int MenuButtonCount = 3;
+
         private static void CreateMenuBar(Transform canvasTransform, GameObject marketPanel, GameObject partyPanel, GameObject questPanel)
         {
             var barGO = new GameObject("MenuButtonBar", typeof(RectTransform), typeof(HorizontalLayoutGroup));
@@ -386,10 +419,10 @@ namespace GN3.UI
             rect.anchorMin = new Vector2(0f, 1f);
             rect.anchorMax = new Vector2(0f, 1f);
             rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = new Vector2(16f, -16f);
+            rect.anchoredPosition = new Vector2(MenuBarMargin, -MenuBarMargin);
 
             var layout = barGO.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 8f;
+            layout.spacing = MenuSpacing;
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
             layout.childControlWidth = true;
@@ -410,8 +443,8 @@ namespace GN3.UI
             buttonGO.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.25f, 0.9f);
 
             var layoutElement = buttonGO.GetComponent<LayoutElement>();
-            layoutElement.minWidth = 120f;
-            layoutElement.minHeight = 40f;
+            layoutElement.minWidth = MenuButtonWidth;
+            layoutElement.minHeight = MenuButtonHeight;
 
             CreateFillText(buttonGO.transform, label, 18);
             buttonGO.GetComponent<Button>().onClick.AddListener(onClick);

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -68,6 +69,13 @@ namespace GN3.EditorTools
             {
                 string candidate = folder + name + ".png";
                 if (File.Exists(candidate)) return candidate;
+            }
+            // 하위 폴더(Buildings/뒷골목 등)에 있는 원본. 바로 아래에서 못 찾으면 그 안까지 찾는다.
+            foreach (var folder in SourceFolders)
+            {
+                if (!Directory.Exists(folder)) continue;
+                string found = Directory.GetFiles(folder, name + ".png", SearchOption.AllDirectories).FirstOrDefault();
+                if (found != null) return found.Replace('\\', '/');
             }
             return null;
         }

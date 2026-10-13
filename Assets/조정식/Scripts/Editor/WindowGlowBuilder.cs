@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using GN3.World;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -37,7 +38,10 @@ namespace GN3.EditorTools
             Build();
         }
 
-        public static void Build()
+        public static void Build() => Build(null);
+
+        /// <summary>only가 있으면 그 건물들만 만든다(새로 옮겨 온 건물만 — 다른 건물 불빛을 지우고 다시 만들지 않는다).</summary>
+        public static void Build(ICollection<SpriteRenderer> only)
         {
             var rects = EnsureRects();
             var material = EnsureMaterial();
@@ -48,9 +52,11 @@ namespace GN3.EditorTools
             var log = new List<string>();
             // 처리 중에 기존 WindowGlow 자식을 지우고 다시 만들므로, 대상 건물을 먼저 모아 둔 뒤 처리한다
             // (모으면서 바로 처리하면 지워진 렌더러를 다시 건드려 MissingReferenceException이 났다).
+            // only가 있으면 그 렌더러만(씬 밖, 예: 열어 둔 프리팹 안의 건물이어도 된다), 없으면 지금 씬 전체.
+            var candidates = only ?? SceneManager.GetActiveScene().GetRootGameObjects()
+                .SelectMany(root => root.GetComponentsInChildren<SpriteRenderer>(true)).ToList();
             var targets = new List<(SpriteRenderer renderer, string key)>();
-            foreach (var root in SceneManager.GetActiveScene().GetRootGameObjects())
-            foreach (var candidate in root.GetComponentsInChildren<SpriteRenderer>(true))
+            foreach (var candidate in candidates)
             {
                 // 그림자(같은 건물 그림을 씀)와 창 불빛 자신은 건너뛴다.
                 if (candidate.GetComponent<ProjectedShadow>() != null || candidate.GetComponent<WindowGlow>() != null) continue;
@@ -81,8 +87,25 @@ namespace GN3.EditorTools
                 built++;
             }
 
-            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            if (only == null) EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
             Debug.Log($"[WindowGlow] 건물 {built}채에 창문 불빛을 만들었습니다.\n" + string.Join("\n", log));
+        }
+
+        /// <summary>
+        /// 창 불빛을 다시 만들어야 하는 건물인지: WindowRects에 창이 있는데 불빛 자식이 없거나, 불빛 마스크 크기가 건물 그림과 다르다
+        /// (건물만 다시 구워 크기·scale이 바뀌면 옛 마스크가 커져 창 밖으로 떠 보인다). 그림자·불빛 자신과 애니메이션 조각은 대상이 아니다.
+        /// </summary>
+        public static bool NeedsRebuild(SpriteRenderer building)
+        {
+            if (building.sprite == null || building.GetComponent<ProjectedShadow>() != null || building.GetComponent<WindowGlow>() != null) return false;
+            if (PixelBaker.FindSourcePath(building.sprite) == null) return false;
+            string key = BuildingKey(building.sprite);
+            var entry = key != null ? EnsureRects().Find(key) : null;
+            if (entry == null || entry.windows.Count == 0) return false;
+            var glow = building.transform.Find(GlowChildName);
+            var glowRenderer = glow != null ? glow.GetComponent<SpriteRenderer>() : null;
+            if (glowRenderer == null || glowRenderer.sprite == null) return true;
+            return glowRenderer.sprite.rect.size != building.sprite.rect.size;
         }
 
         /// <summary>
@@ -125,7 +148,7 @@ namespace GN3.EditorTools
                 for (int x = Mathf.Max(0, x0); x < Mathf.Min(width, x1); x++)
                 {
                     int p = y * width + x;
-                    if (!(forge ? IsFire(pixels[p]) : IsGlass(pixels[p]))) continue;
+                    if (!(forge ? IsFire(pixels[p]) : IsGlass(pixels[p], entry.warmGlass))) continue;
                     mask[p] = Color.white;
                     glassPixels++;
                 }
@@ -137,14 +160,23 @@ namespace GN3.EditorTools
             return result;
         }
 
-        /// <summary>꺼진 창의 어두운 남색·회색 유리, 또는 원래 주황빛 불이 그려진 유리.</summary>
-        private static bool IsGlass(Color c)
+        /// <summary>
+        /// 꺼진 창의 어두운 남색·회색 유리, 또는 원래 주황빛 불이 그려진 유리.
+        /// warmGlass(건물별 설정)면 붉은 유리(뒷골목 건물의 붉은 격자·커튼 창)와 아주 어두운 갈색 유리
+        /// (낡은 마을 건물: 어두운 안쪽에 주황 창살 — 창살은 밝아서 빠지고 사이 유리만 남는다)도 넣는다.
+        /// 기존 건물은 이 규칙을 켜면 창틀까지 빛나 넓어지므로 건물별로만 켠다.
+        /// </summary>
+        private static bool IsGlass(Color c, bool warmGlass)
         {
             if (c.a < 0.5f) return false;
             float luma = 0.299f * c.r + 0.587f * c.g + 0.114f * c.b;
             bool darkCoolGlass = luma < 0.42f && c.b >= c.r * 0.85f;          // 나무(빨강 > 파랑)는 빠진다
             bool litAmberGlass = c.r > 0.7f && c.g > 0.35f && c.b < 0.45f && luma > 0.45f;
-            return darkCoolGlass || litAmberGlass;
+            if (darkCoolGlass || litAmberGlass) return true;
+            if (!warmGlass) return false;
+            bool redGlass = c.r > 0.55f && c.g < 0.3f && c.b < 0.3f;
+            bool darkWarmGlass = luma < 0.2f;
+            return redGlass || darkWarmGlass;
         }
 
         /// <summary>화덕 불꽃: 주황·노랑·흰 노랑 심지(빨강이 파랑보다 확실히 크고 밝다). 검은 석탄·벽돌은 빠진다.</summary>

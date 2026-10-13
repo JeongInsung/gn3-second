@@ -21,11 +21,18 @@ namespace GN3.UI
         private const float WhenWidth = 170f;
         private const int MaxRows = 150;
 
-        private enum Tab { All, Important, Arrival, Quest, Report, Notice }
+        private static readonly Color ReadRowTint = new Color(0.45f, 0.45f, 0.45f, 0.85f); // 읽은 편지 줄 배경(테마 그림에 곱함)
+        private static readonly Color ReadTitleColor = UITheme.MutedText;
+        private static readonly Color ReadWhenColor = new Color(UITheme.MutedText.r, UITheme.MutedText.g, UITheme.MutedText.b, 0.6f);
+        // 읽은 편지 줄(배경·제목·날짜). 테마(UIThemeApplier)가 버튼 줄의 배경·글자색을 덮어쓰므로 그 뒤에 다시 칠한다.
+        private readonly List<(Image Background, Text Title, Text When)> _readRows = new List<(Image, Text, Text)>();
+        private const float TabWidth = 110f;
+        private const float TabSpacing = 6f;
+
+        private enum Tab { All, Important }
         private static readonly (Tab Tab, string Label)[] Tabs =
         {
-            (Tab.All, "전체"), (Tab.Important, "중요"), (Tab.Arrival, "도착"),
-            (Tab.Quest, "퀘스트"), (Tab.Report, "보고"), (Tab.Notice, "알림"),
+            (Tab.All, "전체"), (Tab.Important, "중요"),
         };
 
         private static MailboxPanel _instance;
@@ -118,10 +125,6 @@ namespace GN3.UI
         private static bool InTab(Mailbox.Mail mail, Tab tab) => tab switch
         {
             Tab.Important => mail.Important,
-            Tab.Arrival => mail.IsPendingChoice,
-            Tab.Quest => mail.Kind == MailKind.QuestResult,
-            Tab.Report => mail.Kind == MailKind.Report,
-            Tab.Notice => mail.Kind == MailKind.Notice,
             _ => true,
         };
 
@@ -131,9 +134,7 @@ namespace GN3.UI
             for (int i = 0; i < Tabs.Length; i++)
             {
                 var (tab, label) = Tabs[i];
-                int count = tab == Tab.Arrival ? Mailbox.PendingChoiceCount : 0;
-                string text = count > 0 ? $"{label} {count}" : label;
-                _tabLabels[i].text = tab == _tab ? $"● {text}" : text;
+                _tabLabels[i].text = tab == _tab ? $"● {label}" : label;
             }
 
             // 목록: 최신이 위. Destroy는 프레임 끝이라 먼저 떼어 낸다.
@@ -146,6 +147,7 @@ namespace GN3.UI
             }
             if (_selected != null && !Mailbox.All.Contains(_selected)) _selected = null;
 
+            _readRows.Clear();
             var mails = Mailbox.All.Where(m => InTab(m, _tab)).Reverse().Take(MaxRows).ToList();
             if (mails.Count == 0) CreateEmptyRow();
             RectTransform selectedRow = null;
@@ -158,6 +160,13 @@ namespace GN3.UI
             }
             LayoutRebuilder.ForceRebuildLayoutImmediate(_list);
             UIThemeApplier.ApplyNow(_list);
+            // 테마가 줄 배경(진홍 버튼 그림, 흰색)·글자색(밝은 본문색)을 칠한 뒤라야 덮어쓸 수 있다. 버튼 하이라이트는 따로 곱해져 남는다.
+            foreach (var (background, title, when) in _readRows)
+            {
+                if (background != null) background.color = ReadRowTint;
+                if (title != null) title.color = ReadTitleColor;
+                if (when != null) when.color = ReadWhenColor;
+            }
 
             if (_scrollToSelected && selectedRow != null) ScrollTo(selectedRow);
             _scrollToSelected = false;
@@ -197,9 +206,10 @@ namespace GN3.UI
             go.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.24f, 0.9f);
             go.GetComponent<Button>().onClick.AddListener(() => ToggleExpand(mail));
 
+            // 읽은 편지는 줄 전체를 흐리게(배경·글자색은 Refresh에서 테마를 입힌 뒤 칠한다), 안 읽은 편지는 밝게·굵게·● 표시.
             string arrow = mail == _selected ? "▼ " : "▶ ";
             string mark = mail.Read ? "" : "● ";
-            string tag = Mailbox.Colored($"[{Mailbox.KindTag(mail.Kind)}]", Mailbox.KindColor(mail.Kind));
+            string tag = Mailbox.Colored($"[{Mailbox.KindTag(mail.Kind)}]", mail.Read ? UITheme.MutedText : Mailbox.KindColor(mail.Kind));
             string title = mail.Read ? mail.ShortTitle : $"<b>{mail.ShortTitle}</b>";
             string pending = mail.IsPendingChoice ? " " + Mailbox.Colored("선택 대기", new Color(1f, 0.6f, 0.2f)) : "";
             var text = CreateText(go.transform, $"{arrow}{mark}{tag} {title}{pending}", 14, TextAnchor.MiddleLeft, UITheme.BodyText);
@@ -211,6 +221,7 @@ namespace GN3.UI
             text.rectTransform.offsetMax = new Vector2(-(WhenWidth + 10f), 0f);
 
             var when = CreateText(go.transform, Mailbox.FormatWhen(mail), 13, TextAnchor.MiddleRight, UITheme.MutedText);
+            if (mail.Read) _readRows.Add((go.GetComponent<Image>(), text, when));
             when.horizontalOverflow = HorizontalWrapMode.Overflow;
             var whenRect = when.rectTransform;
             whenRect.anchorMin = new Vector2(1f, 0f);
@@ -276,12 +287,11 @@ namespace GN3.UI
             CreateButton(_panel.transform, "닫기", Hide, new Vector2(Width - 118f, -14f), new Vector2(100f, 32f));
 
             // 탭
-            float tabWidth = (Width - 40f - 5 * 6f) / Tabs.Length;
             for (int i = 0; i < Tabs.Length; i++)
             {
                 var tab = Tabs[i].Tab;
                 var label = CreateButton(_panel.transform, Tabs[i].Label, () => SetTab(tab),
-                    new Vector2(20f + i * (tabWidth + 6f), -56f), new Vector2(tabWidth, 30f));
+                    new Vector2(20f + i * (TabWidth + TabSpacing), -56f), new Vector2(TabWidth, 30f));
                 _tabLabels.Add(label);
             }
 

@@ -90,6 +90,22 @@ namespace GN3.UI
                 $"최대 파견 인원: {q.MaxDispatchSize}명\n\n" +
                 $"<color=#f0a54a>보상 {Pricing.QuestReward(q)}G</color>";
             _acceptButton.interactable = !_accepted && _onAccept != null;
+            LayoutBody();
+        }
+
+        /// <summary>제목·본문이 길면 잘리지 않게 본문을 내리고 창을 아래로 늘린다(최소 Height, 수락 버튼은 창 아래에 붙어 따라 내려간다).</summary>
+        private void LayoutBody()
+        {
+            var titleRect = _title.rectTransform;
+            float titleHeight = Mathf.Max(52f, _title.preferredHeight);
+            titleRect.sizeDelta = new Vector2(titleRect.sizeDelta.x, titleHeight);
+            float bodyTop = -16f - titleHeight - 10f;
+            var bodyRect = _body.rectTransform;
+            bodyRect.anchoredPosition = new Vector2(bodyRect.anchoredPosition.x, bodyTop);
+            float bodyHeight = Mathf.Max(Height - 150f, _body.preferredHeight);
+            bodyRect.sizeDelta = new Vector2(bodyRect.sizeDelta.x, bodyHeight);
+            var panelRect = (RectTransform)_panel.transform;
+            panelRect.sizeDelta = new Vector2(Width, Mathf.Max(Height, -(bodyTop - bodyHeight) + 72f));
         }
 
         private void Accept()
@@ -143,7 +159,7 @@ namespace GN3.UI
             closeRect.sizeDelta = new Vector2(28f, 28f);
             close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
             close.GetComponent<Button>().onClick.AddListener(Hide);
-            EscapeCloser.Register(_panel, Hide);
+            EscapeCloser.Register(_panel, Hide, WindowRole.Linked); // 게시판 줄을 눌러 여는 창: 퀘스트 창을 닫지 않는다
             FillLabel(close.transform, "X", 16);
 
             _panel.SetActive(false);
@@ -164,7 +180,7 @@ namespace GN3.UI
             text.color = UITheme.BodyText;
             text.alignment = TextAnchor.UpperLeft;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.verticalOverflow = VerticalWrapMode.Overflow; // 길면 LayoutBody가 칸과 창을 늘린다
             text.raycastTarget = false;
             return text;
         }

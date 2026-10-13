@@ -35,7 +35,7 @@ namespace GN3.Quests
 
         /// <summary>
         /// 전투 결과를 반영하고 파견을 끝낸다: 체력 반영(0이면 전사 → 파티에서 제거), 승리 시 보상, 알림·하루 보고서 기록,
-        /// ExpeditionLog.Complete(살아남은 용병은 마을 출구에서 걸어 들어온다). 한 줄 요약을 돌려준다.
+        /// 귀환 시작(ExpeditionLog.BeginReturn — 귀환 일수가 지나면 살아남은 용병이 마을 출구에서 걸어 들어온다). 한 줄 요약을 돌려준다.
         /// 우편함에 퀘스트 결과 편지(중요 → 게임을 멈추고 알림창)를 남기고 도착 편지를 처리 완료로 바꾼다.
         /// alertShown: 이미 결과 화면을 보여 준 곳(직접 진행 전투 씬·파티 패널 로그 재생)은 true — 알림창을 다시 띄우지 않는다.
         /// </summary>
@@ -63,28 +63,25 @@ namespace GN3.Quests
                 int reward = Pricing.QuestReward(quest);
                 Wallet.Add(reward);
                 int rep = Guild.VictoryReputation(questGrade);
-                summary = $"[{quest.Title}] 임무 완료! 보상 +{reward}G · 명성 +{rep}";
+                summary = $"{quest.Title} — 임무 완료! 보상 +{reward}G · 명성 +{rep}";
                 Guild.Add(rep);
                 QuestClearHistory.RecordClear(quest.Region, quest.Tier); // 이 지역·계층은 다음 게시판에서 덜 나오고, 안 깬 계층이 더 자주 나온다
             }
             else
             {
-                summary = $"[{quest.Title}] 임무 실패... 명성 -{Guild.FailPenalty}";
+                summary = $"{quest.Title} — 임무 실패... 명성 -{Guild.FailPenalty}";
                 Guild.Add(-Guild.FailPenalty);
             }
 
-            // 살아남은 파견원 경험치: 승리 40+20×등급, 실패는 절반.
-            int xp = 40 + 20 * (int)questGrade;
-            if (!battle.Victory) xp /= 2;
-            var levelUps = GrantExperience(expedition.Members.Where(m => m.IsAlive), xp);
+            // 살아남은 파견원 성장: 승리 1 + 0.5×퀘스트 등급, 실패는 절반(× 나이 배율, GrowthTuning.BattleGrowth).
+            var levelUps = GrantGrowth(expedition.Members.Where(m => m.IsAlive), GrowthTuning.BattleGrowth((int)questGrade, battle.Victory));
             var survivorsList = expedition.Members.Where(m => m.IsAlive).ToList();
             MercenaryCondition.AfterBattle(survivorsList, battle.Victory, fallenMercs); // 피로·사기(친밀도 보정 포함)
             // 함께 살아 돌아온 사람끼리 친밀도가 바뀐다(승리면 오르고, 실패면 성격이 안 맞는 사이는 내려간다).
             Affinity.AfterExpedition(survivorsList, battle.Victory);
-            summary += $" · 경험치 +{xp}";
 
             string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
-            if (survivors.Length > 0) summary += $" · 귀환: {survivors}";
+            if (survivors.Length > 0) summary += $" · 귀환길: {survivors} ({GN3.World.GameClock.FormatDuration(expedition.ReturnHoursFor)})";
             if (fallen.Count > 0) summary += $" · 전사: {string.Join(", ", fallen)}";
 
             ToastLog.Show(summary, false);
@@ -95,25 +92,30 @@ namespace GN3.Quests
                 DailyLog.Add(line);
             }
 
-            // 우편함: 결과 편지(중요). 본문은 요약을 줄마다 나누고 레벨업을 덧붙인다.
+            // 우편함: 결과 편지(중요). 본문은 요약을 줄마다 나누고 성장(오른 능력치)을 덧붙인다.
             string body = summary.Replace(" · ", "\n");
             if (levelUps.Count > 0) body += "\n\n" + string.Join("\n", levelUps);
             var mail = Mailbox.Post(MailKind.QuestResult,
-                battle.Victory ? $"[{quest.Title}] 임무 완료!" : $"[{quest.Title}] 임무 실패...", body, important: true);
+                battle.Victory ? $"{quest.Title} — 임무 완료!" : $"{quest.Title} — 임무 실패...", body, important: true);
             if (alertShown) Mailbox.Acknowledge(mail);
             Mailbox.ResolveArrival(expedition);
 
-            ExpeditionLog.Instance.Complete(expedition);
+            // 살아남은 사람이 있으면 귀환길에 오른다(며칠 뒤 마을 도착). 전멸이면 바로 끝낸다.
+            if (survivorsList.Count > 0) ExpeditionLog.Instance.BeginReturn(expedition);
+            else ExpeditionLog.Instance.Complete(expedition);
             return summary;
         }
 
         /// <summary>경험치를 나눠 주고 "아린 레벨 업! Lv.3" 문구 목록을 돌려준다.</summary>
-        public static List<string> GrantExperience(IEnumerable<Mercenary> members, int xp)
+        /// <summary>살아남은 사람에게 성장량(나이 배율 전)을 준다. 능력치가 오른 사람마다 "카이런 공격 +3, 체력 +6" 한 줄.</summary>
+        public static List<string> GrantGrowth(IEnumerable<Mercenary> members, float growth)
         {
             var lines = new List<string>();
             foreach (var merc in members)
-                if (merc.AddExperience(xp) > 0)
-                    lines.Add($"{merc.Name} 레벨 업! Lv.{merc.Level}");
+            {
+                var gains = merc.AddGrowth(growth);
+                if (gains.Count > 0) lines.Add($"{merc.Name} {string.Join(", ", gains)}");
+            }
             return lines;
         }
     }

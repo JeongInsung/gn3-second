@@ -165,6 +165,7 @@ namespace GN3.World
         {
             Instance = this;
             _lightMeshesRebuilt = false;
+            CollectLampLights();
             Apply();
 #if UNITY_EDITOR
             // 에디터 모드에선 Update가 변화가 있을 때만 돌아서, 리로드 직후 다음 틱에 직접 다시 만든다.
@@ -376,6 +377,21 @@ namespace GN3.World
                 Mathf.Cos(hourAngle) * Mathf.Sin(lat) - Mathf.Tan(declination) * Mathf.Cos(lat));
             altitudeDeg = altitude * Mathf.Rad2Deg;
             azimuthDeg = Mathf.Repeat(azimuthFromSouth * Mathf.Rad2Deg + 180f, 360f);
+        }
+
+        /// <summary>
+        /// 가로등을 복사해 늘리면 그 안의 Lamp Light/Lamp Glow가 목록에 없어 밤에도 꺼져 있었다.
+        /// 이름으로 찾아 목록에 더한다(이미 있으면 그대로, 지워진 항목은 뺀다).
+        /// </summary>
+        private void CollectLampLights()
+        {
+            lampLights.RemoveAll(light => light == null);
+            lampGlows.RemoveAll(light => light == null);
+            foreach (var light in FindObjectsByType<Light2D>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                var list = light.name == "Lamp Light" ? lampLights : light.name == "Lamp Glow" ? lampGlows : null;
+                if (list != null && !list.Contains(light)) list.Add(light);
+            }
         }
 
         private static void SetLampIntensity(List<Light2D> lights, float intensity)
