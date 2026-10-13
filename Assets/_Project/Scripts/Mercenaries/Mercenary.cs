@@ -40,7 +40,8 @@ namespace GN3.Mercenaries
         /// <summary>들고 있는 무기(없으면 맨손). 대장간에서 사서 쥐여 준다.</summary>
         public WeaponItem Weapon { get; private set; }
 
-        /// <summary>직업 기본값 + 성장 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어만) → 부상·질병 순으로 계산한 현재 능력치.</summary>
+        /// <summary>직업 기본값 + 성장 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어·신성력) → 부상·질병 순으로 계산한 현재 능력치.
+        /// 마법사는 마지막에 공격을 마력으로 옮긴다(UsesMagic).</summary>
         public CombatStats CurrentStats => ComputeStats(_ailments);
 
         /// <summary>부상·질병이 없었다면의 능력치(툴팁에서 "공격 24 → 18"처럼 비교할 때).</summary>
@@ -50,7 +51,7 @@ namespace GN3.Mercenaries
         /// legacyTalent면 예전 공식(재능 능력치 배율) — 예전 저장의 전투력을 잴 때만.</summary>
         public CombatStats ComputeStats(IEnumerable<Ailment> ailments, bool includeCondition = true, bool legacyTalent = false)
         {
-            var raw = MercenaryStatCalculator.Calculate(Class, GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed);
+            var raw = MercenaryStatCalculator.Calculate(Class, GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed, GrowthHoly);
             if (legacyTalent) raw = GradeTable.ApplyLegacyTalent(raw, Talent);
             var stats = PersonalityTable.Apply(raw, Personality);
             if (Weapon != null)
@@ -64,21 +65,32 @@ namespace GN3.Mercenaries
             stats.Attack += research.attack;
             stats.Defense += research.defense;
             stats.MaxHealth += research.health;
-            // 지치거나 사기가 낮으면 공격·방어가 깎인다(최대 체력은 그대로라 체력 계산이 꼬이지 않는다).
+            stats.Holy += research.holy;
+            // 지치거나 사기가 낮으면 공격·방어·신성력이 깎인다(최대 체력은 그대로라 체력 계산이 꼬이지 않는다).
             float condition = includeCondition ? ConditionMultiplier : 1f;
             if (condition < 1f)
             {
                 stats.Attack = (int)Math.Round(stats.Attack * condition);
                 stats.Defense = (int)Math.Round(stats.Defense * condition);
+                stats.Holy = (int)Math.Round(stats.Holy * condition);
             }
-            // 부상·질병은 공격·방어·이동 속도를 깎는다(최대 체력은 그대로).
-            if (ailments == null) return stats;
-            foreach (var ailment in ailments)
+            // 부상·질병은 공격·방어·이동 속도를 깎는다(최대 체력은 그대로). 신성력은 공격과 같은 비율로 깎인다.
+            if (ailments != null)
             {
-                var def = ailment.Def;
-                stats.Attack = (int)Math.Round(stats.Attack * (1f - def.attackPenalty));
-                stats.Defense = (int)Math.Round(stats.Defense * (1f - def.defensePenalty));
-                stats.MoveSpeed = (int)Math.Round(stats.MoveSpeed * (1f - def.moveSpeedPenalty));
+                foreach (var ailment in ailments)
+                {
+                    var def = ailment.Def;
+                    stats.Attack = (int)Math.Round(stats.Attack * (1f - def.attackPenalty));
+                    stats.Defense = (int)Math.Round(stats.Defense * (1f - def.defensePenalty));
+                    stats.MoveSpeed = (int)Math.Round(stats.MoveSpeed * (1f - def.moveSpeedPenalty));
+                    stats.Holy = (int)Math.Round(stats.Holy * (1f - def.attackPenalty));
+                }
+            }
+            // 마법사의 공격 능력치(기본값·성장·성격·무기·연구·피로·부상을 모두 거친 값)는 마력이다.
+            if (UsesMagic)
+            {
+                stats.Magic += stats.Attack;
+                stats.Attack = 0;
             }
             return stats;
         }
@@ -125,7 +137,13 @@ namespace GN3.Mercenaries
 
         public const float ResearchHoursPerBonus = 4f;
         public const int MaxResearchLevel = 10;
-        public const int HealerHealthPerResearchLevel = 4;
+        public const int HealerHolyPerResearchLevel = 2;
+
+        /// <summary>마법사: 공격 대신 마력으로 싸운다(데이터의 공격 기본값·성장치·성장 횟수가 곧 마력).</summary>
+        public bool UsesMagic => Class.Kind == MercenaryClassKind.Mage;
+
+        /// <summary>UI용 공격 능력치 이름: 마법사 "마력", 그 외 "공격".</summary>
+        public string OffenseLabel => UsesMagic ? "마력" : "공격";
 
         /// <summary>연구소·성당에서 쌓은 수련 단계(4시간마다 +1, 최대 10). 단계가 어떤 능력치가 되는지는 직업이 정한다(ResearchStatBonus).</summary>
         public int ResearchLevel { get; private set; }
@@ -134,22 +152,23 @@ namespace GN3.Mercenaries
 
         public bool CanResearchMore => ResearchLevel < MaxResearchLevel;
 
-        /// <summary>수련 단계가 주는 능력치: 마법사 공격 +1/단계, 힐러 방어 +1 · 최대 체력 +4/단계, 그 외 없음.</summary>
-        public (int attack, int defense, int health) ResearchStatBonus() => Class.Kind switch
+        /// <summary>수련 단계가 주는 능력치: 마법사 마력 +1/단계(공격에 더한 뒤 마력으로 옮겨진다), 힐러 신성력 +2/단계, 그 외 없음.</summary>
+        public (int attack, int defense, int health, int holy) ResearchStatBonus() => Class.Kind switch
         {
-            MercenaryClassKind.Mage => (ResearchLevel, 0, 0),
-            MercenaryClassKind.Healer => (0, ResearchLevel, ResearchLevel * HealerHealthPerResearchLevel),
-            _ => (0, 0, 0),
+            MercenaryClassKind.Mage => (ResearchLevel, 0, 0, 0),
+            MercenaryClassKind.Healer => (0, 0, 0, ResearchLevel * HealerHolyPerResearchLevel),
+            _ => (0, 0, 0, 0),
         };
 
-        /// <summary>UI용: "공격 +3" / "방어 +2 · 체력 +8" (보너스가 없으면 빈 문자열).</summary>
+        /// <summary>UI용: "마력 +3" / "신성력 +4" (보너스가 없으면 빈 문자열).</summary>
         public string ResearchBonusText()
         {
-            var (attack, defense, health) = ResearchStatBonus();
+            var (attack, defense, health, holy) = ResearchStatBonus();
             var parts = new List<string>();
-            if (attack > 0) parts.Add($"공격 +{attack}");
+            if (attack > 0) parts.Add($"{OffenseLabel} +{attack}");
             if (defense > 0) parts.Add($"방어 +{defense}");
             if (health > 0) parts.Add($"체력 +{health}");
+            if (holy > 0) parts.Add($"신성력 +{holy}");
             return string.Join(" · ", parts);
         }
 
@@ -249,7 +268,8 @@ namespace GN3.Mercenaries
         public int GrowthDefense { get; private set; }
         public int GrowthHealth { get; private set; }
         public int GrowthSpeed { get; private set; }
-        public int TotalGrowth => GrowthAttack + GrowthDefense + GrowthHealth + GrowthSpeed;
+        public int GrowthHoly { get; private set; }
+        public int TotalGrowth => GrowthAttack + GrowthDefense + GrowthHealth + GrowthSpeed + GrowthHoly;
 
         /// <summary>다음 성장 1회까지 쌓인 양(0~1). 훈련·실전이 함께 쌓는다.</summary>
         public float GrowthProgress { get; private set; }
@@ -301,11 +321,11 @@ namespace GN3.Mercenaries
                 int sign = now < target ? +1 : -1;
                 if (sign < 0 && TotalGrowth == 0) break;
                 // 한 번 더 움직였을 때 더 멀어지면 멈춘다
-                var snapshot = (GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed);
+                var snapshot = (GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed, GrowthHoly);
                 GrowOnce(rng, sign);
                 if (System.Math.Abs(GradePower - target) > System.Math.Abs(now - target))
                 {
-                    (GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed) = snapshot;
+                    (GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed, GrowthHoly) = snapshot;
                     break;
                 }
             }
@@ -328,27 +348,28 @@ namespace GN3.Mercenaries
                 case 0: GrowthAttack += sign; break;
                 case 1: GrowthDefense += sign; break;
                 case 2: GrowthHealth += sign; break;
-                default: GrowthSpeed += sign; break;
+                case 3: GrowthSpeed += sign; break;
+                default: GrowthHoly += sign; break;
             }
             int newMax = CurrentStats.MaxHealth;
             if (IsAlive) CurrentHealth = Math.Clamp(CurrentHealth + (newMax - oldMax), 1, newMax);
-            int amount = stat switch { 0 => Class.AttackGrowth, 1 => Class.DefenseGrowth, 2 => Class.HealthGrowth, _ => Class.MoveSpeedGrowth };
-            string label = stat switch { 0 => "공격", 1 => "방어", 2 => "체력", _ => "속도" };
+            int amount = stat switch { 0 => Class.AttackGrowth, 1 => Class.DefenseGrowth, 2 => Class.HealthGrowth, 3 => Class.MoveSpeedGrowth, _ => Class.HolyGrowth };
+            string label = stat switch { 0 => OffenseLabel, 1 => "방어", 2 => "체력", 3 => "속도", _ => "신성력" };
             return $"{label} {(sign > 0 ? "+" : "-")}{amount}";
         }
 
         /// <summary>
-        /// 성장할 능력치를 직업 성향대로 고른다: 가중치 = 직업 성장치 × 전투력 가중치(공격 4 · 방어 3 · 체력 1 · 속도 2, GradeTable.CombatPower와 같음).
+        /// 성장할 능력치를 직업 성향대로 고른다: 가중치 = 직업 성장치 × 전투력 가중치(공격·마력 4 · 방어 3 · 체력 1 · 속도 2 · 신성력 3, GradeTable.CombatPower와 같음).
         /// 성장치가 0인 능력치(마법사 방어 등)는 오르지 않는다. onlyGrown이면 성장 횟수가 남은 능력치에서만(쇠퇴).
         /// </summary>
         private int PickGrowthStat(Random rng, bool onlyGrown)
         {
-            int[] growth = { Class.AttackGrowth, Class.DefenseGrowth, Class.HealthGrowth, Class.MoveSpeedGrowth };
-            int[] counts = { GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed };
-            int[] power = { 4, 3, 1, 2 };
-            var weights = new int[4];
+            int[] growth = { Class.AttackGrowth, Class.DefenseGrowth, Class.HealthGrowth, Class.MoveSpeedGrowth, Class.HolyGrowth };
+            int[] counts = { GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed, GrowthHoly };
+            int[] power = { 4, 3, 1, 2, 3 };
+            var weights = new int[growth.Length];
             int total = 0;
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < growth.Length; i++)
             {
                 if (onlyGrown && counts[i] <= 0) continue;
                 weights[i] = Math.Max(0, growth[i]) * power[i];
@@ -356,12 +377,12 @@ namespace GN3.Mercenaries
             }
             if (total == 0) // 성장치가 모두 0이거나(이상한 직업) 쇠퇴할 게 남은 능력치의 성장치가 0일 때
             {
-                for (int i = 0; i < 4; i++)
+                for (int i = 0; i < growth.Length; i++)
                     if (!onlyGrown || counts[i] > 0) return i;
                 return 2;
             }
             int roll = rng.Next(total);
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < growth.Length; i++)
             {
                 if (roll < weights[i]) return i;
                 roll -= weights[i];
@@ -373,10 +394,11 @@ namespace GN3.Mercenaries
         public string GrowthSummary()
         {
             var parts = new List<string>();
-            if (GrowthAttack * Class.AttackGrowth > 0) parts.Add($"공격 +{GrowthAttack * Class.AttackGrowth}");
+            if (GrowthAttack * Class.AttackGrowth > 0) parts.Add($"{OffenseLabel} +{GrowthAttack * Class.AttackGrowth}");
             if (GrowthDefense * Class.DefenseGrowth > 0) parts.Add($"방어 +{GrowthDefense * Class.DefenseGrowth}");
             if (GrowthHealth * Class.HealthGrowth > 0) parts.Add($"체력 +{GrowthHealth * Class.HealthGrowth}");
             if (GrowthSpeed * Class.MoveSpeedGrowth > 0) parts.Add($"속도 +{GrowthSpeed * Class.MoveSpeedGrowth}");
+            if (GrowthHoly * Class.HolyGrowth > 0) parts.Add($"신성력 +{GrowthHoly * Class.HolyGrowth}");
             return string.Join(" · ", parts);
         }
 
@@ -388,24 +410,27 @@ namespace GN3.Mercenaries
         public int MonthBaseAttack { get; private set; }
         public int MonthBaseDefense { get; private set; }
         public int MonthBaseSpeed { get; private set; }
+        public int MonthBaseHoly { get; private set; }
         public int MonthBasePower { get; private set; }
 
         /// <summary>이번 달 기준값을 지금 영구 수치로 찍는다(매달 1일 자정·고용 시장에서 만들 때·예전 저장 불러올 때).</summary>
         public void SnapshotMonth()
         {
             var s = PermanentStats;
-            MonthBaseAttack = s.Attack;
+            MonthBaseAttack = s.Offense;
             MonthBaseDefense = s.Defense;
             MonthBaseSpeed = s.MoveSpeed;
+            MonthBaseHoly = s.Holy;
             MonthBasePower = GradeTable.CombatPower(s);
         }
 
         /// <summary>저장 파일에서 불러올 때 이번 달 기준값을 되돌린다.</summary>
-        public void RestoreMonthBase(int attack, int defense, int speed, int power)
+        public void RestoreMonthBase(int attack, int defense, int speed, int holy, int power)
         {
             MonthBaseAttack = attack;
             MonthBaseDefense = defense;
             MonthBaseSpeed = speed;
+            MonthBaseHoly = holy;
             MonthBasePower = power;
         }
 
@@ -413,7 +438,7 @@ namespace GN3.Mercenaries
         public void GrowOlder() => Age++;
 
         /// <summary>저장 파일에서 불러올 때 나이·생일·성장을 되돌린다(체력보다 먼저 — 최대 체력이 달라진다).</summary>
-        public void RestoreGrowth(int age, int birthdayIndex, int attack, int defense, int health, int speed, float progress)
+        public void RestoreGrowth(int age, int birthdayIndex, int attack, int defense, int health, int speed, int holy, float progress)
         {
             Age = Math.Max(GrowthTuning.MinHireAge, age);
             BirthdayIndex = Math.Clamp(birthdayIndex, 0, 359);
@@ -421,6 +446,7 @@ namespace GN3.Mercenaries
             GrowthDefense = Math.Max(0, defense);
             GrowthHealth = Math.Max(0, health);
             GrowthSpeed = Math.Max(0, speed);
+            GrowthHoly = Math.Max(0, holy);
             GrowthProgress = Math.Clamp(progress, 0f, 0.999f);
         }
 

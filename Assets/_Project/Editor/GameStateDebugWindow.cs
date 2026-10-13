@@ -287,7 +287,8 @@ namespace GN3.EditorTools
                     EditorGUILayout.LabelField($"[{GradeTable.Label(merc.Grade)}] {merc.Name}  ·  {merc.Class.ClassName}  ·  {merc.Age}세  ·  재능 {GradeTable.Label(merc.Talent)}  ·  전투력 {merc.CombatPower} (등급 기준 {merc.GradePower})  ·  {where}");
                     var stats = merc.CurrentStats;
                     string weapon = merc.Weapon != null ? $"{merc.Weapon.Name} ({merc.Weapon.DescribeFor(merc.Class.Kind)})" : "맨손";
-                    EditorGUILayout.LabelField($"공격 {stats.Attack} · 방어 {stats.Defense} · 속도 {stats.MoveSpeed}   무기: {weapon}");
+                    string holy = stats.Holy > 0 ? $" · 신성력 {stats.Holy}" : "";
+                    EditorGUILayout.LabelField($"{merc.OffenseLabel} {stats.Offense} · 방어 {stats.Defense} · 속도 {stats.MoveSpeed}{holy}   무기: {weapon}");
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         EditorGUILayout.LabelField("성장", $"{GrowthTuning.RateLabel(merc.Age)} · 다음까지 {merc.GrowthProgress:P0} · {merc.GrowthSummary()}");

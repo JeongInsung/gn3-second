@@ -21,5 +21,9 @@ namespace GN3.Mercenaries
         [Header("Move Speed (회피 확률에 영향)")]
         public int BaseMoveSpeed;
         public int MoveSpeedGrowth;
+
+        [Header("신성력 (힐러 회복량, 다른 직업은 0)")]
+        public int BaseHoly;
+        public int HolyGrowth;
     }
 }

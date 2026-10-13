@@ -64,7 +64,7 @@ namespace GN3.Combat
             float damageMultiplier = 1f, bool ignoreDefense = false)
         {
             int baseDamage = ignoreDefense
-                ? Math.Max(CombatFormulas.MinimumDamage, attacker.Stats.Attack)
+                ? Math.Max(CombatFormulas.MinimumDamage, attacker.Stats.Offense)
                 : CombatFormulas.CalculateDamage(attacker, target);
             if (damageMultiplier != 1f)
                 baseDamage = Math.Max(CombatFormulas.MinimumDamage, (int)Math.Round(baseDamage * damageMultiplier));

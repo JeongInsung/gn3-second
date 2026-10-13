@@ -52,10 +52,11 @@ namespace GN3.Economy
             }
         }
 
-        /// <summary>"공격 +6(적성) · 속도 +1" (특정 용병 기준)</summary>
+        /// <summary>"공격 +6(적성) · 속도 +1" (특정 용병 기준, 마법사는 무기 공격이 마력으로 들어가 "마력 +6")</summary>
         public string DescribeFor(MercenaryClassKind kind)
         {
-            var parts = new List<string> { $"공격 +{AttackFor(kind)}" + (Suits(kind) ? "(적성)" : "") };
+            string offense = kind == MercenaryClassKind.Mage ? "마력" : "공격";
+            var parts = new List<string> { $"{offense} +{AttackFor(kind)}" + (Suits(kind) ? "(적성)" : "") };
             if (Defense != 0) parts.Add($"방어 {Signed(Defense)}");
             if (Speed != 0) parts.Add($"속도 {Signed(Speed)}");
             return string.Join(" · ", parts);

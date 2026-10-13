@@ -11,7 +11,9 @@ namespace GN3.Save
         // 3: 레벨·경험치 → 나이·성장 횟수(MercenarySave.age 등). 2 이하면 level-1을 네 능력치 성장 횟수로(능력치 그대로), 나이는 20대 무작위.
         // 4: 등급 = 전투력 구간, 저장의 grade는 재능. 3 이하면 재능 능력치 배율이 빠진 만큼 성장을 더하거나 빼 예전 전투력에 맞춘다.
         // 5: 정보창 '이번 달 기준값'(MercenarySave.month*). 없으면 불러올 때 지금 값으로 찍는다.
-        public const int CurrentVersion = 5;
+        // 6: 힐러 신성력(MercenarySave.growthHoly·monthHoly). 5 이하 힐러는 다른 네 능력치 성장 평균만큼 신성력 성장을 준다.
+        //    마법사 growthAttack·monthAttack은 이제 마력(값은 그대로).
+        public const int CurrentVersion = 6;
 
         public int version = CurrentVersion;
         public string savedAt;
@@ -67,11 +69,13 @@ namespace GN3.Save
         public int growthDefense;
         public int growthHealth;
         public int growthSpeed;
+        public int growthHoly; // 신성력(힐러, 버전 6)
         public float growthProgress;
         public bool hasMonthBase; // 이번 달 기준값(정보창 괄호 정산용, 버전 5)
         public int monthAttack;
         public int monthDefense;
         public int monthSpeed;
+        public int monthHoly; // 버전 6
         public int monthPower;
         public int personality;
         public bool rarePassive;

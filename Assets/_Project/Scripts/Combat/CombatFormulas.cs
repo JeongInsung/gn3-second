@@ -8,7 +8,7 @@ namespace GN3.Combat
 
         public static int CalculateDamage(Combatant attacker, Combatant defender)
         {
-            int raw = attacker.Stats.Attack - defender.Stats.Defense;
+            int raw = attacker.Stats.Offense - defender.Stats.Defense;
             return raw < MinimumDamage ? MinimumDamage : raw;
         }
 

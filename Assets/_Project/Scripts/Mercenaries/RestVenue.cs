@@ -244,9 +244,9 @@ namespace GN3.Mercenaries
     /// 마을 쉼터 목록. 수치는 ConditionTuning(아래 괄호 안은 지금 값).
     /// 온천(청록 지붕의 포렴 찻집): 피로 위주. 1시간마다 피로 -10 · 사기 +1, 1~2시간, 최대 3명, 밤엔 안 받음. 피로 30 이상일 때 피로가 높을수록 자주 온다.
     /// 도박장(주사위 간판의 뒷골목 도박장): 사기 위주. 1시간마다 사기 +2(사기 70 미만일 때만) · 피로 -5, 1~3시간, 최대 4명, 밤에도 받음. 사기 70 미만이거나 피로 30 이상이면 온다.
-    /// 마법 연구소(터키석 수정의 마법사 연구소): 마법사 전용. 2~4시간 연구, 4시간마다 공격 +1 영구(최대 10단계, Mercenary.AddResearch).
+    /// 마법 연구소(터키석 수정의 마법사 연구소): 마법사 전용. 2~4시간 연구, 4시간마다 마력 +1 영구(최대 10단계, Mercenary.AddResearch).
     ///   1시간마다 피로 +2(훈련과 같음), 최대 2명, 밤엔 안 받음. 지치지 않은 마법사가 25% 확률로 온다.
-    /// 성당(장미창과 종탑의 중세 성당): 힐러 전용. 2~4시간 기도, 4시간마다 방어 +1 · 최대 체력 +4 영구(최대 10단계).
+    /// 성당(장미창과 종탑의 중세 성당): 힐러 전용. 2~4시간 기도, 4시간마다 신성력 +2 영구(최대 10단계).
     ///   1시간마다 피로 +2 · 사기 +1, 최대 2명, 밤엔 안 받음. 지치지 않은 힐러가 25% 확률로 온다.
     /// </summary>
     public static class RestVenues
@@ -276,9 +276,9 @@ namespace GN3.Mercenaries
             "마법 연구소", "터키석 수정의 마법사 연구소", 0.41f, ConditionTuning.StudyCapacity,
             ConditionTuning.StudyMinHours, ConditionTuning.StudyMaxHours, -StudyFatiguePerHour, 0f, false,
             merc => ConditionTuning.StudyVisitChance,
-            $"마법사들이 가끔 스스로 찾아와 {ConditionTuning.StudyMinHours:0}~{ConditionTuning.StudyMaxHours:0}시간 연구합니다. 연구 {Mercenary.ResearchHoursPerBonus:0}시간마다 공격 +1 영구 상승(최대 +{Mercenary.MaxResearchLevel}). " +
+            $"마법사들이 가끔 스스로 찾아와 {ConditionTuning.StudyMinHours:0}~{ConditionTuning.StudyMaxHours:0}시간 연구합니다. 연구 {Mercenary.ResearchHoursPerBonus:0}시간마다 마력 +1 영구 상승(최대 +{Mercenary.MaxResearchLevel}). " +
             $"1시간마다 피로 +{StudyFatiguePerHour:0}. 마법사만 이용할 수 있습니다. (최대 {ConditionTuning.StudyCapacity}명)",
-            $"{Mercenary.ResearchHoursPerBonus:0}시간마다 공격 +1 · 피로 +{StudyFatiguePerHour:0}",
+            $"{Mercenary.ResearchHoursPerBonus:0}시간마다 마력 +1 · 피로 +{StudyFatiguePerHour:0}",
             eligible: merc => merc.Class.Kind == MercenaryClassKind.Mage && merc.CanResearchMore && !merc.IsExhausted,
             onStayed: Research);
 
@@ -286,9 +286,9 @@ namespace GN3.Mercenaries
             "성당", "장미창과 종탑의 중세 성당", 0.49f, ConditionTuning.StudyCapacity,
             ConditionTuning.StudyMinHours, ConditionTuning.StudyMaxHours, -StudyFatiguePerHour, ConditionTuning.StudyMoralePerHour, false,
             merc => ConditionTuning.StudyVisitChance,
-            $"힐러들이 가끔 스스로 찾아와 {ConditionTuning.StudyMinHours:0}~{ConditionTuning.StudyMaxHours:0}시간 기도합니다. 기도 {Mercenary.ResearchHoursPerBonus:0}시간마다 방어 +1, 최대 체력 +{Mercenary.HealerHealthPerResearchLevel} 영구 상승(최대 {Mercenary.MaxResearchLevel}단계). " +
+            $"힐러들이 가끔 스스로 찾아와 {ConditionTuning.StudyMinHours:0}~{ConditionTuning.StudyMaxHours:0}시간 기도합니다. 기도 {Mercenary.ResearchHoursPerBonus:0}시간마다 신성력 +{Mercenary.HealerHolyPerResearchLevel} 영구 상승(최대 {Mercenary.MaxResearchLevel}단계). " +
             $"1시간마다 피로 +{StudyFatiguePerHour:0}, 사기 +{ConditionTuning.StudyMoralePerHour:0}. 힐러만 이용할 수 있습니다. (최대 {ConditionTuning.StudyCapacity}명)",
-            $"{Mercenary.ResearchHoursPerBonus:0}시간마다 방어 +1 · 체력 +{Mercenary.HealerHealthPerResearchLevel} · 피로 +{StudyFatiguePerHour:0}",
+            $"{Mercenary.ResearchHoursPerBonus:0}시간마다 신성력 +{Mercenary.HealerHolyPerResearchLevel} · 피로 +{StudyFatiguePerHour:0}",
             eligible: merc => merc.Class.Kind == MercenaryClassKind.Healer && merc.CanResearchMore && !merc.IsExhausted,
             onStayed: Research);
 

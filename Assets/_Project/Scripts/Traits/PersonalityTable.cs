@@ -38,7 +38,9 @@ namespace GN3.Traits
                 attack: Mathf.Max(1, Mathf.RoundToInt(baseStats.Attack * mod.AttackMultiplier)),
                 defense: Mathf.Max(0, Mathf.RoundToInt(baseStats.Defense * mod.DefenseMultiplier)),
                 maxHealth: Mathf.Max(1, Mathf.RoundToInt(baseStats.MaxHealth * mod.HealthMultiplier)),
-                moveSpeed: baseStats.MoveSpeed
+                moveSpeed: baseStats.MoveSpeed,
+                magic: baseStats.Magic,
+                holy: baseStats.Holy
             );
         }
     }

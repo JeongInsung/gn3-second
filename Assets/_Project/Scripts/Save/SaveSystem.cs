@@ -86,11 +86,13 @@ namespace GN3.Save
                     growthDefense = merc.GrowthDefense,
                     growthHealth = merc.GrowthHealth,
                     growthSpeed = merc.GrowthSpeed,
+                    growthHoly = merc.GrowthHoly,
                     growthProgress = merc.GrowthProgress,
                     hasMonthBase = true,
                     monthAttack = merc.MonthBaseAttack,
                     monthDefense = merc.MonthBaseDefense,
                     monthSpeed = merc.MonthBaseSpeed,
+                    monthHoly = merc.MonthBaseHoly,
                     monthPower = merc.MonthBasePower,
                     personality = (int)merc.Personality,
                     rarePassive = merc.HasRarePassive,
@@ -193,12 +195,18 @@ namespace GN3.Save
                 var weapon = string.IsNullOrEmpty(m.weapon) ? null : WeaponCatalog.All.FirstOrDefault(w => w.Name == m.weapon);
                 // 성장·수련은 최대 체력을 바꾸므로 체력보다 먼저
                 if (data.version >= 3)
-                    merc.RestoreGrowth(m.age, m.birthday, m.growthAttack, m.growthDefense, m.growthHealth, m.growthSpeed, m.growthProgress);
+                {
+                    // 버전 5 이하 힐러: 신성력 성장이 없었다 → 다른 네 능력치 성장 평균만큼 준다(오래 키운 힐러가 새 힐러보다 약하지 않게).
+                    int holy = data.version >= 6 ? m.growthHoly
+                        : cls.HolyGrowth > 0 ? (int)Math.Round((m.growthAttack + m.growthDefense + m.growthHealth + m.growthSpeed) / 4.0) : 0;
+                    merc.RestoreGrowth(m.age, m.birthday, m.growthAttack, m.growthDefense, m.growthHealth, m.growthSpeed, holy, m.growthProgress);
+                }
                 else
                 {
-                    // 레벨제 저장: Lv N = 네 능력치 모두 N-1회 성장(능력치 그대로). 나이·생일은 새로 정한다.
+                    // 레벨제 저장: Lv N = 다섯 능력치 모두 N-1회 성장(신성력은 힐러만 의미 있음). 나이·생일은 새로 정한다.
                     int grown = Math.Max(1, m.level) - 1;
-                    merc.RestoreGrowth(LegacyRng.Next(20, 30), LegacyRng.Next(GN3.World.GameCalendar.DaysPerYear), grown, grown, grown, grown, 0f);
+                    merc.RestoreGrowth(LegacyRng.Next(20, 30), LegacyRng.Next(GN3.World.GameCalendar.DaysPerYear), grown, grown, grown, grown,
+                        cls.HolyGrowth > 0 ? grown : 0, 0f);
                 }
                 merc.RestoreResearch(m.researchHours, m.researchBonus);
                 merc.RestoreState(m.health, weapon);
@@ -207,8 +215,8 @@ namespace GN3.Save
                     merc.MatchLegacyPower(LegacyRng); // 재능 능력치 배율이 빠진 만큼 성장으로 메운다
                     merc.SetHealth(m.health);
                 }
-                if (m.hasMonthBase) merc.RestoreMonthBase(m.monthAttack, m.monthDefense, m.monthSpeed, m.monthPower);
-                else merc.SnapshotMonth(); // 예전 저장: 지금 값을 이번 달 기준으로
+                if (m.hasMonthBase && data.version >= 6) merc.RestoreMonthBase(m.monthAttack, m.monthDefense, m.monthSpeed, m.monthHoly, m.monthPower);
+                else merc.SnapshotMonth(); // 예전 저장: 지금 값을 이번 달 기준으로(버전 5는 힐러 신성력·전투력이 바뀌어 다시 찍는다)
                 merc.RestoreCondition(m.fatigue, m.morale);
                 if (m.ailments != null)
                     foreach (var ailment in m.ailments)
