@@ -118,6 +118,7 @@ namespace GN3.Save
             data.trainees = TrainingHall.SaveIds();
             data.patients = Hospital.SaveIds();
             data.affinities = Affinity.SaveEntries();
+            data.questClears = QuestClearHistory.SaveEntries();
             return data;
         }
 
@@ -197,6 +198,7 @@ namespace GN3.Save
             TrainingHall.Restore(data.trainees);
             Hospital.Restore(data.patients);
             Affinity.Restore(data.affinities);
+            QuestClearHistory.Restore(data.questClears);
 
             OnLoaded?.Invoke();
             return true;

@@ -38,6 +38,7 @@ namespace GN3.Battle
             public bool IsMelee; // 근접(전사·암살자 등)만 대상 자리까지 다가가서 때린다 - 원거리는 제자리에서 공격
             public float BobPhase;   // 대기 중 흔들림이 유닛마다 어긋나 보이도록
             public Vector2 LungeOffset; // 공격 동작(대상 쪽으로 다가갔다 돌아옴) 중 오프셋, 코루틴이 갱신
+            public BattlePortraitAnimator Animator; // 내 쪽 용병만(파츠 조합 캐릭터) - 적은 기본 도형이라 null
         }
 
         private Font _font;
@@ -46,8 +47,8 @@ namespace GN3.Battle
         private ManualBattleSession _session;
         private readonly Dictionary<Combatant, UnitView> _views = new Dictionary<Combatant, UnitView>();
         private bool _pickingSkillTarget;
+        private Combatant _skillActor; // 스킬 대상을 고르는 중일 때, 그 스킬을 쓰는 용병(_selectedMerc와 별개)
         private Combatant _selectedMerc; // 플레이어가 클릭해서 고른 내 용병(다음에 적을 클릭하면 그 용병의 공격 대상이 된다)
-        private Combatant _actionPanelActor; // 행동 패널을 지금 누구 기준으로 띄워뒀는지(새 대기자로 바뀔 때만 다시 그림)
         private bool _resultShown;
 
         private Canvas _canvas;
@@ -60,6 +61,11 @@ namespace GN3.Battle
         private Text _skillButtonText;
 
         private const int MaxLogLines = 9;
+
+        // 전체적으로 느리게 해달라는 피드백 - 걸어가는 속도(작을수록 느리게 미끄러지듯 다가감)와 대기 중 까딱임.
+        private const float LungeLerpSharpness = 4f;
+        private const float BobSpeed = 1.2f;
+        private const float BobAmplitude = 3f;
 
         public void Init(Expedition expedition)
         {
@@ -92,7 +98,8 @@ namespace GN3.Battle
             foreach (var enemy in enemies)
                 _views[enemy] = CreateUnitView(_enemyRow, enemy.Name, enemy, null, tier, isMelee: true);
 
-            HideActionPanel(); // 스킬 버튼 초기 상태(비활성)까지 맞춰둔다
+            UpdateSkillPanel(); // 스킬 버튼 초기 상태(비활성)까지 맞춰둔다
+            RefreshInteractable();
         }
 
         /// <summary>전사·암살자처럼 몸으로 부딪히는 직업만 근접(대상 자리까지 다가가 때림), 나머지는 원거리(제자리에서 공격).</summary>
@@ -122,97 +129,101 @@ namespace GN3.Battle
                 return;
             }
 
-            var waiting = _session.WaitingPlayerActor;
-            if (waiting == null)
+            UpdateSkillPanel();
+            RefreshInteractable();
+        }
+
+        /// <summary>
+        /// 스킬은 게이지·차례와 무관하게 언제든 쓸 수 있다 - 패널은 "지금 스킬을 쓸 대상"(스킬 대상을 고르는
+        /// 중이면 그 용병, 아니면 선택해둔 용병)을 기준으로 버튼 글자·활성 여부만 매 프레임 갱신한다.
+        /// </summary>
+        private void UpdateSkillPanel()
+        {
+            var merc = _pickingSkillTarget ? _skillActor : _selectedMerc;
+            if (merc == null || !merc.IsAlive)
             {
-                if (_actionPanelActor != null) HideActionPanel();
+                _skillButton.interactable = false;
+                _skillButtonText.text = "용병을 선택하세요";
+                _turnLabel.text = "전투 진행 중...";
                 return;
             }
 
-            if (_actionPanelActor != waiting)
+            var skill = _session.SkillOf(merc);
+            if (_pickingSkillTarget)
             {
-                _actionPanelActor = waiting;
-                _pickingSkillTarget = false;
-                ShowActionPanel(waiting);
-            }
-            else if (!_pickingSkillTarget)
-            {
-                // 스킬을 고르지 않고 있는 동안엔 남은 자동공격 시간을 계속 갱신해서 보여준다.
-                UpdateCountdownLabel(waiting);
+                _skillButton.interactable = false; // 이미 쓰기로 정했으니 버튼은 잠그고 대상 클릭만 받는다.
+                _skillButtonText.text = skill != null ? $"{skill.Name} - 대상을 고르세요" : "";
+                _turnLabel.text = $"{merc.Name} - 스킬 대상을 고르세요";
+                return;
             }
 
-            RefreshInteractable();
-        }
-
-        private void HideActionPanel()
-        {
-            _actionPanelActor = null;
-            _pickingSkillTarget = false;
-            _session.Deciding = false;
-            _skillButton.interactable = false;
-            _turnLabel.text = "전투 진행 중...";
-            RefreshInteractable();
-        }
-
-        private void ShowActionPanel(Combatant actor)
-        {
-            var skill = _session.SkillOf(actor);
-            float cooldown = _session.CooldownRemaining(actor);
+            _turnLabel.text = $"{merc.Name} 선택됨";
             if (skill == null)
             {
                 _skillButton.interactable = false;
                 _skillButtonText.text = "전투 스킬 없음";
             }
-            else if (cooldown > 0f)
+            else if (_session.IsActing(merc))
             {
                 _skillButton.interactable = false;
-                _skillButtonText.text = $"{skill.Name} (쿨타임 {Mathf.CeilToInt(cooldown)})";
+                _skillButtonText.text = $"{skill.Name} (행동 중)";
             }
             else
             {
-                _skillButton.interactable = true;
-                _skillButtonText.text = skill.Name;
+                float cooldown = _session.CooldownRemaining(merc);
+                if (cooldown > 0f)
+                {
+                    _skillButton.interactable = false;
+                    _skillButtonText.text = $"{skill.Name} (쿨타임 {Mathf.CeilToInt(cooldown)})";
+                }
+                else
+                {
+                    _skillButton.interactable = true;
+                    _skillButtonText.text = skill.Name;
+                }
             }
-
-            UpdateCountdownLabel(actor);
         }
 
-        private void UpdateCountdownLabel(Combatant actor)
+        /// <summary>
+        /// 스킬 버튼 클릭 - 선택해둔 용병이 적에게 쓰는 스킬이고 지금 붙어서 싸우는 대상이 있으면 그 대상에게
+        /// 바로 쓰고, 없으면(또는 아군 대상 스킬이면) 대상을 고르는 모드로 들어간다(이어서 유닛을 클릭).
+        /// </summary>
+        private void OnSkillButtonClicked()
         {
-            float countdown = _session.AutoAttackCountdown;
-            _turnLabel.text = countdown > 0f
-                ? $"{actor.Name}의 차례! (자동공격 {countdown:0.0}초)"
-                : $"{actor.Name}의 차례!";
-        }
+            if (_selectedMerc == null) return;
+            var merc = _selectedMerc;
+            var skill = _session.SkillOf(merc);
+            if (skill == null || _session.IsActing(merc) || _session.CooldownRemaining(merc) > 0f) return;
 
-        private void OnSkillClicked()
-        {
-            var actor = _session.WaitingPlayerActor;
-            if (actor == null) return;
-            var skill = _session.SkillOf(actor);
-            if (skill == null || _session.CooldownRemaining(actor) > 0f) return;
             _selectedMerc = null;
-            _pickingSkillTarget = true;
-            _session.Deciding = true;
-            _turnLabel.text = $"{actor.Name} - {skill.Name} 대상을 고르세요";
+            var engaged = skill.TargetType == SkillTargetType.Enemy ? _session.EngagedTargetOf(merc) : null;
+            if (engaged != null)
+            {
+                _session.TryUseSkill(merc, engaged);
+            }
+            else
+            {
+                _pickingSkillTarget = true;
+                _skillActor = merc;
+            }
             RefreshInteractable();
         }
 
         /// <summary>
         /// 유닛 카드 클릭. 세 가지 뜻 중 하나:
-        /// 1) 스킬 대상을 고르는 중이면 - 그 대상에게 스킬 사용(기존 동작).
+        /// 1) 스킬 대상을 고르는 중이면 - 그 대상에게 스킬 사용.
         /// 2) 내 용병을 클릭 - 그 용병을 선택(다시 클릭하면 선택 해제, 다른 용병 클릭하면 선택 바뀜).
-        /// 3) 용병을 선택해둔 채 적을 클릭 - 그 용병에게 "이 적을 공격해라" 지정. 근접이면 즉시 그 자리로 다가가고,
-        ///    마침 그 용병이 입력을 기다리던 참이면(WaitingPlayerActor) 지금 바로 공격까지 수행한다.
+        /// 3) 용병을 선택해둔 채 적을 클릭 - 그 용병에게 "이 적을 공격해라" 지정(기본공격). 근접이면 즉시 그
+        ///    자리로 다가가고, 마침 게이지가 다 차 있었으면 지금 바로 공격까지 확정된다.
         /// </summary>
         private void OnUnitClicked(Combatant clicked)
         {
             if (_pickingSkillTarget)
             {
-                if (_session.WaitingPlayerActor == null || !clicked.IsAlive) return;
+                if (_skillActor != null && clicked.IsAlive)
+                    _session.TryUseSkill(_skillActor, clicked);
                 _pickingSkillTarget = false;
-                var events = _session.PlayerAct(true, clicked);
-                ApplyEventsVisual(events);
+                _skillActor = null;
                 RefreshInteractable();
                 return;
             }
@@ -230,12 +241,7 @@ namespace GN3.Battle
             {
                 var merc = _selectedMerc;
                 _selectedMerc = null;
-                _session.SetEngagedTarget(merc, clicked);
-                if (_session.WaitingPlayerActor == merc)
-                {
-                    var events = _session.PlayerAct(false, clicked);
-                    ApplyEventsVisual(events);
-                }
+                _session.CommandAttack(merc, clicked);
                 RefreshInteractable();
             }
         }
@@ -256,7 +262,10 @@ namespace GN3.Battle
             var battle = new ExpeditionBattle.Battle { Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam };
             string summary = ExpeditionBattle.Conclude(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
 
-            HideActionPanel();
+            _selectedMerc = null;
+            _pickingSkillTarget = false;
+            _skillActor = null;
+            _skillButton.interactable = false;
             bool victory = _session.Outcome == BattleOutcome.TeamAVictory;
             _turnLabel.text = victory ? "승리!" : "패배...";
             BuildResultOverlay(victory, summary);
@@ -277,11 +286,11 @@ namespace GN3.Battle
         {
             if (_pickingSkillTarget)
             {
-                var waiting = _session.WaitingPlayerActor;
-                var skill = waiting != null ? _session.SkillOf(waiting) : null;
-                if (waiting == null || skill == null)
+                var skill = _skillActor != null ? _session.SkillOf(_skillActor) : null;
+                if (_skillActor == null || !_skillActor.IsAlive || skill == null)
                 {
                     _pickingSkillTarget = false;
+                    _skillActor = null;
                 }
                 else
                 {
@@ -325,22 +334,29 @@ namespace GN3.Battle
             v.HpFill.color = ratio > 0.5f ? new Color(0.4f, 0.75f, 0.35f) : ratio > 0.25f ? new Color(0.85f, 0.7f, 0.3f) : new Color(0.75f, 0.25f, 0.2f);
             v.HpText.text = alive ? $"{v.Combatant.CurrentHealth}/{v.Combatant.Stats.MaxHealth}" : "전사";
             v.ReadinessFill.fillAmount = alive ? _session.ReadinessRatioOf(v.Combatant) : 0f;
-            v.TurnMarker.SetActive(alive && _session.WaitingPlayerActor == v.Combatant);
+            v.TurnMarker.SetActive(alive && _session.IsActing(v.Combatant));
 
             // 내 쪽 근접 유닛은 "붙어서 싸우는 대상"이 살아있는 동안 계속 그 자리에 머문다(안 돌아옴) -
             // 매 프레임 목표 오프셋으로 부드럽게 다가가고, 대상이 죽으면(또는 아직 없으면) 서서히 제자리로.
             // 적(원거리는 아예 호출 안 되는 Lunge 코루틴)은 그대로 한 번 다가갔다 돌아오는 연출을 쓴다.
-            if (v.IsPlayerSide && v.IsMelee && alive)
+            Vector2 goal = Vector2.zero;
+            bool followsEngagedTarget = v.IsPlayerSide && v.IsMelee && alive;
+            if (followsEngagedTarget)
             {
-                var engaged = v.Combatant != null ? _session.EngagedTargetOf(v.Combatant) : null;
-                Vector2 goal = (engaged != null && _views.TryGetValue(engaged, out var targetView2))
-                    ? ApproachOffset(v, targetView2)
-                    : Vector2.zero;
-                v.LungeOffset = Vector2.Lerp(v.LungeOffset, goal, 1f - Mathf.Exp(-10f * Time.deltaTime));
+                var engaged = _session.EngagedTargetOf(v.Combatant);
+                if (engaged != null && _views.TryGetValue(engaged, out var targetView2))
+                    goal = ApproachOffset(v, targetView2);
+                v.LungeOffset = Vector2.Lerp(v.LungeOffset, goal, 1f - Mathf.Exp(-LungeLerpSharpness * Time.deltaTime));
             }
 
-            float bob = alive ? Mathf.Sin(Time.time * 1.6f + v.BobPhase) * 3f : 0f;
+            float bob = alive ? Mathf.Sin(Time.time * BobSpeed + v.BobPhase) * BobAmplitude : 0f;
             v.AnimRoot.anchoredPosition = new Vector2(0f, bob) + v.LungeOffset;
+
+            if (v.Animator != null)
+            {
+                bool walking = alive && followsEngagedTarget && Vector2.Distance(v.LungeOffset, goal) > 2f;
+                if (walking) v.Animator.PlayWalk(); else v.Animator.PlayIdle();
+            }
         }
 
         private void ApplyEventsVisual(List<BattleEvent> events)
@@ -352,9 +368,13 @@ namespace GN3.Battle
                 // 내 쪽 근접 유닛은 UpdateUnitView가 매 프레임 "붙어서 싸우는 대상" 쪽으로 자연스럽게 따라가므로
                 // 여기서 따로 움직이지 않는다 - 적 쪽 근접만 기존처럼 한 번 다가갔다 돌아오는 연출을 쓴다.
                 _views.TryGetValue(evt.Target, out var targetView);
-                if (_views.TryGetValue(evt.Attacker, out var attackerView) && attackerView.IsMelee
-                    && !attackerView.IsPlayerSide && targetView != null)
-                    StartCoroutine(Lunge(attackerView, targetView));
+                if (_views.TryGetValue(evt.Attacker, out var attackerView))
+                {
+                    if (attackerView.IsMelee && !attackerView.IsPlayerSide && targetView != null)
+                        StartCoroutine(Lunge(attackerView, targetView));
+                    if (evt.Damage >= 0) // 회복은 검격 대신 그냥 대기 자세로 둔다(휘두르는 연출이 안 맞아서)
+                        attackerView.Animator?.PlaySlash();
+                }
 
                 if (targetView != null)
                 {
@@ -384,7 +404,7 @@ namespace GN3.Battle
         /// 내 쪽 근접 유닛은 UpdateUnitView가 "붙어서 싸우는 대상" 쪽으로 계속 따라가는 방식을 쓰므로 이 코루틴을 안 쓴다.</summary>
         private IEnumerator Lunge(UnitView attacker, UnitView target)
         {
-            const float outDur = 0.14f, holdDur = 0.05f, backDur = 0.2f;
+            const float outDur = 0.3f, holdDur = 0.12f, backDur = 0.4f; // 전체적으로 느리게(이전 0.14/0.05/0.2)
             Vector2 approach = ApproachOffset(attacker, target);
 
             float t = 0f;
@@ -569,11 +589,14 @@ namespace GN3.Battle
             animRoot.anchorMax = Vector2.one;
             animRoot.offsetMin = animRoot.offsetMax = Vector2.zero;
 
-            // 초상화 또는 기본 도형
+            // 초상화(애니메이션) 또는 기본 도형
             GameObject portraitGO;
+            BattlePortraitAnimator animator = null;
             if (appearance != null)
             {
-                portraitGO = CharacterPortraitUI.Create(animRoot, appearance, 110, PortraitCrop.FullBody);
+                portraitGO = BattlePortraitAnimator.Create(animRoot, appearance, 110);
+                animator = portraitGO.GetComponent<BattlePortraitAnimator>();
+                // LayoutElement는 부모가 LayoutGroup일 때만 적용되는데 animRoot는 아니라서 크기를 직접 정해줘야 한다.
                 ((RectTransform)portraitGO.transform).sizeDelta = new Vector2(110f, 110f);
             }
             else
@@ -692,6 +715,7 @@ namespace GN3.Battle
                 Button = button,
                 IsPlayerSide = tier < 0,
                 IsMelee = isMelee,
+                Animator = animator,
                 BobPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
             };
             UpdateUnitView(view);
@@ -723,7 +747,7 @@ namespace GN3.Battle
 
             // 기본공격은 자동(랜덤 대상)이라 버튼이 필요 없다 - 스킬 쓰고 싶을 때만 이 버튼으로 개입한다.
             _skillButton = CreateActionButton(panel.transform, new Vector2(28f, -100f), out _skillButtonText);
-            _skillButton.onClick.AddListener(OnSkillClicked);
+            _skillButton.onClick.AddListener(OnSkillButtonClicked);
 
             var logBg = new GameObject("LogPanel", typeof(RectTransform), typeof(Image));
             logBg.transform.SetParent(panel.transform, false);

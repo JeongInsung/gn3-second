@@ -13,6 +13,10 @@ namespace GN3.Quests
         public int EnemyCount { get; }
         public int Difficulty { get; }
 
+        /// <summary>몬스터 계층(0=약탈 세력/1=지형 동물/2=보스). QuestGenerator가 쓰는 공식과 같다
+        /// (난이도 1~3이 계층 0~2에 정확히 1:1 대응) - QuestClearHistory가 "어느 계층을 얼마나 깼는지" 셀 때 쓴다.</summary>
+        public int Tier => Math.Clamp(Difficulty - 1, 0, 2);
+
         /// <summary>게임 내 임무 소요 일수. 하루가 지날 때마다(자정) 줄어드는 RemainingDays의 초기값.</summary>
         public int DurationDays { get; }
         public int RemainingDays { get; private set; }

@@ -271,12 +271,15 @@ namespace GN3.UI
 
         private IEnumerator FadeBanner()
         {
+            // BattleScene 등으로 씬이 전환되면 이 코루틴의 자기 자신(TimeAdvanceController)보다 _banner가
+            // 먼저 파괴될 수 있다 - 매 틱 null 체크로 막는다(SetDim과 같은 방어 방식).
             for (float t = 0f; t < BannerFadeSeconds; t += Time.unscaledDeltaTime)
             {
+                if (_banner == null) yield break;
                 _banner.alpha = 1f - t / BannerFadeSeconds;
                 yield return null;
             }
-            _banner.alpha = 0f;
+            if (_banner != null) _banner.alpha = 0f;
             _bannerFade = null;
         }
 

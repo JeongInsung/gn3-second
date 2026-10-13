@@ -22,6 +22,15 @@ namespace GN3.Save
         public List<string> trainees = new List<string>(); // 훈련소에 맡긴 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> patients = new List<string>(); // 병원에 입원한 용병 id(예전 저장엔 없어 빈 목록)
         public List<AffinitySave> affinities = new List<AffinitySave>(); // 용병 쌍 친밀도(예전 저장엔 없어 성격 궁합 기본값으로 시작)
+        public List<QuestClearSave> questClears = new List<QuestClearSave>(); // 지역·계층별 퀘스트 클리어 횟수(예전 저장엔 없어 0부터 시작)
+    }
+
+    [Serializable]
+    public class QuestClearSave
+    {
+        public int region;
+        public int tier;
+        public int count;
     }
 
     [Serializable]

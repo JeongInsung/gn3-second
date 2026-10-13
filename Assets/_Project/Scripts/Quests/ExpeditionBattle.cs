@@ -65,6 +65,7 @@ namespace GN3.Quests
                 int rep = Guild.VictoryReputation(questGrade);
                 summary = $"[{quest.Title}] 임무 완료! 보상 +{reward}G · 명성 +{rep}";
                 Guild.Add(rep);
+                QuestClearHistory.RecordClear(quest.Region, quest.Tier); // 이 지역·계층은 다음 게시판에서 덜 나오고, 안 깬 계층이 더 자주 나온다
             }
             else
             {
