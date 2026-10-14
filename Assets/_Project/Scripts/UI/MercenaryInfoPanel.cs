@@ -17,7 +17,9 @@ namespace GN3.UI
     public class MercenaryInfoPanel : MonoBehaviour
     {
         private const float RefreshInterval = 0.5f;
-        private const float PanelWidth = 400f;
+        private const float DefaultRight = -16f; // 화면 오른쪽 끝에서
+        private const float DefaultTop = -120f;  // 위쪽 버튼·시간 바 아래
+        private const float PanelWidth = 340f; // 화면 오른쪽 빈 곳에 들어가게(시장·퀘스트 창 오른쪽 끝을 덮지 않게) — 퀘스트 상세 창과 같은 폭
         private const float PanelHeight = 382f; // 최소 높이. 아래 30px은 버튼 자리(관계 보기·개발 빌드 테스트)
         private const float BottomSpace = 58f; // 마지막 줄 아래 ~ 창 아래(버튼 자리 포함)
         private const int PortraitSize = 110;
@@ -88,7 +90,7 @@ namespace GN3.UI
             var rect = _panel.GetComponent<RectTransform>();
             _panelRect = rect;
             rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one; // 화면 오른쪽 위(글이 길면 아래로 늘어난다 — LayoutRows)
-            rect.anchoredPosition = new Vector2(-16f, -16f);
+            rect.anchoredPosition = new Vector2(DefaultRight, DefaultTop); // 오른쪽 위 진행·저장·불러오기 버튼과 시간 바 아래(퀘스트 상세 창과 같은 높이)
             rect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
             _panel.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.13f, 0.92f);
             DraggablePanel.Attach(rect); // 잡고 끌어 옮길 수 있다
@@ -298,7 +300,26 @@ namespace GN3.UI
             _shown = mercenary;
             _shownWasHired = PlayerParty.Instance.Members.Contains(mercenary);
             _panel.SetActive(true);
+            PlaceBesideParty();
             Refresh();
+        }
+
+        /// <summary>
+        /// 기본 자리는 화면 오른쪽 위(버튼·시간 바 아래). 파티 창(오른쪽)이 열려 있으면 그 왼쪽에 붙여 파티 목록을 덮지 않는다.
+        /// </summary>
+        private void PlaceBesideParty()
+        {
+            var parent = (RectTransform)_panelRect.parent;
+            float x = DefaultRight;
+            var partyPanel = GameObject.Find("PartyPanel"); // 씬의 파티 창 판(꺼져 있으면 못 찾는다)
+            if (partyPanel != null && partyPanel.transform is RectTransform partyRect)
+            {
+                var corners = new Vector3[4];
+                partyRect.GetWorldCorners(corners);
+                float partyLeft = parent.InverseTransformPoint(corners[0]).x;
+                x = Mathf.Min(DefaultRight, partyLeft - parent.rect.xMax - 12f);
+            }
+            _panelRect.anchoredPosition = new Vector2(x, DefaultTop);
         }
 
         public void Hide()
@@ -351,7 +372,7 @@ namespace GN3.UI
             else
                 _statusText.text = merc.IsExhausted ? "상태: 지쳐서 쉬는 중 (파견 불가)"
                     : wounded ? "상태: 다침 (마을에서 쉬는 중)" : "상태: 마을에서 쉬는 중";
-            if (hired) _statusText.text += $" · 주급 {MercenaryCondition.WeeklyWage(merc)}G";
+            if (hired) _statusText.text += $"\n주급 {MercenaryCondition.WeeklyWage(merc)}G"; // 좁은 칸에서 "주급 / 22G"처럼 끊기지 않게 줄을 나눈다
             string ailmentTip = Ailments.EffectTooltip(merc); // 효과는 글에 쓰지 않고 마우스를 올리면 보여 준다(건강 줄·능력치 줄)
             SetTipLine(_statusText, _statusTip, _statusText.text, null);
 
@@ -362,10 +383,10 @@ namespace GN3.UI
             if (hired)
             {
                 // 피로·사기(능력치가 깎였으면 몇 %인지)
-                _healthText.text += $"  ·  피로 {merc.Fatigue} · 사기 {merc.Morale}";
+                _healthText.text += $"\n피로 {merc.Fatigue} · 사기 {merc.Morale}"; // 좁은 칸에서 "사기 / 70"처럼 끊기지 않게 줄을 나눈다
                 float condition = merc.ConditionMultiplier;
                 string hit = merc.UsesMagic ? "마·방" : stats.Holy > 0 ? "공·방·신" : "공·방";
-                if (condition < 1f) _healthText.text += $" ({hit} -{Mathf.RoundToInt((1f - condition) * 100f)}%)";
+                if (condition < 1f) _healthText.text += $"\n{hit} -{Mathf.RoundToInt((1f - condition) * 100f)}%"; // 깎인 능력치는 따로 한 줄
             }
 
             // 나이 칸: 나이와 생일만(성장 속도·재능은 숨은 값)
