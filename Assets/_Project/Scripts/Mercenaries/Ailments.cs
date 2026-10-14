@@ -90,6 +90,8 @@ namespace GN3.Mercenaries
         {
             var parts = new List<string>();
             if (after.Attack != before.Attack) parts.Add($"공격 {before.Attack} → {after.Attack}");
+            if (after.Magic != before.Magic) parts.Add($"마력 {before.Magic} → {after.Magic}");
+            if (after.Holy != before.Holy) parts.Add($"신성력 {before.Holy} → {after.Holy}");
             if (after.Defense != before.Defense) parts.Add($"방어 {before.Defense} → {after.Defense}");
             if (after.MoveSpeed != before.MoveSpeed) parts.Add($"속도 {before.MoveSpeed} → {after.MoveSpeed}");
             return parts.Count > 0 ? string.Join(" · ", parts) : "능력치 변화 없음";

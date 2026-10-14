@@ -82,12 +82,12 @@ namespace GN3.UI
                 CharacterPortraitUI.Create(row.transform, merc.Appearance, 40);
 
                 string current = merc.Weapon != null ? merc.Weapon.Name : "맨손";
-                int before = merc.CurrentStats.Attack;
+                int before = merc.CurrentStats.Offense;
                 int after = before - (merc.Weapon?.AttackFor(merc.Class.Kind) ?? 0) + weapon.AttackFor(merc.Class.Kind);
                 string fit = weapon.Suits(merc.Class.Kind) ? " (적성)" : "";
                 ShopListUI.CreateTwoLineLabel(row.transform,
                     $"{merc.Name} ({merc.Class.ClassName})  현재: {current}",
-                    $"이 무기로: 공격 {before} → {after}{fit}");
+                    $"이 무기로: {merc.OffenseLabel} {before} → {after}{fit}");
 
                 var target = merc;
                 var button = ShopListUI.CreateButton(row.transform, "장착", () => Equip(weapon, target));

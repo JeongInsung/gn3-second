@@ -364,13 +364,14 @@ namespace GN3.UI
                 // 피로·사기(능력치가 깎였으면 몇 %인지)
                 _healthText.text += $"  ·  피로 {merc.Fatigue} · 사기 {merc.Morale}";
                 float condition = merc.ConditionMultiplier;
-                if (condition < 1f) _healthText.text += $" (공·방 -{Mathf.RoundToInt((1f - condition) * 100f)}%)";
+                string hit = merc.UsesMagic ? "마·방" : stats.Holy > 0 ? "공·방·신" : "공·방";
+                if (condition < 1f) _healthText.text += $" ({hit} -{Mathf.RoundToInt((1f - condition) * 100f)}%)";
             }
 
             // 나이 칸: 나이와 생일만(성장 속도·재능은 숨은 값)
             _growthText.text = $"{merc.Age}세 · {MercenaryAge.BirthdayText(merc)}생";
 
-            // 능력치: "공격 23 (+3 −2)" — 23 = 지금 영구 수치(성장·쇠퇴·무기·수련이 바로 반영),
+            // 능력치: "공격 23 (+3 −2)"(마법사는 "마력", 힐러는 "신성력"도) — 23 = 지금 영구 수치(성장·쇠퇴·무기·수련이 바로 반영),
             // +3/−1 = 이번 달 오른·내린 양(참고용, 왼쪽에 이미 들어 있음, 매달 1일 Mercenary.SnapshotMonth로 0부터),
             // −2 = 부상·질병·피로·사기로 잠깐 깎인 양(빨강, 나으면 돌아옴).
             var permanent = merc.PermanentStats;
@@ -401,8 +402,10 @@ namespace GN3.UI
             if (!string.IsNullOrEmpty(ailmentTip)) statsTip += "\n" + ailmentTip;
             if (researchTip != null) statsTip += "\n" + researchTip;
             SetTipLine(_statsText, _statsTip,
-                $"{Stat("공격", merc.MonthBaseAttack, permanent.Attack, stats.Attack)}  ·  {Stat("방어", merc.MonthBaseDefense, permanent.Defense, stats.Defense)}  ·  "
-                + $"{Stat("속도", merc.MonthBaseSpeed, permanent.MoveSpeed, stats.MoveSpeed)}\n{Stat("전투력", merc.MonthBasePower, permanentPower, merc.CombatPower)}",
+                $"{Stat(merc.OffenseLabel, merc.MonthBaseAttack, permanent.Offense, stats.Offense)}  ·  {Stat("방어", merc.MonthBaseDefense, permanent.Defense, stats.Defense)}  ·  "
+                + $"{Stat("속도", merc.MonthBaseSpeed, permanent.MoveSpeed, stats.MoveSpeed)}\n"
+                + (permanent.Holy > 0 ? $"{Stat("신성력", merc.MonthBaseHoly, permanent.Holy, stats.Holy)}  ·  " : "")
+                + Stat("전투력", merc.MonthBasePower, permanentPower, merc.CombatPower),
                 statsTip);
             if (merc.Weapon != null)
                 SetTipLine(_weaponText, _weaponTip, $"무기: {merc.Weapon.Name}", merc.Weapon.DescribeFor(merc.Class.Kind));

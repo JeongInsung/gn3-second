@@ -69,11 +69,13 @@ namespace GN3.Mercenaries
                 attack: Mathf.Max(1, Mathf.RoundToInt(stats.Attack * m)),
                 defense: Mathf.Max(0, Mathf.RoundToInt(stats.Defense * m)),
                 maxHealth: Mathf.Max(1, Mathf.RoundToInt(stats.MaxHealth * m)),
-                moveSpeed: stats.MoveSpeed);
+                moveSpeed: stats.MoveSpeed,
+                magic: stats.Magic,
+                holy: stats.Holy);
         }
 
-        /// <summary>전투력 = 공격×4 + 방어×3 + 최대 체력 + 속도×2.</summary>
+        /// <summary>전투력 = 공격×4 + 방어×3 + 최대 체력 + 속도×2 + 마력×4 + 신성력×3.</summary>
         public static int CombatPower(CombatStats stats) =>
-            stats.Attack * 4 + stats.Defense * 3 + stats.MaxHealth + stats.MoveSpeed * 2;
+            stats.Attack * 4 + stats.Defense * 3 + stats.MaxHealth + stats.MoveSpeed * 2 + stats.Magic * 4 + stats.Holy * 3;
     }
 }

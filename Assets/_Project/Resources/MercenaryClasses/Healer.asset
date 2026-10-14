@@ -22,3 +22,5 @@ MonoBehaviour:
   HealthGrowth: 5
   BaseMoveSpeed: 6
   MoveSpeedGrowth: 1
+  BaseHoly: 8
+  HolyGrowth: 2

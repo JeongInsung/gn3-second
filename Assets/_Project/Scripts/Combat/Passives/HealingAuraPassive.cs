@@ -3,15 +3,15 @@ using System.Collections.Generic;
 
 namespace GN3.Combat
 {
-    /// <summary>힐러 전용. 매 라운드 아군 중 체력 비율이 가장 낮은 유닛을 회복시킨다.</summary>
+    /// <summary>힐러 전용. 매 라운드 아군 중 체력 비율이 가장 낮은 유닛을 힐러의 신성력에 비례해 회복시킨다.</summary>
     public class HealingAuraPassive : PassiveBase
     {
-        private const float HealRatio = 0.1f;
+        private const float HolyRatio = 0.5f;
 
         private IReadOnlyList<Combatant> _allies;
 
         public override string Name => "치유의 기운";
-        public override string Description => $"매 라운드 아군 중 체력 비율이 가장 낮은 유닛을 최대체력의 {HealRatio:P0}만큼 회복";
+        public override string Description => $"매 라운드 아군 중 체력 비율이 가장 낮은 유닛을 신성력 × {HolyRatio:0.##}만큼 회복";
 
         public override void OnBattleStart(Combatant self, IReadOnlyList<Combatant> allies, IReadOnlyList<Combatant> enemies)
         {
@@ -37,7 +37,7 @@ namespace GN3.Combat
             }
 
             if (lowest != null)
-                lowest.Heal((int)Math.Round(lowest.Stats.MaxHealth * HealRatio));
+                lowest.Heal(Math.Max(1, (int)Math.Round(self.Stats.Holy * HolyRatio)));
         }
     }
 }
