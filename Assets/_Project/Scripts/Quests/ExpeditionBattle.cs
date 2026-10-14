@@ -18,19 +18,47 @@ namespace GN3.Quests
             public BattleResult Result;
             public List<Mercenary> Fighters;
             public List<Combatant> Combatants;
+            /// <summary>다 잡은 라운드 수(승리면 WaveCount).</summary>
+            public int WavesCleared;
+            public int WaveCount = 1;
             public bool Victory => Result.Outcome == BattleOutcome.TeamAVictory;
         }
 
         private static readonly System.Random Rng = new System.Random();
 
+        /// <summary>퀘스트 waveIndex번째 라운드의 적(이름은 라운드 적, 능력치는 퀘스트 난이도, 보스는 따로 세게).</summary>
+        public static List<Combatant> SpawnWave(Quest quest, int waveIndex, System.Random rng)
+        {
+            var wave = quest.Waves[waveIndex];
+            return EnemySquadGenerator.Generate(quest.Region, wave.Count, quest.Difficulty, rng, wave.Tier, wave.EnemyName);
+        }
+
+        /// <summary>라운드를 차례로 자동 전투한다. 체력은 라운드 사이에 그대로 이어지고, 한 라운드라도 지면(또는 비기면) 거기서 실패.</summary>
         public static Battle Simulate(Expedition expedition)
         {
             var fighters = expedition.Members.Where(m => m.IsAlive).ToList();
             var combatants = fighters.Select(m => m.ToCombatant()).ToList();
             var quest = expedition.Quest;
-            var enemies = EnemySquadGenerator.Generate(quest.Region, quest.EnemyCount, quest.Difficulty, Rng);
-            var result = new AutoBattleSimulator().Simulate(combatants, enemies, skills: ClassSkillFactory.ForTeam(fighters, combatants));
-            return new Battle { Result = result, Fighters = fighters, Combatants = combatants };
+            var skills = ClassSkillFactory.ForTeam(fighters, combatants);
+
+            var log = new List<BattleEvent>();
+            var allEnemies = new List<Combatant>();
+            int rounds = 0, cleared = 0;
+            var outcome = BattleOutcome.TeamAVictory;
+            for (int w = 0; w < quest.WaveCount; w++)
+            {
+                var enemies = SpawnWave(quest, w, Rng);
+                allEnemies.AddRange(enemies);
+                var result = new AutoBattleSimulator().Simulate(combatants, enemies, skills: skills);
+                log.AddRange(result.Log);
+                rounds += result.Rounds;
+                outcome = result.Outcome;
+                if (outcome != BattleOutcome.TeamAVictory) break;
+                cleared++;
+            }
+
+            var total = new BattleResult { Outcome = outcome, Rounds = rounds, Log = log, TeamA = combatants, TeamB = allEnemies };
+            return new Battle { Result = total, Fighters = fighters, Combatants = combatants, WavesCleared = cleared, WaveCount = quest.WaveCount };
         }
 
         /// <summary>
@@ -48,6 +76,8 @@ namespace GN3.Quests
             public bool Victory;
             public int Gold;          // 받은 보상(실패면 0)
             public int Reputation;    // 명성 변화(실패면 음수)
+            public int WavesCleared;  // 다 잡은 라운드 수
+            public int WaveCount = 1;
             public float ReturnHours; // 귀환까지(생존자가 없으면 0)
             public string Summary;
             public List<MemberReport> Members = new List<MemberReport>();
@@ -108,7 +138,8 @@ namespace GN3.Quests
             }
             else
             {
-                summary = $"{quest.Title} — 임무 실패... 명성 -{Guild.FailPenalty}";
+                string where = battle.WaveCount > 1 ? $" ({battle.WavesCleared + 1}/{battle.WaveCount}라운드에서 패배)" : "";
+                summary = $"{quest.Title} — 임무 실패...{where} 명성 -{Guild.FailPenalty}";
                 Guild.Add(-Guild.FailPenalty);
                 report.Reputation = -Guild.FailPenalty;
             }
@@ -157,6 +188,8 @@ namespace GN3.Quests
             else ExpeditionLog.Instance.Complete(expedition);
             report.ReturnHours = survivorsList.Count > 0 ? expedition.ReturnHoursFor : 0f;
             report.Summary = summary;
+            report.WavesCleared = battle.WavesCleared;
+            report.WaveCount = battle.WaveCount;
             return report;
         }
 

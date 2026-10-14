@@ -84,7 +84,9 @@ namespace GN3.Combat
         private const float SpeedJitterRange = 0.15f;      // 유닛마다 ±15% 흔들어 한꺼번에 몰려 때리지 않게
         private const float StartingTimerJitter = 0.4f;    // 시작할 때 공격 대기를 0~40% 채워 흩어 둔다
 
-        private const float MaxBattleSeconds = 180f; // 안전장치(무승부)
+        private const float MaxBattleSeconds = 180f; // 라운드당 안전장치(넘기면 무승부 = 실패)
+        /// <summary>라운드를 깨고 다음 적이 나오기까지(게임 초). 그동안 대원은 서 있던 자리에서 쉬고 분대장은 움직일 수 있다.</summary>
+        public const float WaveBreakSeconds = 2.5f;
 
         // 직접 전투는 위치(원거리는 뒤에서 안전)와 분대장 조작 덕에 자동 전투보다 유리하다 → 적을 이만큼 세게.
         // 분대장을 가만히 둔 채 이기는 비율이 자동 전투와 비슷해지게 맞춘 값(조작을 잘하면 더 잘 이긴다).
@@ -94,17 +96,38 @@ namespace GN3.Combat
 
         public List<FieldUnit> Units { get; } = new List<FieldUnit>();
         public List<Combatant> PlayerTeam { get; }
-        public List<Combatant> EnemyTeam { get; }
+        /// <summary>지금 라운드의 적.</summary>
+        public List<Combatant> EnemyTeam { get; private set; }
+        /// <summary>지금까지 나온 모든 라운드의 적(결과용).</summary>
+        public List<Combatant> AllEnemies { get; } = new List<Combatant>();
         public FieldUnit Leader { get; }
         public List<BattleEvent> Log { get; } = new List<BattleEvent>();
         public int ActionCount { get; private set; }
         public float Elapsed { get; private set; }
 
-        public bool IsOver => !PlayerTeam.Any(c => c.IsAlive) || !EnemyTeam.Any(c => c.IsAlive) || Elapsed >= MaxBattleSeconds;
+        /// <summary>지금 라운드(0부터)와 전체 라운드 수.</summary>
+        public int CurrentWave { get; private set; }
+        public int WaveCount => _waves.Count;
+        /// <summary>라운드를 깨고 다음 적을 기다리는 중.</summary>
+        public bool IsBetweenWaves => _breakTimer > 0f;
+        /// <summary>다 잡은 라운드 수.</summary>
+        public int WavesCleared => CurrentWave + (EnemyTeam.Any(c => c.IsAlive) ? 0 : 1);
+
+        private bool PlayersAlive => PlayerTeam.Any(c => c.IsAlive);
+        private bool LastWave => CurrentWave >= WaveCount - 1;
+
+        public bool IsOver => !PlayersAlive || (LastWave && !EnemyTeam.Any(c => c.IsAlive)) || Elapsed >= MaxBattleSeconds * WaveCount;
         public BattleOutcome Outcome => CombatResolver.DetermineOutcome(PlayerTeam, EnemyTeam);
 
         /// <summary>스킬이 쓰인 순간(UI가 스킬 이름을 띄운다).</summary>
         public event Action<FieldUnit, SkillBase> OnSkillUsed;
+        /// <summary>라운드를 깼다(깬 라운드 번호, 0부터). WaveBreakSeconds 뒤에 다음 라운드가 시작된다.</summary>
+        public event Action<int> OnWaveCleared;
+        /// <summary>다음 라운드 시작(라운드 번호, 치운 적 유닛, 새로 나온 적 유닛).</summary>
+        public event Action<int, List<FieldUnit>, List<FieldUnit>> OnWaveStarted;
+
+        private readonly List<List<Combatant>> _waves;
+        private float _breakTimer;
 
         private readonly Random _rng;
         private readonly Dictionary<Combatant, FieldUnit> _byCombatant = new Dictionary<Combatant, FieldUnit>();
@@ -112,12 +135,12 @@ namespace GN3.Combat
         /// <param name="playerTeam">아군(순서대로 배치). leaderIndex번째가 분대장.</param>
         /// <param name="playerMelee">아군 각자가 근접인지(playerTeam과 같은 순서).</param>
         /// <param name="playerSkills">아군 각자의 스킬(없으면 null).</param>
+        /// <param name="enemyWaves">라운드별 적(순서대로). 체력은 라운드 사이에 그대로 이어진다.</param>
         public FieldBattleSession(List<Combatant> playerTeam, IList<bool> playerMelee, IList<SkillBase> playerSkills, int leaderIndex,
-            List<Combatant> enemyTeam, Random rng)
+            IList<List<Combatant>> enemyWaves, Random rng)
         {
             PlayerTeam = playerTeam;
-            EnemyTeam = enemyTeam.Select(Strengthen).ToList();
-            enemyTeam = EnemyTeam;
+            _waves = enemyWaves.Select(w => w.Select(Strengthen).ToList()).ToList();
             _rng = rng;
 
             // 아군: 근접은 앞줄(오른쪽), 원거리는 뒷줄. 줄마다 위아래로 고르게 벌린다.
@@ -132,15 +155,47 @@ namespace GN3.Combat
                 if (unit.IsLeader) Leader = unit;
             }
 
-            // 적: 오른쪽에 두 줄로 엇갈려 선다. 몬스터는 모두 근접.
-            for (int i = 0; i < enemyTeam.Count; i++)
+            SpawnEnemies(0);
+            CombatResolver.RaiseBattleStart(PlayerTeam, EnemyTeam);
+        }
+
+        /// <summary>waveIndex번째 라운드 적을 오른쪽에 두 줄로 엇갈려 세운다(몬스터는 모두 근접). 새 유닛을 돌려준다.</summary>
+        private List<FieldUnit> SpawnEnemies(int waveIndex)
+        {
+            CurrentWave = waveIndex;
+            EnemyTeam = _waves[waveIndex];
+            AllEnemies.AddRange(EnemyTeam);
+            var added = new List<FieldUnit>();
+            for (int i = 0; i < EnemyTeam.Count; i++)
             {
                 float x = FieldWidth - 260f - (i % 2) * 120f;
-                float y = Spread(i, enemyTeam.Count);
-                CreateUnit(enemyTeam[i], false, false, true, null, new Vector2(x, y));
+                float y = Spread(i, EnemyTeam.Count);
+                added.Add(CreateUnit(EnemyTeam[i], false, false, true, null, new Vector2(x, y)));
             }
+            return added;
+        }
 
-            CombatResolver.RaiseBattleStart(PlayerTeam, EnemyTeam);
+        /// <summary>쓰러진 이번 라운드 적을 치우고 다음 라운드 적을 세운다. 아군은 서 있던 자리·체력 그대로.</summary>
+        private void StartNextWave()
+        {
+            var removed = Units.Where(u => !u.IsPlayerSide).ToList();
+            foreach (var u in removed)
+            {
+                Units.Remove(u);
+                _byCombatant.Remove(u.Combatant);
+            }
+            foreach (var u in Units)
+            {
+                u.Target = null;
+                u.SkillTarget = null;
+            }
+            _orderedTarget = null;
+
+            var added = SpawnEnemies(CurrentWave + 1);
+            foreach (var c in EnemyTeam)
+                foreach (var passive in c.Passives)
+                    passive.OnBattleStart(c, EnemyTeam, PlayerTeam);
+            OnWaveStarted?.Invoke(CurrentWave, removed, added);
         }
 
         /// <summary>직접 전투용으로 적 능력치를 키운 새 유닛(이름·패시브 그대로).</summary>
@@ -281,7 +336,26 @@ namespace GN3.Combat
             }
 
             Separate(dt);
+            UpdateWaveBreak(dt);
             return events;
+        }
+
+        /// <summary>이번 라운드 적을 다 잡았고 다음 라운드가 남았으면 잠깐 쉬었다가 다음 적을 세운다.</summary>
+        private void UpdateWaveBreak(float dt)
+        {
+            if (!PlayersAlive || LastWave || EnemyTeam.Any(c => c.IsAlive)) return;
+            if (_breakTimer <= 0f)
+            {
+                _breakTimer = WaveBreakSeconds;
+                OnWaveCleared?.Invoke(CurrentWave);
+                return;
+            }
+            _breakTimer -= dt;
+            if (_breakTimer <= 0f)
+            {
+                _breakTimer = 0f;
+                StartNextWave();
+            }
         }
 
         /// <summary>분대장: 명령이 없을 때는 사거리 안의 적만 알아서 때린다(쫓아가지는 않음 - 이동은 플레이어 몫).</summary>

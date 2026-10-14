@@ -222,7 +222,7 @@ namespace GN3.Quests
 
             // 습격 규모/강도를 퀘스트 자체의 난이도·적 숫자에 맞춰 키운다 — 난이도가 높은 원정일수록
             // 오가는 길도 위험해지고, 그래야 습격을 피하게 해주는 길잡이의 가치도 생긴다.
-            int maxAmbushSize = Math.Max(1, Math.Min(aliveMembers.Count, expedition.Quest.EnemyCount));
+            int maxAmbushSize = Math.Max(1, Math.Min(aliveMembers.Count, expedition.Quest.MaxWaveSize));
             int enemyCount = _eventRng.Next(1, maxAmbushSize + 1);
             int ambushDifficulty = Math.Max(1, expedition.Quest.Difficulty);
             var enemies = EnemySquadGenerator.Generate(expedition.Quest.Region, enemyCount, ambushDifficulty, _eventRng, tierOverride: 0);

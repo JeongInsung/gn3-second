@@ -121,5 +121,14 @@ namespace GN3.Save
         public float returnHoursLeft;
         public List<string> memberIds = new List<string>();
         public string leaderId; // 분대장(예전 저장엔 없어 비어 있음 → 첫 파견원)
+        public List<WaveSave> waves = new List<WaveSave>(); // 라운드 구성(예전 저장엔 없어 enemy × enemyCount 한 라운드)
+    }
+
+    [Serializable]
+    public class WaveSave
+    {
+        public string enemy;
+        public int count;
+        public int tier;
     }
 }

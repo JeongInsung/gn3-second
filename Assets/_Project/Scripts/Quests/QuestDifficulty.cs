@@ -44,7 +44,24 @@ namespace GN3.Quests
         /// <summary>rich text용 "[S] 퀘스트 이름"(등급 색).</summary>
         public static string RichTitle(Quest quest) => $"{GradeTable.RichLabel(Grade(quest))} {quest.Title}";
 
-        public static int RecommendedPower(Quest quest) => quest.EnemyCount * PowerPerEnemy(quest.Difficulty);
+        // 권장 전투력 = 적 1마리 몫 × 유효 적 수 × RecommendedScale.
+        // 유효 적 수 = 가장 큰 라운드 + 나머지 라운드 적 × 0.5 + 보스 1 — 라운드는 한꺼번에가 아니라 차례로 나와서
+        // 적 수 합만큼 무겁지 않다. 자동 전투 시뮬레이션(실제 직업 수치, 6000판)으로 판정 '중간' 승률 약 60%, '어려움' 약 25%가 되게 맞춤.
+        private const float LaterWaveWeight = 0.5f;
+        private const float BossWeight = 1f;
+        private const float RecommendedScale = 0.8f;
+
+        public static int RecommendedPower(Quest quest)
+        {
+            float effective = quest.MaxWaveSize + LaterWaveWeight * (quest.EnemyCount - quest.MaxWaveSize)
+                + (quest.Waves.Any(w => w.IsBoss) ? BossWeight : 0f);
+            return (int)System.Math.Round(effective * PowerPerEnemy(quest.Difficulty) * RecommendedScale);
+        }
+
+        /// <summary>라운드 구성 한 줄: "1R 산적 ×2 → 2R 늑대 ×3 → 3R 보스 고목왕 ×1"(한 라운드면 "산적 ×3").</summary>
+        public static string WavesText(Quest quest) => quest.WaveCount == 1
+            ? $"{quest.Waves[0].EnemyName} ×{quest.Waves[0].Count}"
+            : string.Join(" → ", quest.Waves.Select((w, i) => $"{i + 1}R {(w.IsBoss ? "보스 " : "")}{w.EnemyName} ×{w.Count}"));
 
         public static Rating Rate(int partyPower, Quest quest)
         {

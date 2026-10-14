@@ -84,7 +84,9 @@ namespace GN3.UI
             _title.text = QuestDifficulty.RichTitle(q);
             _body.text =
                 $"지역: {place}\n" +
-                $"적: {q.EnemyName} × {q.EnemyCount}    난이도 {q.Difficulty}\n\n" +
+                (q.WaveCount > 1
+                    ? $"라운드 {q.WaveCount}개 (체력은 라운드 사이에 이어짐)    난이도 {q.Difficulty}\n{QuestDifficulty.WavesText(q)}\n\n"
+                    : $"적: {q.EnemyName} × {q.EnemyCount}    난이도 {q.Difficulty}\n\n") +
                 $"{QuestDifficulty.DescribeForBoard(q)}\n" +
                 $"{QuestDifficulty.BoardDurationText(q)}\n" +
                 $"최대 파견 인원: {q.MaxDispatchSize}명\n\n" +

@@ -91,7 +91,9 @@ namespace GN3.UI
             titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
             titleText.gameObject.AddComponent<LayoutElement>().minWidth = 520;
 
-            var rewardText = CreateText(row.transform, $"보상 {Pricing.QuestReward(quest)}G", 18, TextAnchor.MiddleLeft);
+            string rounds = quest.WaveCount > 1 ? $"<color=#a3937c>{quest.WaveCount}라운드</color>  " : "";
+            var rewardText = CreateText(row.transform, $"{rounds}보상 {Pricing.QuestReward(quest)}G", 18, TextAnchor.MiddleLeft);
+            rewardText.supportRichText = true;
             rewardText.color = UITheme.TitleText;
             rewardText.horizontalOverflow = HorizontalWrapMode.Overflow;
             var rewardLayout = rewardText.gameObject.AddComponent<LayoutElement>();

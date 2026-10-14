@@ -61,6 +61,7 @@ namespace GN3.Battle
         private readonly Dictionary<FieldUnit, Mercenary> _mercOf = new Dictionary<FieldUnit, Mercenary>();
         private readonly Dictionary<FieldUnit, System.Numerics.Vector2> _defaultPos = new Dictionary<FieldUnit, System.Numerics.Vector2>();
         private FieldUnit _dragUnit;
+        private FieldUnit _hoverUnit;          // 배치 중 마우스가 올라간 아군(흰 테두리)
         private Vector2 _dragOffset;           // 잡은 곳과 발 위치의 차이(끄는 동안 유지)
         private System.Numerics.Vector2 _dragStart;
         private GameObject _deployZone;
@@ -87,6 +88,8 @@ namespace GN3.Battle
         private const float ProjectileSpeed = 1400f;
         private const string MusicPath = "Music/전투 브금 1";
         private const float MusicVolume = 0.6f;
+        /// <summary>전투씬 전체 속도(Time.timeScale). 이동·공격·쿨타임·애니메이션·연출이 같은 비율로 느려져 밸런스는 그대로.</summary>
+        private const float BattleSpeed = 0.7f;
 
         private static readonly Color LeaderColor = new Color(1f, 0.82f, 0.3f);
         private static readonly Color PickingColor = new Color(0.95f, 0.9f, 0.35f);
@@ -105,10 +108,11 @@ namespace GN3.Battle
             _leaderMerc = expedition.Leader;
 
             var rng = new System.Random();
-            var enemies = EnemySquadGenerator.Generate(quest.Region, quest.EnemyCount, quest.Difficulty, rng);
-            int tier = Math.Clamp(quest.Difficulty - 1, 0, 2);
+            var waves = Enumerable.Range(0, quest.WaveCount).Select(w => ExpeditionBattle.SpawnWave(quest, w, rng)).ToList();
 
-            _session = new FieldBattleSession(combatants, melee, skills, leaderIndex, enemies, rng);
+            _session = new FieldBattleSession(combatants, melee, skills, leaderIndex, waves, rng);
+            _session.OnWaveCleared += OnWaveCleared;
+            _session.OnWaveStarted += OnWaveStarted;
             _session.OnSkillUsed += (unit, skill) =>
             {
                 if (_views.TryGetValue(unit, out var v)) StartCoroutine(FloatText(v, skill.Name, new Color(0.6f, 0.85f, 1f), 175f));
@@ -121,7 +125,7 @@ namespace GN3.Battle
                 int i = combatants.IndexOf(unit.Combatant);
                 var view = unit.IsPlayerSide
                     ? CreateUnitView(unit, _fighters[i].Appearance, -1)
-                    : CreateUnitView(unit, null, tier);
+                    : CreateUnitView(unit, null, quest.Waves[0].Tier);
                 _views[unit] = view;
                 _drawOrder.Add(view);
                 if (unit.IsPlayerSide)
@@ -134,13 +138,77 @@ namespace GN3.Battle
             }
 
             PlayMusic();
+            Time.timeScale = BattleSpeed;
 
             _deploying = true;
             BuildDeployZone();
             AppendLog("배치 — 대원을 끌어 자리를 정한 뒤 '전투 시작'(Space)");
+            if (quest.WaveCount > 1)
+                AppendLog($"라운드 {quest.WaveCount}개: {QuestDifficulty.WavesText(quest)} · 체력은 라운드 사이에 이어집니다");
             foreach (var v in _views.Values) UpdateUnitView(v);
             SortByDepth();
             RefreshDeployPanel();
+        }
+
+        // ---------- 라운드 ----------
+
+        private void OnWaveCleared(int wave)
+        {
+            var quest = _expedition.Quest;
+            var next = quest.Waves[wave + 1];
+            AppendLog($"<color=#ffd36b>{wave + 1}라운드 돌파! 다음: {(next.IsBoss ? "보스 " : "")}{next.EnemyName} ×{next.Count}</color>");
+            StartCoroutine(Banner($"{wave + 1}라운드 돌파!", $"다음 — {(next.IsBoss ? "보스 " : "")}{next.EnemyName} ×{next.Count}",
+                new Color(1f, 0.85f, 0.4f)));
+        }
+
+        /// <summary>쓰러진 앞 라운드 적을 치우고 새 적을 그린다(아군은 그대로).</summary>
+        private void OnWaveStarted(int wave, List<FieldUnit> removed, List<FieldUnit> added)
+        {
+            foreach (var u in removed)
+            {
+                if (!_views.TryGetValue(u, out var v)) continue;
+                _views.Remove(u);
+                _drawOrder.Remove(v);
+                Destroy(v.Root.gameObject);
+            }
+            int tier = _expedition.Quest.Waves[wave].Tier;
+            foreach (var u in added)
+            {
+                var v = CreateUnitView(u, null, tier);
+                _views[u] = v;
+                _drawOrder.Add(v);
+            }
+            var w = _expedition.Quest.Waves[wave];
+            bool last = wave == _session.WaveCount - 1;
+            AppendLog($"<color=#ffd36b>{wave + 1}라운드 시작 — {(w.IsBoss ? "보스 " : "")}{w.EnemyName} ×{w.Count}</color>");
+            StartCoroutine(Banner(last ? $"마지막 {wave + 1}라운드" : $"{wave + 1}라운드", $"{(w.IsBoss ? "보스 " : "")}{w.EnemyName} ×{w.Count}",
+                w.IsBoss ? new Color(1f, 0.45f, 0.4f) : Color.white));
+        }
+
+        /// <summary>필드 위쪽 가운데에 큰 글자로 잠깐 띄운다(나타났다 사라짐).</summary>
+        private IEnumerator Banner(string title, string sub, Color color)
+        {
+            var label = CreateText(_fxLayer, $"{title}\n<size=22>{sub}</size>", 44, TextAnchor.MiddleCenter, color);
+            label.fontStyle = FontStyle.Bold;
+            label.supportRichText = true;
+            label.raycastTarget = false;
+            label.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
+            var rect = label.rectTransform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -60f);
+            rect.sizeDelta = new Vector2(1000f, 110f);
+            var group = label.gameObject.AddComponent<CanvasGroup>();
+
+            const float duration = 1.8f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                if (label == null) yield break;
+                float k = t / duration;
+                group.alpha = k < 0.15f ? k / 0.15f : k > 0.75f ? (1f - k) / 0.25f : 1f;
+                rect.localScale = Vector3.one * Mathf.Lerp(1.15f, 1f, Mathf.Clamp01(k / 0.15f));
+                yield return null;
+            }
+            if (label != null) Destroy(label.gameObject);
         }
 
         // ---------- 배치 ----------
@@ -152,6 +220,8 @@ namespace GN3.Battle
             EventSystem.current?.SetSelectedGameObject(null);
             _deploying = false;
             _dragUnit = null;
+            _hoverUnit = null;
+            UpdateDeployOutlines(); // 테두리 끄기
             foreach (var kv in _mercOf)
                 BattleFormation.Remember(kv.Value.Id, new Vector2(kv.Key.Position.X, kv.Key.Position.Y));
             _session.Begin();
@@ -163,6 +233,13 @@ namespace GN3.Battle
                 ? $"전투 시작! 분대장 {leader.Combatant.Name} 지휘 — 땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬"
                 : "전투 시작!");
             RefreshPanel();
+        }
+
+        /// <summary>배치 중 마우스를 올린(또는 끌고 있는) 아군에게만 마을 건물처럼 흰 테두리가 반짝인다.</summary>
+        private void UpdateDeployOutlines()
+        {
+            foreach (var v in _views.Values)
+                v.Animator?.SetOutline(_deploying && (v.Unit == _hoverUnit || v.Unit == _dragUnit));
         }
 
         private void ResetFormation()
@@ -275,6 +352,7 @@ namespace GN3.Battle
                 var kb = Keyboard.current;
                 if (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame)) BeginBattle();
                 foreach (var v in _views.Values) UpdateUnitView(v);
+                UpdateDeployOutlines();
                 SortByDepth();
                 if (_deploying) RefreshDeployPanel();
                 else RefreshPanel();
@@ -311,7 +389,7 @@ namespace GN3.Battle
         private void SetPaused(bool paused)
         {
             _paused = paused && !_resultShown;
-            Time.timeScale = _paused ? 0f : 1f;
+            Time.timeScale = _paused ? 0f : BattleSpeed;
             _pauseOverlay.SetActive(_paused);
         }
 
@@ -376,7 +454,9 @@ namespace GN3.Battle
         {
             var leader = _session.Leader;
             int secs = Mathf.FloorToInt(_session.Elapsed);
-            _timerLabel.text = $"{secs / 60}:{secs % 60:00}";
+            _timerLabel.text = _session.WaveCount > 1
+                ? $"라운드 {_session.CurrentWave + 1}/{_session.WaveCount}    {secs / 60}:{secs % 60:00}"
+                : $"{secs / 60}:{secs % 60:00}";
 
             if (leader == null || !leader.IsAlive)
             {
@@ -550,9 +630,13 @@ namespace GN3.Battle
                 Rounds = _session.ActionCount,
                 Log = _session.Log,
                 TeamA = _session.PlayerTeam,
-                TeamB = _session.EnemyTeam,
+                TeamB = _session.AllEnemies,
             };
-            var battle = new ExpeditionBattle.Battle { Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam };
+            var battle = new ExpeditionBattle.Battle
+            {
+                Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam,
+                WavesCleared = _session.WavesCleared, WaveCount = _session.WaveCount,
+            };
             var report = ExpeditionBattle.ConcludeReport(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
 
             _skillButton.interactable = false;
@@ -695,11 +779,20 @@ namespace GN3.Battle
             titleRect.anchoredPosition = new Vector2(0f, -24f);
             titleRect.sizeDelta = new Vector2(1200f, 40f);
 
+            if (quest.WaveCount > 1)
+            {
+                var waves = CreateText(root, QuestDifficulty.WavesText(quest), 17, TextAnchor.MiddleCenter, UITheme.MutedText);
+                var wavesRect = waves.rectTransform;
+                wavesRect.anchorMin = wavesRect.anchorMax = wavesRect.pivot = new Vector2(0.5f, 1f);
+                wavesRect.anchoredPosition = new Vector2(0f, -62f);
+                wavesRect.sizeDelta = new Vector2(1300f, 28f);
+            }
+
             _timerLabel = CreateText(root, "0:00", 22, TextAnchor.MiddleRight, UITheme.MutedText);
             var timerRect = _timerLabel.rectTransform;
             timerRect.anchorMin = timerRect.anchorMax = timerRect.pivot = new Vector2(1f, 1f);
             timerRect.anchoredPosition = new Vector2(-40f, -24f);
-            timerRect.sizeDelta = new Vector2(160f, 40f);
+            timerRect.sizeDelta = new Vector2(320f, 40f);
 
             // 필드: 피벗을 왼쪽 아래에 둬서 로컬 좌표 = 필드 좌표
             var fieldGO = CreateImage(root, "Field", new Color(0.2f, 0.24f, 0.16f, 1f));
@@ -788,7 +881,7 @@ namespace GN3.Battle
             Image[] tintables;
             if (appearance != null)
             {
-                var portrait = BattlePortraitAnimator.Create(body, appearance, (int)PortraitSize);
+                var portrait = BattlePortraitAnimator.Create(body, appearance, (int)PortraitSize, clip: false); // 검격이 칸에 잘리지 않게
                 var pr = (RectTransform)portrait.transform;
                 pr.anchorMin = pr.anchorMax = pr.pivot = new Vector2(0.5f, 0f);
                 pr.sizeDelta = new Vector2(PortraitSize, PortraitSize);
@@ -868,6 +961,8 @@ namespace GN3.Battle
                 drag.OnBegin = e => OnDragBegin(unit, e);
                 drag.OnMove = e => OnDragMove(unit, e);
                 drag.OnEnd = e => OnDragEnd(unit, e);
+                drag.OnEnter = () => _hoverUnit = unit;
+                drag.OnExit = () => { if (_hoverUnit == unit) _hoverUnit = null; };
             }
 
             var view = new UnitView
@@ -1067,7 +1162,10 @@ namespace GN3.Battle
             PlaceTop(title.rectTransform, -6f, 66f, 0f);
 
             int secs = Mathf.FloorToInt(_session.Elapsed);
-            var subtitle = CreateText(band.transform, $"{QuestDifficulty.RichTitle(_expedition.Quest)}    ·    전투 시간 {secs / 60}:{secs % 60:00}",
+            string waveLine = report.WaveCount <= 1 ? ""
+                : victory ? $"    ·    {report.WaveCount}라운드 모두 돌파"
+                : $"    ·    {report.WavesCleared + 1}/{report.WaveCount}라운드에서 패배";
+            var subtitle = CreateText(band.transform, $"{QuestDifficulty.RichTitle(_expedition.Quest)}    ·    전투 시간 {secs / 60}:{secs % 60:00}{waveLine}",
                 18, TextAnchor.MiddleCenter, UITheme.BodyText);
             subtitle.supportRichText = true;
             PlaceTop(subtitle.rectTransform, -74f, 30f, 0f);

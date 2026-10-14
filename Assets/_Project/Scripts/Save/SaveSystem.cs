@@ -217,6 +217,8 @@ namespace GN3.Save
                 };
                 e.memberIds.AddRange(expedition.Members.Where(m => m.IsAlive).Select(m => m.Id));
                 e.leaderId = expedition.Leader?.Id;
+                foreach (var w in q.Waves)
+                    e.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
                 data.expeditions.Add(e);
             }
             data.trainees = TrainingHall.SaveIds();
@@ -324,7 +326,10 @@ namespace GN3.Save
             {
                 var members = e.memberIds.Select(id => mercs.FirstOrDefault(m => m.Id == id)).Where(m => m != null).ToList();
                 if (members.Count == 0) continue;
-                var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays);
+                var waves = e.waves != null && e.waves.Count > 0
+                    ? e.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList()
+                    : null; // 예전 저장: enemy × enemyCount 한 라운드
+                var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays, waves);
                 // 버전 1 저장은 일 단위뿐이라 × 24시간으로 읽는다.
                 bool hours = data.version >= 2;
                 quest.SetRemainingHours(hours ? e.remainingHours : e.remainingDays * Quest.HoursPerDay);

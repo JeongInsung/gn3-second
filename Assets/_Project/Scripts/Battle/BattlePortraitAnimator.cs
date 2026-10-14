@@ -33,9 +33,12 @@ namespace GN3.Battle
         private bool _oneShotActive;
         private Action _onComplete;
 
-        public static GameObject Create(Transform parent, ComposedCharacter appearance, int size)
+        /// <param name="clip">true면 size 칸 밖을 잘라낸다(훈련소 창처럼 칸 안에 넣을 때). 전투 필드는 false —
+        /// 검·검광이 칸 밖으로 크게 나가도 잘리지 않게.</param>
+        public static GameObject Create(Transform parent, ComposedCharacter appearance, int size, bool clip = true)
         {
-            var go = new GameObject("AnimatedPortrait", typeof(RectTransform), typeof(LayoutElement), typeof(RectMask2D), typeof(Image));
+            var go = new GameObject("AnimatedPortrait", typeof(RectTransform), typeof(LayoutElement), typeof(Image));
+            if (clip) go.AddComponent<RectMask2D>();
             go.transform.SetParent(parent, false);
 
             var layout = go.GetComponent<LayoutElement>();
@@ -167,7 +170,103 @@ namespace GN3.Battle
                 layer.sprite = sprite;
                 layer.gameObject.SetActive(true);
             }
+            if (_outlineOn) SyncOutline();
             if (_clip == SlashClip && _frame == SlashHitFrame) Hit?.Invoke();
+        }
+
+        // ---------- 호버 테두리 ----------
+        // 마을 캐릭터(VillageWanderer)와 같은 방식: 파츠마다 흰 실루엣 사본 8장을 8방향으로 조금씩 밀어 모든 파츠 뒤에
+        // 깔아 바깥 테두리만 보이게 하고, 켜져 있는 동안 밝기가 숨쉬듯 오르내린다. 처음 켤 때 만든다(안 쓰는 창은 비용 없음).
+
+        private const float OutlinePixels = 2f;     // UI 단위
+        private const float OutlinePulseSpeed = 3f; // 마을 건물·캐릭터와 같은 속도
+        private static readonly Vector2[] OutlineDirections =
+        {
+            new Vector2(1, 0), new Vector2(-1, 0), new Vector2(0, 1), new Vector2(0, -1),
+            new Vector2(0.7071f, 0.7071f), new Vector2(0.7071f, -0.7071f), new Vector2(-0.7071f, 0.7071f), new Vector2(-0.7071f, -0.7071f),
+        };
+        private static Material _outlineMaterial;
+
+        private GameObject _outlineRoot;
+        private readonly Dictionary<string, Image[]> _outlineCopies = new Dictionary<string, Image[]>();
+        private bool _outlineOn;
+
+        /// <summary>흰 테두리를 켜고 끈다(배치 단계 마우스 호버). 매 프레임 불러도 바뀔 때만 일한다.</summary>
+        public void SetOutline(bool on)
+        {
+            if (_outlineOn == on) return;
+            if (on && _outlineRoot == null && !BuildOutline()) return;
+            _outlineOn = on;
+            _outlineRoot.SetActive(on);
+            if (on) SyncOutline();
+        }
+
+        private bool BuildOutline()
+        {
+            if (_outlineMaterial == null)
+            {
+                var shader = Resources.Load<Shader>("UISilhouette");
+                if (shader == null)
+                {
+                    Debug.LogWarning("[BattlePortraitAnimator] Resources/UISilhouette 셰이더를 찾지 못해 호버 테두리가 안 보입니다.");
+                    return false;
+                }
+                _outlineMaterial = new Material(shader);
+            }
+
+            _outlineRoot = new GameObject("Outline", typeof(RectTransform));
+            _outlineRoot.transform.SetParent(transform, false);
+            _outlineRoot.transform.SetAsFirstSibling(); // 모든 파츠 뒤
+            var rootRect = (RectTransform)_outlineRoot.transform;
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = rootRect.offsetMax = Vector2.zero;
+
+            foreach (var kv in _layers)
+            {
+                if (kv.Key == "slash_fx") continue; // 검광은 테두리 없이
+                var source = (RectTransform)kv.Value.transform;
+                var copies = new Image[OutlineDirections.Length];
+                for (int i = 0; i < copies.Length; i++)
+                {
+                    var go = new GameObject($"{kv.Key}_outline{i}", typeof(RectTransform), typeof(Image));
+                    go.transform.SetParent(_outlineRoot.transform, false);
+                    var rect = (RectTransform)go.transform;
+                    rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+                    rect.sizeDelta = source.sizeDelta;
+                    rect.anchoredPosition = source.anchoredPosition + OutlineDirections[i] * OutlinePixels;
+                    var img = go.GetComponent<Image>();
+                    img.material = _outlineMaterial;
+                    img.raycastTarget = false;
+                    copies[i] = img;
+                }
+                _outlineCopies[kv.Key] = copies;
+            }
+            return true;
+        }
+
+        /// <summary>테두리 사본을 지금 프레임의 파츠 그림·표시 여부에 맞춘다.</summary>
+        private void SyncOutline()
+        {
+            foreach (var kv in _outlineCopies)
+            {
+                var layer = _layers[kv.Key];
+                bool visible = layer.gameObject.activeSelf;
+                foreach (var copy in kv.Value)
+                {
+                    copy.gameObject.SetActive(visible);
+                    if (visible) copy.sprite = layer.sprite;
+                }
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (!_outlineOn) return;
+            float brightness = Mathf.Lerp(0.75f, 1f, (Mathf.Sin(Time.unscaledTime * OutlinePulseSpeed) + 1f) * 0.5f);
+            var color = new Color(1f, 1f, 1f, brightness);
+            foreach (var copies in _outlineCopies.Values)
+                foreach (var copy in copies) copy.color = color;
         }
     }
 }
