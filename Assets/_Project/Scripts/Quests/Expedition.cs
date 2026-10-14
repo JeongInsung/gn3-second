@@ -11,6 +11,18 @@ namespace GN3.Quests
         public Quest Quest { get; }
         public IReadOnlyList<Mercenary> Members { get; }
 
+        /// <summary>분대장: 직접 진행 전투에서 플레이어가 조종하는 용병(나머지는 자동). 파견 편성 때 정한다.
+        /// 예전 저장처럼 없거나 쓰러졌으면 살아 있는 첫 파견원이 맡는다.</summary>
+        public Mercenary Leader
+        {
+            get
+            {
+                if (_leader != null && _leader.IsAlive && Members.Contains(_leader)) return _leader;
+                return Members.FirstOrDefault(m => m.IsAlive);
+            }
+        }
+        private readonly Mercenary _leader;
+
         /// <summary>목적지까지 실제로 걸린 게임 시간. 귀환 시간의 기준.</summary>
         public float OutboundHours { get; private set; }
 
@@ -27,10 +39,11 @@ namespace GN3.Quests
         /// <summary>목적지에 도착해 전투를 기다리는 상태. 귀환 중에는 false.</summary>
         public bool IsReady => !IsReturning && Quest.RemainingDays <= 0;
 
-        public Expedition(Quest quest, IReadOnlyList<Mercenary> members)
+        public Expedition(Quest quest, IReadOnlyList<Mercenary> members, Mercenary leader = null)
         {
             Quest = quest;
             Members = members;
+            _leader = leader;
         }
 
         /// <summary>저장 파일에서 불러올 때 이동·귀환 상태를 되돌린다.</summary>

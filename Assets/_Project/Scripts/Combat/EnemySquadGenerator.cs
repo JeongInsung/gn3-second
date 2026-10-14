@@ -6,6 +6,11 @@ namespace GN3.Combat
 {
     public static class EnemySquadGenerator
     {
+        // 전투 전체 난도(자동·직접·습격 공통). 자동 전투에 스킬이 들어가 쉬워진 만큼 올림 —
+        // 권장 전투력 판정 '중간'이면 자동 전투 승률 약 63%, '어려움' 약 26%(예전 91%·58%).
+        public const float HealthMultiplier = 1.3f;
+        public const float AttackMultiplier = 1.15f;
+
         /// <summary>tierOverride를 주면 이름 계층(약탈 세력/지형 동물/보스)은 그 값으로 고정하고
         /// difficulty는 스탯 강도에만 반영한다. 예: 이동 중 습격은 항상 "약탈 세력" 이름(tier 0)을 쓰되,
         /// 퀘스트 난이도에 맞춰 스탯만 세게 만들 때 사용.</summary>
@@ -23,9 +28,9 @@ namespace GN3.Combat
                 int moveSpeed = 4 + difficulty + rng.Next(-1, 2);
 
                 var stats = new CombatStats(
-                    attack: Math.Max(1, attack),
+                    attack: Math.Max(1, (int)Math.Round(attack * AttackMultiplier)),
                     defense: Math.Max(0, defense),
-                    maxHealth: Math.Max(1, health),
+                    maxHealth: Math.Max(1, (int)Math.Round(health * HealthMultiplier)),
                     moveSpeed: Math.Max(0, moveSpeed));
 
                 result.Add(new Combatant(name, stats));

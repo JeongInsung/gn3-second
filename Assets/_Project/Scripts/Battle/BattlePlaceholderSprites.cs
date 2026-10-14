@@ -25,6 +25,38 @@ namespace GN3.Battle
         /// <summary>보스(계층 2)는 같은 원을 더 크게 그려서 구분한다.</summary>
         public static float SizeForTier(int tier) => tier >= 2 ? 1.35f : 1f;
 
+        private static Sprite _ring;
+        /// <summary>속이 빈 고리(발밑 표시: 분대장·공격 대상·이동 지점). Image.color로 색을 입힌다.</summary>
+        public static Sprite Ring => _ring != null ? _ring : _ring = BuildRing();
+
+        private static Sprite BuildRing()
+        {
+            const int size = 64;
+            const float outer = size / 2f - 1f, inner = outer - 6f;
+            var center = new Vector2(size / 2f, size / 2f);
+            var pixels = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float dist = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), center);
+                float alpha = Mathf.Clamp01(outer + 0.5f - dist) * Mathf.Clamp01(dist - inner + 0.5f);
+                pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+            }
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                name = "BattlePlaceholderRing",
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.DontSave,
+            };
+            texture.SetPixels(pixels);
+            texture.Apply();
+            var sprite = Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+            sprite.name = "BattlePlaceholderRing";
+            sprite.hideFlags = HideFlags.DontSave;
+            return sprite;
+        }
+
         private static Sprite BuildCircle()
         {
             const int size = 64;

@@ -23,6 +23,7 @@ namespace GN3.UI
         private readonly List<(LayoutElement layout, Text text)> _wrappedRows = new List<(LayoutElement, Text)>();
         private const int MemberRowPadding = 8;
         private readonly HashSet<string> _selectedForDispatch = new HashSet<string>();
+        private string _leaderId; // 분대장(직접 진행 전투에서 플레이어가 조종). 처음 고른 사람이 맡고 '분대장' 버튼으로 바꾼다
         private Font _font;
         private Transform _panelTransform;
         private GameObject _dispatchButtonGO;
@@ -87,6 +88,7 @@ namespace GN3.UI
         {
             _pendingQuest = quest;
             _selectedForDispatch.Clear();
+            _leaderId = null;
             RenderResultText(string.Empty);
             RefreshList();
         }
@@ -111,6 +113,8 @@ namespace GN3.UI
                 var selected = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id));
                 int teamPower = QuestDifficulty.TeamPower(selected);
                 string power = $"{QuestDifficulty.DescribeTeam(_pendingQuest, teamPower)} · {QuestDifficulty.DurationText(_pendingQuest, teamPower)}";
+                var leader = selected.FirstOrDefault(m => m.Id == _leaderId);
+                if (leader != null) power += $" · 분대장 {leader.Name}";
                 // 한 줄에 다 넣으면 창 폭을 넘어 난이도·소요가 잘린다 → 두 줄
                 _rows.Add(CreateSectionHeader($"파견 편성 — {QuestDifficulty.RichTitle(_pendingQuest)} ({_selectedForDispatch.Count}/{_pendingQuest.MaxDispatchSize}명)\n{power}", 2));
             }
@@ -178,7 +182,9 @@ namespace GN3.UI
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
-            string members = string.Join(", ", expedition.Members.Select(m => m.IsAlive ? m.Name : $"{m.Name}(사망)"));
+            var leaderMerc = expedition.Leader;
+            string members = string.Join(", ", expedition.Members.Select(m =>
+                !m.IsAlive ? $"{m.Name}(사망)" : m == leaderMerc ? $"★{m.Name}" : m.Name));
             string status = expedition.IsReturning ? $"귀환 중 (남은 {GameClock.FormatDuration(expedition.ReturnHoursLeft)})"
                 : expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {GameClock.FormatDuration(quest.RemainingHours)})";
             string info = $"{QuestDifficulty.RichTitle(quest)}    {status}    파견: {members}    {QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(expedition.Members))}";
@@ -320,7 +326,15 @@ namespace GN3.UI
                     () => ToggleSelection(merc), interactable: !atCap && (selected || (!merc.IsExhausted && !merc.IsSeverelyAiling)));
             }
 
-            if (!onExpedition)
+            // 파견에 고른 용병은 해고 대신 분대장 버튼(직접 진행 전투에서 조종할 사람)
+            if (_pendingQuest != null && selected)
+            {
+                bool isLeader = merc.Id == _leaderId;
+                CreateActionButton(row.transform, isLeader ? "★분대장" : "분대장",
+                    isLeader ? new Color(0.62f, 0.5f, 0.2f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
+                    () => { _leaderId = merc.Id; RefreshList(); });
+            }
+            else if (!onExpedition)
             {
                 CreateActionButton(row.transform, "해고", new Color(0.55f, 0.25f, 0.25f, 1f),
                     () => PlayerParty.Instance.Remove(merc));
@@ -334,12 +348,15 @@ namespace GN3.UI
             if (_selectedForDispatch.Contains(merc.Id))
             {
                 _selectedForDispatch.Remove(merc.Id);
+                if (_leaderId == merc.Id) // 분대장을 빼면 남은 사람 중 먼저 줄에 있는 사람이 이어받는다
+                    _leaderId = PlayerParty.Instance.Members.FirstOrDefault(m => _selectedForDispatch.Contains(m.Id))?.Id;
             }
             else
             {
                 if (_pendingQuest != null && _selectedForDispatch.Count >= _pendingQuest.MaxDispatchSize)
                     return;
                 _selectedForDispatch.Add(merc.Id);
+                if (_leaderId == null) _leaderId = merc.Id;
             }
             RefreshList();
         }
@@ -419,10 +436,11 @@ namespace GN3.UI
                 ToastLog.Show($"크게 다치거나 앓는 용병은 출전할 수 없습니다: {string.Join(", ", ailing)} (병원에서 치료)");
                 return;
             }
-            ExpeditionLog.Instance.Dispatch(_pendingQuest, members);
+            ExpeditionLog.Instance.Dispatch(_pendingQuest, members, members.FirstOrDefault(m => m.Id == _leaderId));
 
             _pendingQuest = null;
             _selectedForDispatch.Clear();
+            _leaderId = null;
             RefreshList();
         }
 
@@ -470,8 +488,7 @@ namespace GN3.UI
 
             foreach (var evt in result.Log)
             {
-                string suffix = evt.Evaded ? " (회피)" : evt.TargetDefeated ? " (처치)" : "";
-                AppendLine($"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : {evt.Damage}{suffix}");
+                AppendLine(FormatLogLine(evt));
                 yield return new WaitForSeconds(delayPerEvent);
             }
 
@@ -499,11 +516,18 @@ namespace GN3.UI
 
             foreach (var evt in result.Log.TakeLast(10))
             {
-                string suffix = evt.Evaded ? " (회피)" : evt.TargetDefeated ? " (처치)" : "";
-                sb.AppendLine($"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : {evt.Damage}{suffix}");
+                sb.AppendLine(FormatLogLine(evt));
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>전투 기록 한 줄. 회복(스킬 치유)은 피해를 음수로 담아 오므로 "+N 회복"으로.</summary>
+        private static string FormatLogLine(BattleEvent evt)
+        {
+            if (evt.Damage < 0) return $"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : +{-evt.Damage} 회복";
+            string suffix = evt.Evaded ? " (회피)" : evt.TargetDefeated ? " (처치)" : "";
+            return $"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : {evt.Damage}{suffix}";
         }
 
         private void RenderResultText(string text)

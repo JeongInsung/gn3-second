@@ -8,64 +8,70 @@ using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.UI;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace GN3.Battle
 {
     /// <summary>
-    /// 직접전투 화면 전체(유닛 배치/스킬·대상 선택/전투 로그/결과창)를 코드로 짜 넣는 단일 컨트롤러.
-    /// 전투 규칙 자체는 ManualBattleSession이 맡고, 이 클래스는 그 상태를 화면에 비추고 입력을 돌려주기만 한다.
-    /// 몬스터 쪽은 아직 그림이 없어 기본 도형(BattlePlaceholderSprites)으로 표시한다 - 나중에 그림이 생기면
-    /// CreateUnitView의 enemy 분기만 바꾸면 된다.
+    /// 직접 진행 전투 화면(필드형). 전투 규칙과 AI는 FieldBattleSession이 맡고, 이 클래스는 유닛을 필드 위
+    /// 위치에 그리고 분대장 조작(클릭 이동·적 클릭 공격·Q 스킬)을 세션 명령으로 넘긴다.
+    /// 필드 좌표는 화면 필드 영역의 로컬 좌표와 1:1(왼쪽 아래가 0,0)이다.
+    /// 몬스터 그림이 아직 없어 기본 도형(BattlePlaceholderSprites)으로 그린다 - 그림이 생기면 CreateUnitView의 적 분기만 바꾸면 된다.
     /// </summary>
     public class BattleUIController : MonoBehaviour
     {
         private class UnitView
         {
-            public Combatant Combatant;
-            public GameObject Root;
-            public RectTransform AnimRoot; // 공격 동작·대기 중 흔들림을 여기에만 적용(Root 자체는 레이아웃이 관리)
+            public FieldUnit Unit;
+            public RectTransform Root;      // 발 위치(필드 좌표)
+            public RectTransform Body;      // 그림(바라보는 방향으로 좌우 뒤집음)
             public CanvasGroup Group;
-            public Image Frame;
-            public Image HitFlash;
+            public Image[] Tintables;       // 피격 때 붉게 물들일 그림들
+            public Color[] BaseColors;
             public Image HpFill;
-            public Text HpText;
-            public Image ReadinessFill;
-            public GameObject TurnMarker;
-            public Button Button;
-            public bool IsPlayerSide;
-            public bool IsMelee; // 근접(전사·암살자 등)만 대상 자리까지 다가가서 때린다 - 원거리는 제자리에서 공격
-            public float BobPhase;   // 대기 중 흔들림이 유닛마다 어긋나 보이도록
-            public Vector2 LungeOffset; // 공격 동작(대상 쪽으로 다가갔다 돌아옴) 중 오프셋, 코루틴이 갱신
-            public BattlePortraitAnimator Animator; // 내 쪽 용병만(파츠 조합 캐릭터) - 적은 기본 도형이라 null
+            public Image ReadyFill;
+            public Image TargetRing;        // 분대장이 노리는 적
+            public Image ClickArea;
+            public BattlePortraitAnimator Animator; // 용병만(파츠 조합 캐릭터)
+            public float HopPhase;
         }
 
         private Font _font;
         private Expedition _expedition;
         private List<Mercenary> _fighters;
-        private ManualBattleSession _session;
-        private readonly Dictionary<Combatant, UnitView> _views = new Dictionary<Combatant, UnitView>();
-        private bool _pickingSkillTarget;
-        private Combatant _skillActor; // 스킬 대상을 고르는 중일 때, 그 스킬을 쓰는 용병(_selectedMerc와 별개)
-        private Combatant _selectedMerc; // 플레이어가 클릭해서 고른 내 용병(다음에 적을 클릭하면 그 용병의 공격 대상이 된다)
+        private FieldBattleSession _session;
+        private readonly Dictionary<FieldUnit, UnitView> _views = new Dictionary<FieldUnit, UnitView>();
+        private readonly List<UnitView> _drawOrder = new List<UnitView>();
+        private bool _picking;      // 스킬 대상 고르는 중
         private bool _resultShown;
+        private bool _leaderDownNoticed;
 
         private Canvas _canvas;
-        private Transform _enemyRow;
-        private Transform _playerRow;
-        private Text _turnLabel;
+        private RectTransform _field;
+        // 필드 안의 층: 땅 표시(이동 지점) → 유닛(앞뒤 정렬) → 효과(투사체·숫자). 모두 필드와 같은 좌표.
+        private RectTransform _groundLayer;
+        private RectTransform _unitLayer;
+        private RectTransform _fxLayer;
+        private Text _leaderLabel;
+        private Text _hintLabel;
+        private Text _timerLabel;
         private Text _logText;
         private readonly LinkedList<string> _logLines = new LinkedList<string>();
         private Button _skillButton;
         private Text _skillButtonText;
 
         private const int MaxLogLines = 9;
+        private const float FieldBottom = 250f; // 아래 패널(230) 위
+        private const float PortraitSize = 110f;
+        private const float ProjectileSpeed = 1400f;
+        private const string MusicPath = "Music/전투 브금 1";
+        private const float MusicVolume = 0.6f;
 
-        // 전체적으로 느리게 해달라는 피드백 - 걸어가는 속도(작을수록 느리게 미끄러지듯 다가감)와 대기 중 까딱임.
-        private const float LungeLerpSharpness = 4f;
-        private const float BobSpeed = 1.2f;
-        private const float BobAmplitude = 3f;
+        private static readonly Color LeaderColor = new Color(1f, 0.82f, 0.3f);
+        private static readonly Color PickingColor = new Color(0.95f, 0.9f, 0.35f);
 
         public void Init(Expedition expedition)
         {
@@ -75,181 +81,270 @@ namespace GN3.Battle
 
             _fighters = expedition.Members.Where(m => m.IsAlive).ToList();
             var combatants = _fighters.Select(m => m.ToCombatant()).ToList();
-            var skills = new Dictionary<Combatant, SkillBase>();
-            for (int i = 0; i < _fighters.Count; i++)
-            {
-                var skill = ClassSkillFactory.Create(_fighters[i].Class.Kind);
-                if (skill != null) skills[combatants[i]] = skill;
-            }
+            var melee = _fighters.Select(m => IsMeleeClass(m.Class.Kind)).ToList();
+            var skills = _fighters.Select(m => ClassSkillFactory.Create(m.Class.Kind)).ToList();
+            int leaderIndex = Math.Max(0, _fighters.IndexOf(expedition.Leader));
 
             var rng = new System.Random();
             var enemies = EnemySquadGenerator.Generate(quest.Region, quest.EnemyCount, quest.Difficulty, rng);
             int tier = Math.Clamp(quest.Difficulty - 1, 0, 2);
 
-            _session = new ManualBattleSession(combatants, skills, enemies, rng);
+            _session = new FieldBattleSession(combatants, melee, skills, leaderIndex, enemies, rng);
+            _session.OnSkillUsed += (unit, skill) =>
+            {
+                if (_views.TryGetValue(unit, out var v)) StartCoroutine(FloatText(v, skill.Name, new Color(0.6f, 0.85f, 1f), 175f));
+                AppendLog($"<color=#9fd0ff>{unit.Combatant.Name} — {skill.Name}</color>");
+            };
 
             BuildUI(quest);
-            for (int i = 0; i < _fighters.Count; i++)
+            foreach (var unit in _session.Units)
             {
-                bool isMelee = IsMeleeClass(_fighters[i].Class.Kind);
-                _views[combatants[i]] = CreateUnitView(_playerRow, _fighters[i].Name, combatants[i], _fighters[i].Appearance, -1, isMelee);
+                int i = combatants.IndexOf(unit.Combatant);
+                var view = unit.IsPlayerSide
+                    ? CreateUnitView(unit, _fighters[i].Appearance, -1)
+                    : CreateUnitView(unit, null, tier);
+                _views[unit] = view;
+                _drawOrder.Add(view);
             }
-            // 몬스터는 아직 직업 개념이 없어 전부 근접(달려들어 때림)으로 둔다.
-            foreach (var enemy in enemies)
-                _views[enemy] = CreateUnitView(_enemyRow, enemy.Name, enemy, null, tier, isMelee: true);
 
-            UpdateSkillPanel(); // 스킬 버튼 초기 상태(비활성)까지 맞춰둔다
-            RefreshInteractable();
+            PlayMusic();
+
+            var leader = _session.Leader;
+            AppendLog(leader != null
+                ? $"분대장 {leader.Combatant.Name} 지휘 시작 — 땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬"
+                : "전투 시작");
+            RefreshPanel();
         }
 
-        /// <summary>전사·암살자처럼 몸으로 부딪히는 직업만 근접(대상 자리까지 다가가 때림), 나머지는 원거리(제자리에서 공격).</summary>
+        /// <summary>전투 배경음(Resources/Music). 이 오브젝트에 붙어 있어 씬을 떠나면 같이 멈춘다.</summary>
+        private void PlayMusic()
+        {
+            var clip = Resources.Load<AudioClip>(MusicPath);
+            if (clip == null)
+            {
+                Debug.LogWarning($"[BattleUIController] 전투 배경음을 찾지 못했습니다: Resources/{MusicPath}");
+                return;
+            }
+            var source = gameObject.AddComponent<AudioSource>();
+            source.clip = clip;
+            source.loop = true;
+            source.volume = MusicVolume;
+            source.playOnAwake = false;
+            source.Play();
+        }
+
+        /// <summary>전사·암살자처럼 몸으로 부딪히는 직업만 근접, 나머지는 원거리.</summary>
         private static bool IsMeleeClass(MercenaryClassKind kind) =>
             kind == MercenaryClassKind.Warrior || kind == MercenaryClassKind.Assassin;
 
-        // ---------- 전투 진행(ATB - 매 프레임 게이지를 돌린다) ----------
+        // ---------- 진행 ----------
 
         private void Update()
         {
             if (_session == null || _resultShown) return;
 
+            HandleKeys();
             var events = _session.Tick(Time.deltaTime);
             if (events.Count > 0) ApplyEventsVisual(events);
 
-            RefreshUI();
-        }
-
-        private void RefreshUI()
-        {
-            foreach (var v in _views.Values)
-                UpdateUnitView(v);
+            foreach (var v in _views.Values) UpdateUnitView(v);
+            SortByDepth();
 
             if (_session.IsOver)
             {
                 ShowResult();
                 return;
             }
-
-            UpdateSkillPanel();
-            RefreshInteractable();
+            RefreshPanel();
         }
 
-        /// <summary>
-        /// 스킬은 게이지·차례와 무관하게 언제든 쓸 수 있다 - 패널은 "지금 스킬을 쓸 대상"(스킬 대상을 고르는
-        /// 중이면 그 용병, 아니면 선택해둔 용병)을 기준으로 버튼 글자·활성 여부만 매 프레임 갱신한다.
-        /// </summary>
-        private void UpdateSkillPanel()
+        private void HandleKeys()
         {
-            var merc = _pickingSkillTarget ? _skillActor : _selectedMerc;
-            if (merc == null || !merc.IsAlive)
+            var kb = Keyboard.current;
+            if (kb == null) return;
+            if (kb.qKey.wasPressedThisFrame) PressSkill();
+            if (kb.escapeKey.wasPressedThisFrame) _picking = false;
+        }
+
+        // ---------- 입력 ----------
+
+        /// <summary>스킬 버튼·Q: 공격 스킬은 지금 노리는 적이 있으면 바로 그 적에게, 없으면 대상 고르기.
+        /// 회복 스킬은 대상 고르기(고르는 중에 한 번 더 누르면 자기 자신).</summary>
+        private void PressSkill()
+        {
+            if (!_session.LeaderSkillReady) return;
+            var leader = _session.Leader;
+            if (leader.Skill.TargetType == SkillTargetType.Ally)
             {
+                if (_picking) { _session.OrderSkill(leader); _picking = false; }
+                else _picking = true;
+                return;
+            }
+            if (!_picking && leader.Target != null && leader.Target.IsAlive && _session.OrderSkill(leader.Target)) return;
+            _picking = !_picking;
+        }
+
+        private void OnGroundClicked(PointerEventData e)
+        {
+            if (_picking && e.button == PointerEventData.InputButton.Left)
+            {
+                _picking = false; // 빈 땅을 누르면 대상 고르기 취소
+                return;
+            }
+            _picking = false;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(_field, e.position, e.pressEventCamera, out var local)) return;
+            _session.OrderMove(new System.Numerics.Vector2(local.x, local.y));
+            if (_session.Leader != null && _session.Leader.IsAlive)
+                StartCoroutine(MoveMarker(local));
+        }
+
+        private void OnUnitClicked(FieldUnit unit, PointerEventData e)
+        {
+            if (!unit.IsAlive) return;
+            if (_picking)
+            {
+                if (_session.OrderSkill(unit)) _picking = false;
+                return;
+            }
+            if (!unit.IsPlayerSide) _session.OrderAttack(unit);
+            else OnGroundClicked(e); // 아군을 누르면 그 자리로 이동
+        }
+
+        // ---------- 화면 갱신 ----------
+
+        private void RefreshPanel()
+        {
+            var leader = _session.Leader;
+            int secs = Mathf.FloorToInt(_session.Elapsed);
+            _timerLabel.text = $"{secs / 60}:{secs % 60:00}";
+
+            if (leader == null || !leader.IsAlive)
+            {
+                _picking = false;
+                _leaderLabel.text = leader == null ? "분대장 없음" : $"★ {leader.Combatant.Name} 쓰러짐";
+                _hintLabel.text = "남은 대원이 알아서 싸웁니다";
                 _skillButton.interactable = false;
-                _skillButtonText.text = "용병을 선택하세요";
-                _turnLabel.text = "전투 진행 중...";
+                _skillButtonText.text = "—";
+                if (leader != null && !_leaderDownNoticed)
+                {
+                    _leaderDownNoticed = true;
+                    AppendLog($"<color=#ff8a7a>분대장 {leader.Combatant.Name}이(가) 쓰러졌다! 남은 대원이 자동으로 싸운다</color>");
+                }
                 return;
             }
 
-            var skill = _session.SkillOf(merc);
-            if (_pickingSkillTarget)
-            {
-                _skillButton.interactable = false; // 이미 쓰기로 정했으니 버튼은 잠그고 대상 클릭만 받는다.
-                _skillButtonText.text = skill != null ? $"{skill.Name} - 대상을 고르세요" : "";
-                _turnLabel.text = $"{merc.Name} - 스킬 대상을 고르세요";
-                return;
-            }
+            var c = leader.Combatant;
+            _leaderLabel.text = $"★ 분대장 {c.Name}   체력 {c.CurrentHealth}/{c.Stats.MaxHealth}";
 
-            _turnLabel.text = $"{merc.Name} 선택됨";
+            var skill = leader.Skill;
             if (skill == null)
             {
                 _skillButton.interactable = false;
                 _skillButtonText.text = "전투 스킬 없음";
             }
-            else if (_session.IsActing(merc))
+            else if (leader.Cooldown > 0f)
             {
                 _skillButton.interactable = false;
-                _skillButtonText.text = $"{skill.Name} (행동 중)";
+                _skillButtonText.text = $"[Q] {skill.Name} ({Mathf.CeilToInt(leader.Cooldown)})";
             }
             else
             {
-                float cooldown = _session.CooldownRemaining(merc);
-                if (cooldown > 0f)
-                {
-                    _skillButton.interactable = false;
-                    _skillButtonText.text = $"{skill.Name} (쿨타임 {Mathf.CeilToInt(cooldown)})";
-                }
+                _skillButton.interactable = true;
+                _skillButtonText.text = _picking ? $"{skill.Name} — 대상 선택" : $"[Q] {skill.Name}";
+            }
+
+            _hintLabel.text = _picking
+                ? (skill != null && skill.TargetType == SkillTargetType.Ally
+                    ? "치료할 아군을 클릭 (Q: 자신 · Esc: 취소)"
+                    : "스킬을 쓸 적을 클릭 (Esc: 취소)")
+                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬";
+        }
+
+        private void UpdateUnitView(UnitView v)
+        {
+            var u = v.Unit;
+            bool alive = u.IsAlive;
+            v.Root.anchoredPosition = new Vector2(u.Position.X, u.Position.Y);
+
+            v.Group.alpha = alive ? 1f : 0.3f;
+            v.ClickArea.raycastTarget = alive;
+            float ratio = alive ? (float)u.Combatant.CurrentHealth / Math.Max(1, u.Combatant.Stats.MaxHealth) : 0f;
+            v.HpFill.fillAmount = Mathf.Clamp01(ratio);
+            v.HpFill.color = !u.IsPlayerSide ? new Color(0.8f, 0.3f, 0.25f)
+                : ratio > 0.5f ? new Color(0.4f, 0.75f, 0.35f) : ratio > 0.25f ? new Color(0.85f, 0.7f, 0.3f) : new Color(0.75f, 0.25f, 0.2f);
+            v.ReadyFill.fillAmount = alive ? u.AttackReadyRatio : 0f;
+
+            var leader = _session.Leader;
+            bool targeted = alive && leader != null && leader.IsAlive && leader.Target == u;
+            v.TargetRing.enabled = targeted || (_picking && alive && IsPickable(u));
+            v.TargetRing.color = targeted && !_picking ? new Color(1f, 0.35f, 0.3f, 0.9f) : new Color(PickingColor.r, PickingColor.g, PickingColor.b, 0.85f);
+
+            // 바라보는 쪽(그림은 오른쪽을 본다). 죽으면 옆으로 눕힌다.
+            v.Body.localScale = new Vector3(u.Facing, 1f, 1f);
+            v.Body.localRotation = alive ? Quaternion.identity : Quaternion.Euler(0f, 0f, 90f * u.Facing);
+
+            if (v.Animator != null)
+            {
+                if (alive && u.IsMoving) v.Animator.PlayWalk(); else v.Animator.PlayIdle();
+                v.Body.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                // 몬스터(도형)는 걸을 때 통통 튄다
+                float hop = alive && u.IsMoving ? Mathf.Abs(Mathf.Sin(Time.time * 10f + v.HopPhase)) * 8f : 0f;
+                v.Body.anchoredPosition = new Vector2(0f, hop);
+            }
+        }
+
+        private bool IsPickable(FieldUnit u)
+        {
+            var skill = _session.Leader?.Skill;
+            if (skill == null) return false;
+            return u.IsPlayerSide == (skill.TargetType == SkillTargetType.Ally);
+        }
+
+        /// <summary>아래(화면 앞)에 선 유닛이 위에 그려지게 매 프레임 순서를 맞춘다.</summary>
+        private void SortByDepth()
+        {
+            _drawOrder.Sort((a, b) => b.Unit.Position.Y.CompareTo(a.Unit.Position.Y));
+            for (int i = 0; i < _drawOrder.Count; i++)
+                _drawOrder[i].Root.SetSiblingIndex(i);
+        }
+
+        private void ApplyEventsVisual(List<BattleEvent> events)
+        {
+            foreach (var evt in events)
+            {
+                AppendLog(FormatEvent(evt));
+                var attacker = _session.UnitOf(evt.Attacker);
+                var target = _session.UnitOf(evt.Target);
+                if (attacker == null || target == null) continue;
+                var attackerView = _views[attacker];
+                var targetView = _views[target];
+
+                bool heal = evt.Damage < 0;
+                if (!heal) attackerView.Animator?.PlaySlash();
+
+                string label = heal ? $"+{-evt.Damage}" : evt.Evaded ? "회피" : $"-{evt.Damage}";
+                Color color = heal ? new Color(0.45f, 0.9f, 0.5f) : evt.Evaded ? Color.white : new Color(1f, 0.45f, 0.4f);
+
+                if (!attacker.IsMelee && attacker != target && !heal)
+                    StartCoroutine(Projectile(attackerView, targetView, label, color, !evt.Evaded && evt.Damage > 0));
                 else
                 {
-                    _skillButton.interactable = true;
-                    _skillButtonText.text = skill.Name;
+                    StartCoroutine(FloatText(targetView, label, color, 150f));
+                    if (!heal && !evt.Evaded && evt.Damage > 0) StartCoroutine(HitFlash(targetView));
                 }
             }
         }
 
-        /// <summary>
-        /// 스킬 버튼 클릭 - 선택해둔 용병이 적에게 쓰는 스킬이고 지금 붙어서 싸우는 대상이 있으면 그 대상에게
-        /// 바로 쓰고, 없으면(또는 아군 대상 스킬이면) 대상을 고르는 모드로 들어간다(이어서 유닛을 클릭).
-        /// </summary>
-        private void OnSkillButtonClicked()
-        {
-            if (_selectedMerc == null) return;
-            var merc = _selectedMerc;
-            var skill = _session.SkillOf(merc);
-            if (skill == null || _session.IsActing(merc) || _session.CooldownRemaining(merc) > 0f) return;
-
-            _selectedMerc = null;
-            var engaged = skill.TargetType == SkillTargetType.Enemy ? _session.EngagedTargetOf(merc) : null;
-            if (engaged != null)
-            {
-                _session.TryUseSkill(merc, engaged);
-            }
-            else
-            {
-                _pickingSkillTarget = true;
-                _skillActor = merc;
-            }
-            RefreshInteractable();
-        }
-
-        /// <summary>
-        /// 유닛 카드 클릭. 세 가지 뜻 중 하나:
-        /// 1) 스킬 대상을 고르는 중이면 - 그 대상에게 스킬 사용.
-        /// 2) 내 용병을 클릭 - 그 용병을 선택(다시 클릭하면 선택 해제, 다른 용병 클릭하면 선택 바뀜).
-        /// 3) 용병을 선택해둔 채 적을 클릭 - 그 용병에게 "이 적을 공격해라" 지정(기본공격). 근접이면 즉시 그
-        ///    자리로 다가가고, 마침 게이지가 다 차 있었으면 지금 바로 공격까지 확정된다.
-        /// </summary>
-        private void OnUnitClicked(Combatant clicked)
-        {
-            if (_pickingSkillTarget)
-            {
-                if (_skillActor != null && clicked.IsAlive)
-                    _session.TryUseSkill(_skillActor, clicked);
-                _pickingSkillTarget = false;
-                _skillActor = null;
-                RefreshInteractable();
-                return;
-            }
-
-            if (!clicked.IsAlive) return;
-
-            if (_session.PlayerTeam.Contains(clicked))
-            {
-                _selectedMerc = _selectedMerc == clicked ? null : clicked;
-                RefreshInteractable();
-                return;
-            }
-
-            if (_selectedMerc != null)
-            {
-                var merc = _selectedMerc;
-                _selectedMerc = null;
-                _session.CommandAttack(merc, clicked);
-                RefreshInteractable();
-            }
-        }
+        // ---------- 결과 ----------
 
         private void ShowResult()
         {
             if (_resultShown) return;
             _resultShown = true;
+            _picking = false;
 
             var result = new BattleResult
             {
@@ -262,182 +357,104 @@ namespace GN3.Battle
             var battle = new ExpeditionBattle.Battle { Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam };
             string summary = ExpeditionBattle.Conclude(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
 
-            _selectedMerc = null;
-            _pickingSkillTarget = false;
-            _skillActor = null;
             _skillButton.interactable = false;
             bool victory = _session.Outcome == BattleOutcome.TeamAVictory;
-            _turnLabel.text = victory ? "승리!" : "패배...";
             BuildResultOverlay(victory, summary);
         }
 
-        // ---------- 유닛 표시 ----------
+        // ---------- 연출 ----------
 
-        private static readonly Color TransparentFrame = new Color(0f, 0f, 0f, 0f);
-        private static readonly Color TargetableFrame = new Color(0.9f, 0.85f, 0.3f, 0.35f); // 지금 클릭하면 뜻이 있는 대상(노랑)
-        private static readonly Color SelectedFrame = new Color(0.3f, 0.7f, 1f, 0.45f);       // 내가 선택해둔 용병(파랑)
-
-        /// <summary>
-        /// 모든 유닛 카드의 "지금 클릭 가능한가/어떤 색으로 강조할까"를 한 곳에서 매 프레임 다시 계산한다.
-        /// - 스킬 대상을 고르는 중: 스킬의 TargetType에 맞는 생존 유닛만 클릭 가능(노랑)
-        /// - 그 외: 내 용병은 항상 클릭 가능(선택 중이면 파랑), 적은 용병을 선택해둔 동안에만 클릭 가능(노랑)
-        /// </summary>
-        private void RefreshInteractable()
+        private IEnumerator Projectile(UnitView from, UnitView to, string label, Color color, bool hit)
         {
-            if (_pickingSkillTarget)
+            var go = new GameObject("Projectile", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(_fxLayer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.sizeDelta = new Vector2(14f, 14f);
+            var img = go.GetComponent<Image>();
+            img.sprite = BattlePlaceholderSprites.Circle;
+            img.color = new Color(1f, 0.9f, 0.6f);
+            img.raycastTarget = false;
+
+            Vector2 start = from.Root.anchoredPosition + new Vector2(0f, 60f);
+            Vector2 end = to.Root.anchoredPosition + new Vector2(0f, 60f);
+            float duration = Mathf.Max(0.08f, Vector2.Distance(start, end) / ProjectileSpeed);
+            for (float t = 0f; t < duration; t += Time.deltaTime)
             {
-                var skill = _skillActor != null ? _session.SkillOf(_skillActor) : null;
-                if (_skillActor == null || !_skillActor.IsAlive || skill == null)
-                {
-                    _pickingSkillTarget = false;
-                    _skillActor = null;
-                }
-                else
-                {
-                    var pool = skill.TargetType == SkillTargetType.Enemy ? _session.EnemyTeam : _session.PlayerTeam;
-                    var targets = new HashSet<Combatant>(pool.Where(c => c.IsAlive));
-                    foreach (var kv in _views)
-                        SetFrame(kv.Value, targets.Contains(kv.Key), TargetableFrame);
-                    return;
-                }
-            }
-
-            if (_selectedMerc != null && !_selectedMerc.IsAlive) _selectedMerc = null;
-
-            foreach (var kv in _views)
-            {
-                bool alive = kv.Key.IsAlive;
-                if (_session.PlayerTeam.Contains(kv.Key))
-                {
-                    kv.Value.Button.interactable = alive; // 내 용병은 언제든 선택 가능
-                    kv.Value.Frame.color = kv.Key == _selectedMerc ? SelectedFrame : TransparentFrame;
-                }
-                else
-                {
-                    SetFrame(kv.Value, alive && _selectedMerc != null, TargetableFrame); // 적은 용병을 선택해둔 동안에만
-                }
-            }
-        }
-
-        private static void SetFrame(UnitView v, bool interactable, Color highlightColor)
-        {
-            v.Button.interactable = interactable;
-            v.Frame.color = interactable ? highlightColor : TransparentFrame;
-        }
-
-        private void UpdateUnitView(UnitView v)
-        {
-            bool alive = v.Combatant.IsAlive;
-            v.Group.alpha = alive ? 1f : 0.35f;
-            float ratio = alive ? (float)v.Combatant.CurrentHealth / Math.Max(1, v.Combatant.Stats.MaxHealth) : 0f;
-            v.HpFill.fillAmount = Mathf.Clamp01(ratio);
-            v.HpFill.color = ratio > 0.5f ? new Color(0.4f, 0.75f, 0.35f) : ratio > 0.25f ? new Color(0.85f, 0.7f, 0.3f) : new Color(0.75f, 0.25f, 0.2f);
-            v.HpText.text = alive ? $"{v.Combatant.CurrentHealth}/{v.Combatant.Stats.MaxHealth}" : "전사";
-            v.ReadinessFill.fillAmount = alive ? _session.ReadinessRatioOf(v.Combatant) : 0f;
-            v.TurnMarker.SetActive(alive && _session.IsActing(v.Combatant));
-
-            // 내 쪽 근접 유닛은 "붙어서 싸우는 대상"이 살아있는 동안 계속 그 자리에 머문다(안 돌아옴) -
-            // 매 프레임 목표 오프셋으로 부드럽게 다가가고, 대상이 죽으면(또는 아직 없으면) 서서히 제자리로.
-            // 적(원거리는 아예 호출 안 되는 Lunge 코루틴)은 그대로 한 번 다가갔다 돌아오는 연출을 쓴다.
-            Vector2 goal = Vector2.zero;
-            bool followsEngagedTarget = v.IsPlayerSide && v.IsMelee && alive;
-            if (followsEngagedTarget)
-            {
-                var engaged = _session.EngagedTargetOf(v.Combatant);
-                if (engaged != null && _views.TryGetValue(engaged, out var targetView2))
-                    goal = ApproachOffset(v, targetView2);
-                v.LungeOffset = Vector2.Lerp(v.LungeOffset, goal, 1f - Mathf.Exp(-LungeLerpSharpness * Time.deltaTime));
-            }
-
-            float bob = alive ? Mathf.Sin(Time.time * BobSpeed + v.BobPhase) * BobAmplitude : 0f;
-            v.AnimRoot.anchoredPosition = new Vector2(0f, bob) + v.LungeOffset;
-
-            if (v.Animator != null)
-            {
-                bool walking = alive && followsEngagedTarget && Vector2.Distance(v.LungeOffset, goal) > 2f;
-                if (walking) v.Animator.PlayWalk(); else v.Animator.PlayIdle();
-            }
-        }
-
-        private void ApplyEventsVisual(List<BattleEvent> events)
-        {
-            foreach (var evt in events)
-            {
-                AppendLog(FormatEvent(evt));
-
-                // 내 쪽 근접 유닛은 UpdateUnitView가 매 프레임 "붙어서 싸우는 대상" 쪽으로 자연스럽게 따라가므로
-                // 여기서 따로 움직이지 않는다 - 적 쪽 근접만 기존처럼 한 번 다가갔다 돌아오는 연출을 쓴다.
-                _views.TryGetValue(evt.Target, out var targetView);
-                if (_views.TryGetValue(evt.Attacker, out var attackerView))
-                {
-                    if (attackerView.IsMelee && !attackerView.IsPlayerSide && targetView != null)
-                        StartCoroutine(Lunge(attackerView, targetView));
-                    if (evt.Damage >= 0) // 회복은 검격 대신 그냥 대기 자세로 둔다(휘두르는 연출이 안 맞아서)
-                        attackerView.Animator?.PlaySlash();
-                }
-
-                if (targetView != null)
-                {
-                    UpdateUnitView(targetView);
-                    string label = evt.Damage < 0 ? $"+{-evt.Damage}" : evt.Evaded ? "회피" : $"-{evt.Damage}";
-                    Color color = evt.Damage < 0 ? new Color(0.45f, 0.9f, 0.5f)
-                        : evt.Evaded ? Color.white : new Color(1f, 0.45f, 0.4f);
-                    StartCoroutine(FloatText(targetView, label, color));
-                    if (evt.Damage > 0 && !evt.Evaded)
-                        StartCoroutine(HitFlash(targetView));
-                }
-            }
-        }
-
-        /// <summary>대상 쪽으로 다가가는 데 필요한 AnimRoot 오프셋. Root는 Row 레이아웃이 관리하므로 그대로 두고,
-        /// 두 Root의 월드(=캔버스) 좌표 차이를 캔버스 배율로 나눠 anchoredPosition 오프셋으로 바꾼다
-        /// - 행(위/아래)이 달라도 정확한 방향·거리가 나온다. 거리의 55%까지만 다가가 대상과 완전히 겹치지 않게 한다.</summary>
-        private Vector2 ApproachOffset(UnitView attacker, UnitView target)
-        {
-            const float approachFraction = 0.55f;
-            Vector3 worldDelta = target.Root.transform.position - attacker.Root.transform.position;
-            float scale = _canvas != null && _canvas.scaleFactor > 0.01f ? _canvas.scaleFactor : 1f;
-            return (Vector2)worldDelta / scale * approachFraction;
-        }
-
-        /// <summary>근접 공격 연출(적 전용): 대상 자리까지 다가갔다가 원래 자리로 돌아온다(원거리는 아예 호출 안 됨 - 제자리).
-        /// 내 쪽 근접 유닛은 UpdateUnitView가 "붙어서 싸우는 대상" 쪽으로 계속 따라가는 방식을 쓰므로 이 코루틴을 안 쓴다.</summary>
-        private IEnumerator Lunge(UnitView attacker, UnitView target)
-        {
-            const float outDur = 0.3f, holdDur = 0.12f, backDur = 0.4f; // 전체적으로 느리게(이전 0.14/0.05/0.2)
-            Vector2 approach = ApproachOffset(attacker, target);
-
-            float t = 0f;
-            while (t < outDur)
-            {
-                t += Time.deltaTime;
-                attacker.LungeOffset = approach * Mathf.SmoothStep(0f, 1f, t / outDur);
+                end = to.Root.anchoredPosition + new Vector2(0f, 60f); // 움직이는 대상을 따라간다
+                rect.anchoredPosition = Vector2.Lerp(start, end, t / duration);
                 yield return null;
             }
-            attacker.LungeOffset = approach;
-            yield return new WaitForSeconds(holdDur);
-
-            t = 0f;
-            while (t < backDur)
-            {
-                t += Time.deltaTime;
-                attacker.LungeOffset = approach * (1f - Mathf.SmoothStep(0f, 1f, t / backDur));
-                yield return null;
-            }
-            attacker.LungeOffset = Vector2.zero;
+            Destroy(go);
+            StartCoroutine(FloatText(to, label, color, 150f));
+            if (hit) StartCoroutine(HitFlash(to));
         }
 
-        /// <summary>피격 연출: 포트레이트 위로 붉은 막이 잠깐 번쩍였다 사라진다.</summary>
+        private IEnumerator MoveMarker(Vector2 point)
+        {
+            var go = new GameObject("MoveMarker", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(_groundLayer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.anchoredPosition = point;
+            var img = go.GetComponent<Image>();
+            img.sprite = BattlePlaceholderSprites.Ring;
+            img.raycastTarget = false;
+            const float duration = 0.5f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                float k = t / duration;
+                rect.sizeDelta = new Vector2(Mathf.Lerp(50f, 20f, k), Mathf.Lerp(24f, 10f, k));
+                img.color = new Color(0.5f, 1f, 0.6f, 1f - k);
+                yield return null;
+            }
+            Destroy(go);
+        }
+
         private IEnumerator HitFlash(UnitView v)
         {
             const float duration = 0.3f;
+            var hit = new Color(1f, 0.35f, 0.3f);
             for (float t = 0f; t < duration; t += Time.deltaTime)
             {
-                if (v.HitFlash == null) yield break;
-                v.HitFlash.color = new Color(1f, 0.2f, 0.15f, 0.5f * (1f - t / duration));
+                float k = t / duration;
+                for (int i = 0; i < v.Tintables.Length; i++)
+                    if (v.Tintables[i] != null) v.Tintables[i].color = Color.Lerp(hit * v.BaseColors[i], v.BaseColors[i], k);
                 yield return null;
             }
-            if (v.HitFlash != null) v.HitFlash.color = new Color(1f, 0.2f, 0.15f, 0f);
+            for (int i = 0; i < v.Tintables.Length; i++)
+                if (v.Tintables[i] != null) v.Tintables[i].color = v.BaseColors[i];
+        }
+
+        private IEnumerator FloatText(UnitView v, string text, Color color, float height)
+        {
+            var go = new GameObject("Float", typeof(RectTransform), typeof(Text), typeof(CanvasGroup));
+            go.transform.SetParent(_fxLayer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.sizeDelta = new Vector2(200f, 30f);
+            Vector2 origin = v.Root.anchoredPosition + new Vector2(UnityEngine.Random.Range(-12f, 12f), height);
+
+            var label = go.GetComponent<Text>();
+            label.font = _font;
+            label.fontSize = 22;
+            label.fontStyle = FontStyle.Bold;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = color;
+            label.text = text;
+            label.raycastTarget = false;
+            go.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+
+            var group = go.GetComponent<CanvasGroup>();
+            const float duration = 0.9f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                if (go == null) yield break;
+                rect.anchoredPosition = origin + new Vector2(0f, 44f * (t / duration));
+                group.alpha = 1f - t / duration;
+                yield return null;
+            }
+            if (go != null) Destroy(go);
         }
 
         private static string FormatEvent(BattleEvent evt)
@@ -455,277 +472,206 @@ namespace GN3.Battle
             _logText.text = string.Join("\n", _logLines);
         }
 
-        private IEnumerator FloatText(UnitView v, string text, Color color)
-        {
-            var go = new GameObject("Float", typeof(RectTransform), typeof(Text), typeof(CanvasGroup));
-            go.transform.SetParent(v.Root.transform, false);
-            var rect = (RectTransform)go.transform;
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = new Vector2(0f, 6f);
-            rect.sizeDelta = new Vector2(150f, 30f);
-
-            var text2 = go.GetComponent<Text>();
-            text2.font = _font;
-            text2.fontSize = 22;
-            text2.fontStyle = FontStyle.Bold;
-            text2.alignment = TextAnchor.MiddleCenter;
-            text2.color = color;
-            text2.text = text;
-            text2.raycastTarget = false;
-
-            var group = go.GetComponent<CanvasGroup>();
-            const float duration = 0.9f;
-            for (float t = 0f; t < duration; t += Time.deltaTime)
-            {
-                if (go == null) yield break;
-                rect.anchoredPosition = new Vector2(0f, 6f + 44f * (t / duration));
-                group.alpha = 1f - t / duration;
-                yield return null;
-            }
-            if (go != null) Destroy(go);
-        }
-
         // ---------- 화면 생성 ----------
 
         private void BuildUI(Quest quest)
         {
             var canvasGO = new GameObject("BattleCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            var canvas = canvasGO.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            _canvas = canvas;
+            _canvas = canvasGO.GetComponent<Canvas>();
+            _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = canvasGO.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
             var root = canvasGO.transform;
 
-            if (UnityEngine.Object.FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>() == null)
-                new GameObject("EventSystem", typeof(UnityEngine.EventSystems.EventSystem), typeof(UnityEngine.InputSystem.UI.InputSystemUIInputModule));
+            if (FindFirstObjectByType<EventSystem>() == null)
+                new GameObject("EventSystem", typeof(EventSystem), typeof(UnityEngine.InputSystem.UI.InputSystemUIInputModule));
 
-            BuildBackground(root);
+            var backdrop = CreateImage(root, "Backdrop", new Color(0.1f, 0.11f, 0.15f, 1f));
+            Stretch((RectTransform)backdrop.transform);
 
-            var title = CreateText(root, $"{QuestDifficulty.RichTitle(quest)}", 24, TextAnchor.MiddleCenter, UITheme.TitleText);
+            var title = CreateText(root, QuestDifficulty.RichTitle(quest), 24, TextAnchor.MiddleCenter, UITheme.TitleText);
             title.supportRichText = true;
             var titleRect = title.rectTransform;
             titleRect.anchorMin = titleRect.anchorMax = titleRect.pivot = new Vector2(0.5f, 1f);
             titleRect.anchoredPosition = new Vector2(0f, -24f);
             titleRect.sizeDelta = new Vector2(1200f, 40f);
 
-            _enemyRow = CreateRow(root, new Vector2(0.5f, 1f), new Vector2(0f, -140f));
-            _playerRow = CreateRow(root, new Vector2(0.5f, 0f), new Vector2(0f, 300f));
+            _timerLabel = CreateText(root, "0:00", 22, TextAnchor.MiddleRight, UITheme.MutedText);
+            var timerRect = _timerLabel.rectTransform;
+            timerRect.anchorMin = timerRect.anchorMax = timerRect.pivot = new Vector2(1f, 1f);
+            timerRect.anchoredPosition = new Vector2(-40f, -24f);
+            timerRect.sizeDelta = new Vector2(160f, 40f);
+
+            // 필드: 피벗을 왼쪽 아래에 둬서 로컬 좌표 = 필드 좌표
+            var fieldGO = CreateImage(root, "Field", new Color(0.2f, 0.24f, 0.16f, 1f));
+            _field = (RectTransform)fieldGO.transform;
+            _field.anchorMin = _field.anchorMax = new Vector2(0.5f, 0f);
+            _field.pivot = Vector2.zero;
+            _field.sizeDelta = new Vector2(FieldBattleSession.FieldWidth, FieldBattleSession.FieldHeight);
+            _field.anchoredPosition = new Vector2(-FieldBattleSession.FieldWidth / 2f, FieldBottom);
+            var fieldImage = fieldGO.GetComponent<Image>();
+            fieldImage.sprite = UITheme.Inset;
+            fieldImage.type = Image.Type.Sliced;
+            fieldGO.AddComponent<BattleClickTarget>().OnClick = OnGroundClicked;
+            _groundLayer = CreateLayer("GroundLayer");
+            _unitLayer = CreateLayer("UnitLayer");
+            _fxLayer = CreateLayer("FxLayer");
 
             BuildActionPanel(root);
         }
 
-        private void BuildBackground(Transform root)
+        /// <summary>필드를 꽉 채우는 빈 층(피벗 왼쪽 아래 - 자식 좌표 = 필드 좌표). 그래픽이 없어 클릭을 막지 않는다.</summary>
+        private RectTransform CreateLayer(string name)
         {
-            var sky = new GameObject("Sky", typeof(RectTransform), typeof(Image));
-            sky.transform.SetParent(root, false);
-            var skyRect = (RectTransform)sky.transform;
-            skyRect.anchorMin = new Vector2(0f, 0.32f);
-            skyRect.anchorMax = new Vector2(1f, 1f);
-            skyRect.offsetMin = skyRect.offsetMax = Vector2.zero;
-            sky.GetComponent<Image>().color = new Color(0.1f, 0.11f, 0.15f, 1f);
-
-            var ground = new GameObject("Ground", typeof(RectTransform), typeof(Image));
-            ground.transform.SetParent(root, false);
-            var groundRect = (RectTransform)ground.transform;
-            groundRect.anchorMin = Vector2.zero;
-            groundRect.anchorMax = new Vector2(1f, 0.32f);
-            groundRect.offsetMin = groundRect.offsetMax = Vector2.zero;
-            ground.GetComponent<Image>().color = new Color(0.16f, 0.17f, 0.13f, 1f);
-        }
-
-        private Transform CreateRow(Transform parent, Vector2 anchor, Vector2 anchoredPosition)
-        {
-            var go = new GameObject("Row", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            go.transform.SetParent(parent, false);
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(_field, false);
             var rect = (RectTransform)go.transform;
-            rect.anchorMin = rect.anchorMax = rect.pivot = anchor;
-            rect.anchoredPosition = anchoredPosition;
-            rect.sizeDelta = new Vector2(1700f, 190f);
-
-            var layout = go.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 28f;
-            layout.childAlignment = TextAnchor.MiddleCenter;
-            layout.childForceExpandWidth = false;
-            layout.childForceExpandHeight = false;
-            // 주의(DEVLOG 2026-09-17): childControlWidth/Height를 false로 두면 LayoutElement 값이 실제 크기에
-            // 반영되지 않고 항상 기본 100x100으로 남는 버그가 있다. 반드시 true로 켜서 LayoutElement가 먹게 한다.
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-            return go.transform;
+            Stretch(rect);
+            rect.pivot = Vector2.zero;
+            return rect;
         }
 
-        private UnitView CreateUnitView(Transform parent, string displayName, Combatant combatant, ComposedCharacter appearance, int tier, bool isMelee)
+        private UnitView CreateUnitView(FieldUnit unit, ComposedCharacter appearance, int tier)
         {
-            var root = new GameObject(displayName, typeof(RectTransform), typeof(LayoutElement), typeof(CanvasGroup));
-            root.transform.SetParent(parent, false);
-            var layout = root.GetComponent<LayoutElement>();
-            layout.minWidth = layout.preferredWidth = 160f;
-            layout.minHeight = layout.preferredHeight = 198f;
-            var group = root.GetComponent<CanvasGroup>();
+            var rootGO = new GameObject(unit.Combatant.Name, typeof(RectTransform), typeof(CanvasGroup));
+            rootGO.transform.SetParent(_unitLayer, false);
+            var root = (RectTransform)rootGO.transform;
+            root.anchorMin = root.anchorMax = Vector2.zero;
+            root.pivot = new Vector2(0.5f, 0f);
+            root.sizeDelta = new Vector2(PortraitSize, PortraitSize);
 
-            // 하이라이트/대상 선택 테두리(평소엔 투명) + 클릭(대상 지정)
-            var frameGO = new GameObject("Frame", typeof(RectTransform), typeof(Image), typeof(Button));
-            frameGO.transform.SetParent(root.transform, false);
-            var frameRect = (RectTransform)frameGO.transform;
-            frameRect.anchorMin = Vector2.zero;
-            frameRect.anchorMax = Vector2.one;
-            frameRect.offsetMin = frameRect.offsetMax = Vector2.zero;
-            var frame = frameGO.GetComponent<Image>();
-            frame.sprite = UITheme.Inset;
-            frame.type = Image.Type.Sliced;
-            frame.color = new Color(0f, 0f, 0f, 0f);
-            var button = frameGO.GetComponent<Button>();
-            button.transition = Selectable.Transition.None;
-            button.interactable = false;
-            button.onClick.AddListener(() => OnUnitClicked(combatant));
+            // 발밑 그림자 · 분대장 고리 · 대상 고리
+            var shadow = CreateImage(root, "Shadow", new Color(0f, 0f, 0f, 0.35f));
+            shadow.GetComponent<Image>().sprite = BattlePlaceholderSprites.Circle;
+            PlaceAtFeet(shadow, 70f, 20f);
+            if (unit.IsLeader)
+            {
+                var ring = CreateImage(root, "LeaderRing", LeaderColor);
+                ring.GetComponent<Image>().sprite = BattlePlaceholderSprites.Ring;
+                PlaceAtFeet(ring, 96f, 30f);
+            }
+            var targetRingGO = CreateImage(root, "TargetRing", Color.red);
+            var targetRing = targetRingGO.GetComponent<Image>();
+            targetRing.sprite = BattlePlaceholderSprites.Ring;
+            PlaceAtFeet(targetRingGO, 104f, 34f);
+            targetRing.enabled = false;
 
-            // 공격 동작·대기 중 흔들림은 전부 이 안쪽 컨테이너에만 적용한다(Root 자체는 Row의 레이아웃이 관리하므로 건드리지 않음).
-            var animRootGO = new GameObject("AnimRoot", typeof(RectTransform));
-            animRootGO.transform.SetParent(root.transform, false);
-            var animRoot = (RectTransform)animRootGO.transform;
-            animRoot.anchorMin = Vector2.zero;
-            animRoot.anchorMax = Vector2.one;
-            animRoot.offsetMin = animRoot.offsetMax = Vector2.zero;
+            // 그림
+            var bodyGO = new GameObject("Body", typeof(RectTransform));
+            bodyGO.transform.SetParent(root, false);
+            var body = (RectTransform)bodyGO.transform;
+            body.anchorMin = body.anchorMax = new Vector2(0.5f, 0f);
+            body.pivot = new Vector2(0.5f, 0f);
+            body.sizeDelta = new Vector2(PortraitSize, PortraitSize);
 
-            // 초상화(애니메이션) 또는 기본 도형
-            GameObject portraitGO;
             BattlePortraitAnimator animator = null;
+            Image[] tintables;
             if (appearance != null)
             {
-                portraitGO = BattlePortraitAnimator.Create(animRoot, appearance, 110);
-                animator = portraitGO.GetComponent<BattlePortraitAnimator>();
-                // LayoutElement는 부모가 LayoutGroup일 때만 적용되는데 animRoot는 아니라서 크기를 직접 정해줘야 한다.
-                ((RectTransform)portraitGO.transform).sizeDelta = new Vector2(110f, 110f);
+                var portrait = BattlePortraitAnimator.Create(body, appearance, (int)PortraitSize);
+                var pr = (RectTransform)portrait.transform;
+                pr.anchorMin = pr.anchorMax = pr.pivot = new Vector2(0.5f, 0f);
+                pr.sizeDelta = new Vector2(PortraitSize, PortraitSize);
+                pr.anchoredPosition = new Vector2(0f, -6f);
+                animator = portrait.GetComponent<BattlePortraitAnimator>();
+                tintables = portrait.GetComponentsInChildren<Image>(true).Where(i => i.gameObject != portrait).ToArray();
             }
             else
             {
-                portraitGO = new GameObject("Placeholder", typeof(RectTransform), typeof(Image));
-                portraitGO.transform.SetParent(animRoot, false);
-                var img = portraitGO.GetComponent<Image>();
-                img.sprite = BattlePlaceholderSprites.Circle;
-                img.color = BattlePlaceholderSprites.ColorForTier(tier);
-                img.raycastTarget = false;
-                float s = 86f * BattlePlaceholderSprites.SizeForTier(tier);
-                ((RectTransform)portraitGO.transform).sizeDelta = new Vector2(s, s);
+                float s = 76f * BattlePlaceholderSprites.SizeForTier(tier);
+                var blob = CreateImage(body, "Placeholder", BattlePlaceholderSprites.ColorForTier(tier));
+                blob.GetComponent<Image>().sprite = BattlePlaceholderSprites.Circle;
+                blob.GetComponent<Image>().raycastTarget = false;
+                var br = (RectTransform)blob.transform;
+                br.anchorMin = br.anchorMax = br.pivot = new Vector2(0.5f, 0f);
+                br.sizeDelta = new Vector2(s, s);
+                br.anchoredPosition = new Vector2(0f, 4f);
+                tintables = new[] { blob.GetComponent<Image>() };
             }
-            var portraitRect = (RectTransform)portraitGO.transform;
-            portraitRect.anchorMin = portraitRect.anchorMax = portraitRect.pivot = new Vector2(0.5f, 1f);
-            portraitRect.anchoredPosition = new Vector2(0f, -8f);
 
-            var turnMarker = CreateText(animRoot, "▼", 20, TextAnchor.MiddleCenter, UITheme.TitleText);
-            turnMarker.raycastTarget = false;
-            var markerRect = turnMarker.rectTransform;
-            markerRect.anchorMin = markerRect.anchorMax = markerRect.pivot = new Vector2(0.5f, 1f);
-            markerRect.anchoredPosition = new Vector2(0f, 14f);
-            markerRect.sizeDelta = new Vector2(60f, 22f);
-            turnMarker.gameObject.SetActive(false);
+            // 머리 위: 이름 · 체력 · 공격 대기
+            string label = unit.IsLeader ? $"★{unit.Combatant.Name}" : unit.Combatant.Name;
+            var name = CreateText(root, label, 14, TextAnchor.MiddleCenter, unit.IsLeader ? LeaderColor : unit.IsPlayerSide ? UITheme.BodyText : new Color(1f, 0.75f, 0.7f));
+            name.raycastTarget = false;
+            name.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+            PlaceAbove(name.rectTransform, 150f, 150f, 20f);
 
-            var nameText = CreateText(animRoot, displayName, 15, TextAnchor.MiddleCenter, UITheme.BodyText);
-            nameText.raycastTarget = false;
-            var nameRect = nameText.rectTransform;
-            nameRect.anchorMin = nameRect.anchorMax = nameRect.pivot = new Vector2(0.5f, 1f);
-            nameRect.anchoredPosition = new Vector2(0f, -122f);
-            nameRect.sizeDelta = new Vector2(156f, 22f);
+            var hpBg = CreateImage(root, "HpBg", new Color(0.05f, 0.05f, 0.06f, 0.9f));
+            PlaceAbove((RectTransform)hpBg.transform, 132f, 80f, 9f);
+            var hpFill = CreateFill(hpBg.transform, new Color(0.4f, 0.75f, 0.35f));
 
-            var hpBg = new GameObject("HpBg", typeof(RectTransform), typeof(Image));
-            hpBg.transform.SetParent(animRoot, false);
-            var hpBgRect = (RectTransform)hpBg.transform;
-            hpBgRect.anchorMin = hpBgRect.anchorMax = hpBgRect.pivot = new Vector2(0.5f, 1f);
-            hpBgRect.anchoredPosition = new Vector2(0f, -144f);
-            hpBgRect.sizeDelta = new Vector2(140f, 16f);
-            var hpBgImage = hpBg.GetComponent<Image>();
-            hpBgImage.sprite = UITheme.Inset;
-            hpBgImage.type = Image.Type.Sliced;
-            hpBgImage.raycastTarget = false;
+            var readyBg = CreateImage(root, "ReadyBg", new Color(0.05f, 0.05f, 0.06f, 0.9f));
+            PlaceAbove((RectTransform)readyBg.transform, 124f, 80f, 4f);
+            var readyFill = CreateFill(readyBg.transform, new Color(0.35f, 0.75f, 0.9f));
 
-            var hpFillGO = new GameObject("HpFill", typeof(RectTransform), typeof(Image));
-            hpFillGO.transform.SetParent(hpBg.transform, false);
-            var hpFillRect = (RectTransform)hpFillGO.transform;
-            hpFillRect.anchorMin = Vector2.zero;
-            hpFillRect.anchorMax = Vector2.one;
-            hpFillRect.offsetMin = new Vector2(2f, 2f);
-            hpFillRect.offsetMax = new Vector2(-2f, -2f);
-            var hpFill = hpFillGO.GetComponent<Image>();
-            hpFill.color = new Color(0.4f, 0.75f, 0.35f);
-            hpFill.type = Image.Type.Filled;
-            hpFill.fillMethod = Image.FillMethod.Horizontal;
-            hpFill.fillOrigin = (int)Image.OriginHorizontal.Left;
-            hpFill.fillAmount = 1f;
-            hpFill.raycastTarget = false;
-
-            var hpText = CreateText(hpBg.transform, "", 11, TextAnchor.MiddleCenter, Color.white);
-            hpText.raycastTarget = false;
-            var hpTextRect = hpText.rectTransform;
-            hpTextRect.anchorMin = Vector2.zero;
-            hpTextRect.anchorMax = Vector2.one;
-            hpTextRect.offsetMin = hpTextRect.offsetMax = Vector2.zero;
-
-            // 준비 게이지(ATB) - 체력바 바로 아래, 다 차면 그 유닛이 행동한다.
-            var readyBg = new GameObject("ReadinessBg", typeof(RectTransform), typeof(Image));
-            readyBg.transform.SetParent(animRoot, false);
-            var readyBgRect = (RectTransform)readyBg.transform;
-            readyBgRect.anchorMin = readyBgRect.anchorMax = readyBgRect.pivot = new Vector2(0.5f, 1f);
-            readyBgRect.anchoredPosition = new Vector2(0f, -162f);
-            readyBgRect.sizeDelta = new Vector2(140f, 9f);
-            // 9px짜리 얇은 바라 9-slice(Inset)는 모서리가 두꺼워 뭉개져 보이므로 민무늬 색으로.
-            var readyBgImage = readyBg.GetComponent<Image>();
-            readyBgImage.color = new Color(0.05f, 0.05f, 0.06f, 1f);
-            readyBgImage.raycastTarget = false;
-
-            var readyFillGO = new GameObject("ReadinessFill", typeof(RectTransform), typeof(Image));
-            readyFillGO.transform.SetParent(readyBg.transform, false);
-            var readyFillRect = (RectTransform)readyFillGO.transform;
-            readyFillRect.anchorMin = Vector2.zero;
-            readyFillRect.anchorMax = Vector2.one;
-            readyFillRect.offsetMin = new Vector2(1.5f, 1.5f);
-            readyFillRect.offsetMax = new Vector2(-1.5f, -1.5f);
-            var readyFill = readyFillGO.GetComponent<Image>();
-            readyFill.color = new Color(0.35f, 0.75f, 0.9f);
-            readyFill.type = Image.Type.Filled;
-            readyFill.fillMethod = Image.FillMethod.Horizontal;
-            readyFill.fillOrigin = (int)Image.OriginHorizontal.Left;
-            readyFill.fillAmount = 0f;
-            readyFill.raycastTarget = false;
-
-            // 피격 막(평소엔 완전 투명) - AnimRoot보다 위에 그려야 하므로 root의 마지막 자식으로 둔다.
-            var hitFlashGO = new GameObject("HitFlash", typeof(RectTransform), typeof(Image));
-            hitFlashGO.transform.SetParent(root.transform, false);
-            var hitFlashRect = (RectTransform)hitFlashGO.transform;
-            hitFlashRect.anchorMin = Vector2.zero;
-            hitFlashRect.anchorMax = Vector2.one;
-            hitFlashRect.offsetMin = hitFlashRect.offsetMax = Vector2.zero;
-            var hitFlash = hitFlashGO.GetComponent<Image>();
-            hitFlash.color = new Color(1f, 0.2f, 0.15f, 0f);
-            hitFlash.raycastTarget = false;
+            // 클릭 영역(그림 크기만큼, 투명)
+            var clickGO = CreateImage(root, "Click", new Color(0f, 0f, 0f, 0f));
+            var clickRect = (RectTransform)clickGO.transform;
+            clickRect.anchorMin = clickRect.anchorMax = new Vector2(0.5f, 0f);
+            clickRect.pivot = new Vector2(0.5f, 0f);
+            clickRect.sizeDelta = new Vector2(80f, 120f);
+            var clickImage = clickGO.GetComponent<Image>();
+            clickImage.raycastTarget = true;
+            clickGO.AddComponent<BattleClickTarget>().OnClick = e => OnUnitClicked(unit, e);
 
             var view = new UnitView
             {
-                Combatant = combatant,
+                Unit = unit,
                 Root = root,
-                AnimRoot = animRoot,
-                Group = group,
-                Frame = frame,
-                HitFlash = hitFlash,
+                Body = body,
+                Group = rootGO.GetComponent<CanvasGroup>(),
+                Tintables = tintables,
+                BaseColors = tintables.Select(i => i.color).ToArray(),
                 HpFill = hpFill,
-                HpText = hpText,
-                ReadinessFill = readyFill,
-                TurnMarker = turnMarker.gameObject,
-                Button = button,
-                IsPlayerSide = tier < 0,
-                IsMelee = isMelee,
+                ReadyFill = readyFill,
+                TargetRing = targetRing,
+                ClickArea = clickImage,
                 Animator = animator,
-                BobPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
+                HopPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
             };
             UpdateUnitView(view);
             return view;
         }
 
+        private static void PlaceAtFeet(GameObject go, float width, float height)
+        {
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
+            rect.sizeDelta = new Vector2(width, height);
+            rect.anchoredPosition = new Vector2(0f, -height / 2f);
+            go.GetComponent<Image>().raycastTarget = false;
+        }
+
+        private static void PlaceAbove(RectTransform rect, float y, float width, float height)
+        {
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
+            rect.sizeDelta = new Vector2(width, height);
+            rect.anchoredPosition = new Vector2(0f, y);
+            var img = rect.GetComponent<Image>();
+            if (img != null) img.raycastTarget = false;
+        }
+
+        private Image CreateFill(Transform parent, Color color)
+        {
+            var go = CreateImage(parent, "Fill", color);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(1f, 1f);
+            rect.offsetMax = new Vector2(-1f, -1f);
+            var img = go.GetComponent<Image>();
+            img.type = Image.Type.Filled;
+            img.fillMethod = Image.FillMethod.Horizontal;
+            img.fillOrigin = (int)Image.OriginHorizontal.Left;
+            img.raycastTarget = false;
+            return img;
+        }
+
         private void BuildActionPanel(Transform root)
         {
-            var panel = new GameObject("ActionPanel", typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(root, false);
+            var panel = CreateImage(root, "ActionPanel", new Color(1f, 1f, 1f, 0.97f));
             var rect = (RectTransform)panel.transform;
             rect.anchorMin = new Vector2(0f, 0f);
             rect.anchorMax = new Vector2(1f, 0f);
@@ -735,32 +681,35 @@ namespace GN3.Battle
             var panelImage = panel.GetComponent<Image>();
             panelImage.sprite = UITheme.Panel;
             panelImage.type = Image.Type.Sliced;
-            panelImage.color = new Color(1f, 1f, 1f, 0.97f);
 
-            _turnLabel = CreateText(panel.transform, "", 18, TextAnchor.UpperLeft, UITheme.TitleText);
-            _turnLabel.fontStyle = FontStyle.Bold;
-            var turnRect = _turnLabel.rectTransform;
-            turnRect.anchorMin = turnRect.anchorMax = turnRect.pivot = new Vector2(0f, 1f);
-            turnRect.anchoredPosition = new Vector2(28f, -16f);
-            turnRect.sizeDelta = new Vector2(280f, 72f);
-            _turnLabel.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _leaderLabel = CreateText(panel.transform, "", 19, TextAnchor.UpperLeft, LeaderColor);
+            _leaderLabel.fontStyle = FontStyle.Bold;
+            var leaderRect = _leaderLabel.rectTransform;
+            leaderRect.anchorMin = leaderRect.anchorMax = leaderRect.pivot = new Vector2(0f, 1f);
+            leaderRect.anchoredPosition = new Vector2(28f, -18f);
+            leaderRect.sizeDelta = new Vector2(420f, 30f);
 
-            // 기본공격은 자동(랜덤 대상)이라 버튼이 필요 없다 - 스킬 쓰고 싶을 때만 이 버튼으로 개입한다.
-            _skillButton = CreateActionButton(panel.transform, new Vector2(28f, -100f), out _skillButtonText);
-            _skillButton.onClick.AddListener(OnSkillButtonClicked);
+            _skillButton = CreateActionButton(panel.transform, new Vector2(28f, -60f), out _skillButtonText);
+            _skillButton.onClick.AddListener(PressSkill);
 
-            var logBg = new GameObject("LogPanel", typeof(RectTransform), typeof(Image));
-            logBg.transform.SetParent(panel.transform, false);
+            _hintLabel = CreateText(panel.transform, "", 15, TextAnchor.UpperLeft, UITheme.MutedText);
+            var hintRect = _hintLabel.rectTransform;
+            hintRect.anchorMin = hintRect.anchorMax = hintRect.pivot = new Vector2(0f, 1f);
+            hintRect.anchoredPosition = new Vector2(28f, -128f);
+            hintRect.sizeDelta = new Vector2(420f, 80f);
+
+            var logBg = CreateImage(panel.transform, "LogPanel", Color.white);
             var logRect = (RectTransform)logBg.transform;
             logRect.anchorMin = new Vector2(0f, 0f);
             logRect.anchorMax = new Vector2(1f, 1f);
-            logRect.offsetMin = new Vector2(320f, 16f);
+            logRect.offsetMin = new Vector2(480f, 16f);
             logRect.offsetMax = new Vector2(-28f, -16f);
             var logBgImage = logBg.GetComponent<Image>();
             logBgImage.sprite = UITheme.Inset;
             logBgImage.type = Image.Type.Sliced;
 
             _logText = CreateText(logBg.transform, "", 14, TextAnchor.LowerLeft, UITheme.MutedText);
+            _logText.supportRichText = true;
             var logTextRect = _logText.rectTransform;
             logTextRect.anchorMin = Vector2.zero;
             logTextRect.anchorMax = Vector2.one;
@@ -771,22 +720,19 @@ namespace GN3.Battle
 
         private Button CreateActionButton(Transform parent, Vector2 anchoredPosition, out Text label)
         {
-            var go = new GameObject("ActionButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            go.transform.SetParent(parent, false);
+            var go = CreateImage(parent, "ActionButton", Color.white);
+            go.AddComponent<Button>();
             var rect = (RectTransform)go.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = anchoredPosition;
-            rect.sizeDelta = new Vector2(260f, 52f);
+            rect.sizeDelta = new Vector2(300f, 56f);
 
             var image = go.GetComponent<Image>();
             image.sprite = UITheme.Button;
             image.type = Image.Type.Sliced;
 
-            label = CreateText(go.transform, "", 17, TextAnchor.MiddleCenter, UITheme.BodyText);
-            var labelRect = label.rectTransform;
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+            label = CreateText(go.transform, "", 18, TextAnchor.MiddleCenter, UITheme.BodyText);
+            Stretch(label.rectTransform);
             label.raycastTarget = false;
 
             return go.GetComponent<Button>();
@@ -794,17 +740,11 @@ namespace GN3.Battle
 
         private void BuildResultOverlay(bool victory, string summary)
         {
-            var overlay = new GameObject("ResultOverlay", typeof(RectTransform), typeof(Image));
-            overlay.transform.SetParent(_turnLabel.transform.root, false);
-            var overlayRect = (RectTransform)overlay.transform;
-            overlayRect.anchorMin = Vector2.zero;
-            overlayRect.anchorMax = Vector2.one;
-            overlayRect.offsetMin = overlayRect.offsetMax = Vector2.zero;
-            overlay.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.6f);
+            var overlay = CreateImage(_canvas.transform, "ResultOverlay", new Color(0f, 0f, 0f, 0.6f));
+            Stretch((RectTransform)overlay.transform);
             overlay.transform.SetAsLastSibling();
 
-            var panel = new GameObject("ResultPanel", typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(overlay.transform, false);
+            var panel = CreateImage(overlay.transform, "ResultPanel", Color.white);
             var rect = (RectTransform)panel.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(620f, 420f);
@@ -833,6 +773,21 @@ namespace GN3.Battle
             backRect.anchoredPosition = new Vector2(0f, 28f);
             backRect.sizeDelta = new Vector2(220f, 52f);
             backButton.onClick.AddListener(() => SceneManager.LoadScene("MainScene"));
+        }
+
+        private static GameObject CreateImage(Transform parent, string name, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            go.GetComponent<Image>().color = color;
+            return go;
+        }
+
+        private static void Stretch(RectTransform rect)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment, Color color)

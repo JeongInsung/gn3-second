@@ -13,9 +13,12 @@ namespace GN3.Combat
             _random = seed.HasValue ? new Random(seed.Value) : new Random();
         }
 
-        public BattleResult Simulate(List<Combatant> teamA, List<Combatant> teamB, int maxRounds = 50)
+        /// <param name="skills">유닛별 스킬(없으면 기본공격만). 쿨타임이 돌았고 쓸 대상이 있으면(SkillAI) 그 차례엔 기본공격 대신 스킬을 쓴다.</param>
+        public BattleResult Simulate(List<Combatant> teamA, List<Combatant> teamB, int maxRounds = 50,
+            IReadOnlyDictionary<Combatant, SkillBase> skills = null)
         {
             var log = new List<BattleEvent>();
+            var cooldowns = new Dictionary<Combatant, int>(); // 남은 라운드(0이면 쓸 수 있음)
             var order = CombatResolver.BuildTurnOrder(teamA, teamB);
 
             CombatResolver.RaiseBattleStart(teamA, teamB);
@@ -31,6 +34,24 @@ namespace GN3.Combat
                     if (!entry.unit.IsAlive) continue;
 
                     var enemies = entry.isTeamA ? teamB : teamA;
+                    var allies = entry.isTeamA ? teamA : teamB;
+
+                    if (skills != null && skills.TryGetValue(entry.unit, out var skill) && skill != null)
+                    {
+                        cooldowns.TryGetValue(entry.unit, out int left);
+                        if (left > 0) cooldowns[entry.unit] = left - 1;
+                        else
+                        {
+                            var skillTarget = SkillAI.ChooseTarget(skill, allies, enemies, null);
+                            if (skillTarget != null)
+                            {
+                                log.AddRange(skill.Execute(entry.unit, skillTarget, allies, enemies, round, _random));
+                                cooldowns[entry.unit] = SkillAI.CooldownRounds(skill);
+                                if (!teamA.Any(c => c.IsAlive) || !teamB.Any(c => c.IsAlive)) break;
+                                continue;
+                            }
+                        }
+                    }
 
                     if (entry.unit.Passives.Any(p => p.TryTriggerAoeAttack(_random)))
                     {

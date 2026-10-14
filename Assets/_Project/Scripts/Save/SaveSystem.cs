@@ -135,6 +135,7 @@ namespace GN3.Save
                     returnHoursLeft = expedition.ReturnHoursLeft,
                 };
                 e.memberIds.AddRange(expedition.Members.Where(m => m.IsAlive).Select(m => m.Id));
+                e.leaderId = expedition.Leader?.Id;
                 data.expeditions.Add(e);
             }
             data.trainees = TrainingHall.SaveIds();
@@ -244,7 +245,8 @@ namespace GN3.Save
                 // 버전 1 저장은 일 단위뿐이라 × 24시간으로 읽는다.
                 bool hours = data.version >= 2;
                 quest.SetRemainingHours(hours ? e.remainingHours : e.remainingDays * Quest.HoursPerDay);
-                var expedition = new Expedition(quest, members);
+                var leader = string.IsNullOrEmpty(e.leaderId) ? null : members.FirstOrDefault(m => m.Id == e.leaderId);
+                var expedition = new Expedition(quest, members, leader);
                 expedition.RestoreState(hours ? e.outboundHours : e.outboundDays * Quest.HoursPerDay, e.returning,
                     hours ? e.returnHoursLeft : e.returnDaysLeft * Quest.HoursPerDay);
                 ExpeditionLog.Instance.Restore(expedition);

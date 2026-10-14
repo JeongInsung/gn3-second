@@ -120,5 +120,6 @@ namespace GN3.Save
         public float outboundHours;
         public float returnHoursLeft;
         public List<string> memberIds = new List<string>();
+        public string leaderId; // 분대장(예전 저장엔 없어 비어 있음 → 첫 파견원)
     }
 }

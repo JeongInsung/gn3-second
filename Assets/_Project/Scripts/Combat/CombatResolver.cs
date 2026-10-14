@@ -6,7 +6,7 @@ namespace GN3.Combat
 {
     /// <summary>
     /// 전투 핵심 규칙(턴 순서/대상 선정/공격 판정/패시브 훅 배선)을 한 곳에 모은 static 헬퍼.
-    /// AutoBattleSimulator(자동 전투)와 ManualBattleSession(직접 전투)이 똑같이 가져다 써서
+    /// AutoBattleSimulator(자동 전투)와 FieldBattleSession(직접 전투)이 똑같이 가져다 써서
     /// 두 모드가 항상 같은 규칙으로 싸우게 한다(로직이 두 군데로 갈라져 결과가 어긋나는 것을 막음).
     /// </summary>
     public static class CombatResolver

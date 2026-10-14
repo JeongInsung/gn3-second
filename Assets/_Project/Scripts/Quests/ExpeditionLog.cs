@@ -73,9 +73,9 @@ namespace GN3.Quests
         /// <summary>전투를 마치고 마을로 돌아오는 중인지.</summary>
         public bool IsReturning(Mercenary mercenary) => FindExpedition(mercenary)?.IsReturning == true;
 
-        public Expedition Dispatch(Quest quest, IReadOnlyList<Mercenary> members)
+        public Expedition Dispatch(Quest quest, IReadOnlyList<Mercenary> members, Mercenary leader = null)
         {
-            var expedition = new Expedition(quest, members);
+            var expedition = new Expedition(quest, members, leader);
             _active.Add(expedition);
 
             // 전투력이 넉넉한 편성(쉬움·매우 쉬움)은 더 빨리 도착한다(QuestDifficulty.DaysSaved).
@@ -229,7 +229,7 @@ namespace GN3.Quests
             var combatants = aliveMembers.Select(m => m.ToCombatant()).ToList();
 
             var simulator = new AutoBattleSimulator();
-            simulator.Simulate(combatants, enemies, maxRounds: 20);
+            simulator.Simulate(combatants, enemies, maxRounds: 20, skills: ClassSkillFactory.ForTeam(aliveMembers, combatants));
 
             string raiderNames = string.Join("·", enemies.Select(e => e.Name).Distinct());
             var sb = new StringBuilder();

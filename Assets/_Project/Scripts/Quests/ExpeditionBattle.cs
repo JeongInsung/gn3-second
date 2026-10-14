@@ -29,7 +29,7 @@ namespace GN3.Quests
             var combatants = fighters.Select(m => m.ToCombatant()).ToList();
             var quest = expedition.Quest;
             var enemies = EnemySquadGenerator.Generate(quest.Region, quest.EnemyCount, quest.Difficulty, Rng);
-            var result = new AutoBattleSimulator().Simulate(combatants, enemies);
+            var result = new AutoBattleSimulator().Simulate(combatants, enemies, skills: ClassSkillFactory.ForTeam(fighters, combatants));
             return new Battle { Result = result, Fighters = fighters, Combatants = combatants };
         }
 
