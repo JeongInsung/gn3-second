@@ -1,0 +1,429 @@
+fileFormatVersion: 2
+guid: a498f477129491242935ca4f27159f38
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -5409472241692013703
+    second: goblin_archer_idle_0
+  - first:
+      213: 8918968696081902474
+    second: goblin_archer_idle_1
+  - first:
+      213: 6386371344519242650
+    second: goblin_archer_idle_2
+  - first:
+      213: -6563513496030457884
+    second: goblin_archer_idle_3
+  - first:
+      213: 6709588999776996892
+    second: goblin_archer_idle_4
+  - first:
+      213: -4022905719153265115
+    second: goblin_archer_idle_5
+  - first:
+      213: 3825521030028166554
+    second: goblin_archer_idle_6
+  - first:
+      213: -942281115125510349
+    second: goblin_archer_idle_7
+  - first:
+      213: -2748694897736564728
+    second: goblin_archer_idle_8
+  - first:
+      213: 2832916322544232713
+    second: goblin_archer_idle_9
+  - first:
+      213: 306245160448033312
+    second: goblin_archer_idle_10
+  - first:
+      213: -4914365824769940381
+    second: goblin_archer_idle_11
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: goblin_archer_idle_0
+      rect:
+        serializedVersion: 2
+        x: 90
+        y: 577
+        width: 425
+        height: 450
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 97b8c9328a1bde4b0800000000000000
+      internalID: -5409472241692013703
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_1
+      rect:
+        serializedVersion: 2
+        x: 574
+        y: 603
+        width: 487
+        height: 436
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a8b6acc36ca86cb70800000000000000
+      internalID: 8918968696081902474
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_2
+      rect:
+        serializedVersion: 2
+        x: 971
+        y: 610
+        width: 10
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a93adc1c6e2f0a850800000000000000
+      internalID: 6386371344519242650
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_3
+      rect:
+        serializedVersion: 2
+        x: 1184
+        y: 591
+        width: 409
+        height: 443
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4ef4f961047b9e4a0800000000000000
+      internalID: -6563513496030457884
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_4
+      rect:
+        serializedVersion: 2
+        x: 1701
+        y: 611
+        width: 412
+        height: 428
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c1e839875af3d1d50800000000000000
+      internalID: 6709588999776996892
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_5
+      rect:
+        serializedVersion: 2
+        x: 1809
+        y: 587
+        width: 22
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5267bfc0094cb28c0800000000000000
+      internalID: -4022905719153265115
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_6
+      rect:
+        serializedVersion: 2
+        x: 1882
+        y: 610
+        width: 13
+        height: 23
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a958d9bbb1bf61530800000000000000
+      internalID: 3825521030028166554
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_7
+      rect:
+        serializedVersion: 2
+        x: 586
+        y: 49
+        width: 455
+        height: 464
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 33f826671585ce2f0800000000000000
+      internalID: -942281115125510349
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_8
+      rect:
+        serializedVersion: 2
+        x: 1876
+        y: 502
+        width: 23
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 800cb70cd8caad9d0800000000000000
+      internalID: -2748694897736564728
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_9
+      rect:
+        serializedVersion: 2
+        x: 76
+        y: 66
+        width: 425
+        height: 434
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 909a7abc26a805720800000000000000
+      internalID: 2832916322544232713
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_10
+      rect:
+        serializedVersion: 2
+        x: 1136
+        y: 49
+        width: 459
+        height: 432
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 02200b2d950004400800000000000000
+      internalID: 306245160448033312
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_idle_11
+      rect:
+        serializedVersion: 2
+        x: 1688
+        y: 49
+        width: 424
+        height: 437
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 364a44ed15aaccbb0800000000000000
+      internalID: -4914365824769940381
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      goblin_archer_idle_0: -5409472241692013703
+      goblin_archer_idle_1: 8918968696081902474
+      goblin_archer_idle_10: 306245160448033312
+      goblin_archer_idle_11: -4914365824769940381
+      goblin_archer_idle_2: 6386371344519242650
+      goblin_archer_idle_3: -6563513496030457884
+      goblin_archer_idle_4: 6709588999776996892
+      goblin_archer_idle_5: -4022905719153265115
+      goblin_archer_idle_6: 3825521030028166554
+      goblin_archer_idle_7: -942281115125510349
+      goblin_archer_idle_8: -2748694897736564728
+      goblin_archer_idle_9: 2832916322544232713
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -26,6 +26,12 @@ namespace GN3.Combat
         public float AttackTimer { get; internal set; } // AttackInterval까지 차면 사거리 안의 대상을 때린다
         public float Cooldown { get; internal set; }    // 스킬 남은 쿨타임(초)
 
+        /// <summary>공격 동작(검격 애니메이션) 길이(초). UI가 그림에 맞춰 넣는다. 0이면 공격 직후에도 바로 움직인다.</summary>
+        public float AttackAnimSeconds { get; set; }
+        /// <summary>공격 동작이 끝날 때까지 남은 시간. 그동안은 이동·새 공격·스킬을 하지 않고 밀려나지도 않는다.</summary>
+        public float BusyTimer { get; internal set; }
+        public bool IsBusy => BusyTimer > 0f;
+
         /// <summary>기본공격 대상(살아 있는 동안 계속 붙는다).</summary>
         public FieldUnit Target { get; internal set; }
         /// <summary>분대장 이동 명령 지점(도착하면 null).</summary>
@@ -159,21 +165,35 @@ namespace GN3.Combat
             CombatResolver.RaiseBattleStart(PlayerTeam, EnemyTeam);
         }
 
-        /// <summary>waveIndex번째 라운드 적을 오른쪽에 두 줄로 엇갈려 세운다(몬스터는 모두 근접). 새 유닛을 돌려준다.</summary>
+        /// <summary>
+        /// waveIndex번째 라운드 적을 오른쪽에 세운다. 근접은 두 줄로 엇갈리고, 원거리(궁수)는 그 뒤 한 줄.
+        /// 적이 2명 이상이면 3명 중 1명꼴(3번째·6번째…)이 궁수다 — 2명 라운드는 근접만, 혼자 나오는 보스도 근접.
+        /// 새 유닛을 돌려준다.
+        /// </summary>
         private List<FieldUnit> SpawnEnemies(int waveIndex)
         {
             CurrentWave = waveIndex;
             EnemyTeam = _waves[waveIndex];
+            for (int i = 0; i < EnemyTeam.Count; i++)
+                if (IsArcherSlot(i, EnemyTeam.Count))
+                    EnemyTeam[i] = Renamed(EnemyTeam[i], EnemyTeam[i].Name + " 궁수");
             AllEnemies.AddRange(EnemyTeam);
             var added = new List<FieldUnit>();
             for (int i = 0; i < EnemyTeam.Count; i++)
             {
-                float x = FieldWidth - 260f - (i % 2) * 120f;
+                bool archer = IsArcherSlot(i, EnemyTeam.Count);
+                float x = archer ? FieldWidth - ArcherColumnInset : FieldWidth - 260f - (i % 2) * 120f;
                 float y = Spread(i, EnemyTeam.Count);
-                added.Add(CreateUnit(EnemyTeam[i], false, false, true, null, new Vector2(x, y)));
+                added.Add(CreateUnit(EnemyTeam[i], false, false, !archer, null, new Vector2(x, y)));
             }
             return added;
         }
+
+        private const float ArcherColumnInset = 140f; // 궁수 줄: 필드 오른쪽 끝에서 이만큼 안쪽(근접 두 줄보다 뒤)
+
+        private static bool IsArcherSlot(int index, int count) => count >= 2 && index % 3 == 2;
+
+        private static Combatant Renamed(Combatant c, string name) => new Combatant(name, c.Stats, c.Passives);
 
         /// <summary>쓰러진 이번 라운드 적을 치우고 다음 라운드 적을 세운다. 아군은 서 있던 자리·체력 그대로.</summary>
         private void StartNextWave()
@@ -320,15 +340,18 @@ namespace GN3.Combat
                     u.Target = null;
                     u.SkillTarget = null;
                     u.MoveGoal = null;
+                    u.BusyTimer = 0f;
                     continue;
                 }
                 u.AttackTimer = Math.Min(u.AttackInterval, u.AttackTimer + dt);
                 if (u.Cooldown > 0f) u.Cooldown = Math.Max(0f, u.Cooldown - dt);
+                if (u.BusyTimer > 0f) u.BusyTimer = Math.Max(0f, u.BusyTimer - dt);
             }
 
             foreach (var u in Units.ToList())
             {
                 if (!u.IsAlive || IsOver) continue;
+                if (u.IsBusy) continue; // 공격 동작 중: 명령은 남겨 두고 동작이 끝난 뒤 이어서 한다
                 if (u.IsLeader) ThinkLeader(u);
                 else if (u.IsPlayerSide) ThinkAlly(u);
                 else ThinkEnemy(u);
@@ -456,6 +479,7 @@ namespace GN3.Combat
                 produced.Add(CombatResolver.ResolveAttack(u.Combatant, target.Combatant, ActionCount, targetTeam, _rng));
             }
             u.AttackTimer = 0f;
+            u.BusyTimer = u.AttackAnimSeconds;
             events.AddRange(produced);
             Log.AddRange(produced);
         }
@@ -472,6 +496,7 @@ namespace GN3.Combat
             var enemies = u.IsPlayerSide ? EnemyTeam : PlayerTeam;
             var produced = u.Skill.Execute(u.Combatant, target.Combatant, allies, enemies, ActionCount, _rng);
             u.Cooldown = u.Skill.CooldownSeconds;
+            if (produced.Any(e => e.Damage >= 0)) u.BusyTimer = u.AttackAnimSeconds; // 치유만 하는 스킬은 검격 동작이 없다
             OnSkillUsed?.Invoke(u, u.Skill);
             events.AddRange(produced);
             Log.AddRange(produced);
@@ -515,9 +540,12 @@ namespace GN3.Combat
                 var dir = dist > 0.01f ? delta / dist : new Vector2((float)_rng.NextDouble() - 0.5f, (float)_rng.NextDouble() - 0.5f);
                 if (dir.LengthSquared() < 0.0001f) dir = Vector2.UnitY;
                 dir = Vector2.Normalize(dir);
-                var push = dir * ((SeparationRadius - dist) * 0.5f * strength);
-                a.Position = ClampToField(a.Position - push);
-                b.Position = ClampToField(b.Position + push);
+                // 공격 동작 중인 쪽은 밀리지 않고 상대가 그만큼 더 비켜선다(둘 다 동작 중이면 그대로).
+                if (a.IsBusy && b.IsBusy) continue;
+                float share = a.IsBusy || b.IsBusy ? 1f : 0.5f;
+                var push = dir * ((SeparationRadius - dist) * share * strength);
+                if (!a.IsBusy) a.Position = ClampToField(a.Position - push);
+                if (!b.IsBusy) b.Position = ClampToField(b.Position + push);
             }
         }
 

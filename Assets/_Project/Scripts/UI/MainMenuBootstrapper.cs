@@ -41,13 +41,18 @@ namespace GN3.UI
             var marketPanel = GameObject.Find("MarketPanel");
             var partyPanel = GameObject.Find("PartyPanel");
             var questPanel = GameObject.Find("QuestPanel");
-            var canvas = Object.FindFirstObjectByType<Canvas>();
+            // 창들이 들어 있는 씬의 메인 Canvas(아무 Canvas나 고르면 이미 떠 있는 툴팁 캔버스가 잡히기도 한다)
+            var windowCanvas = marketPanel != null ? marketPanel.GetComponentInParent<Canvas>() : null;
+            var canvas = windowCanvas != null ? windowCanvas.rootCanvas : null;
 
             if (canvas == null || marketPanel == null || partyPanel == null || questPanel == null)
             {
                 Debug.LogWarning("[MainMenuBootstrapper] Canvas/MarketPanel/PartyPanel/QuestPanel를 찾지 못해 메뉴 버튼을 생성하지 못했습니다.");
                 return;
             }
+            // 마을 HUD(메뉴 줄·날짜 줄·진행·배속·불러오기·저장·건강·관계·우편함)는 창보다 위 전용 캔버스에 — 창을 열어도 가려지지 않는다.
+            var hud = CreateHudCanvas(canvas);
+            KeepBelowHud((RectTransform)partyPanel.transform, canvas); // 오른쪽 파티 창 위쪽 끝이 HUD 줄에 걸리지 않게
 
             PanelActivator.RegisterGroup(marketPanel, partyPanel, questPanel);
             // 창은 빈 곳·제목을 잡고 끌어 옮길 수 있다.
@@ -55,16 +60,17 @@ namespace GN3.UI
             DraggablePanel.Attach((RectTransform)partyPanel.transform);
             DraggablePanel.Attach((RectTransform)questPanel.transform);
 
-            CreateMenuBar(canvas.transform, marketPanel, partyPanel, questPanel);
+            CreateMenuBar(hud, marketPanel, partyPanel, questPanel);
             CreateCloseButton(marketPanel.transform, marketPanel);
             CreateCloseButton(partyPanel.transform, partyPanel);
             CreateCloseButton(questPanel.transform, questPanel);
             // ESC로도 닫는다(닫기 버튼과 같은 동작). 위에 뜬 상세 창이 있으면 그것부터 닫힌다.
             foreach (var p in new[] { marketPanel, partyPanel, questPanel })
                 EscapeCloser.Register(p, () => p.SetActive(false));
-            CreateDayControls(canvas.transform);
+            CreateDayControls(hud);
             new GameObject("VillageParty", typeof(VillagePartyPresenter)); // 파티 용병들이 마을을 돌아다닌다
             new GameObject("WeatherEffects", typeof(WeatherEffects));     // 오늘 날씨(서울 평년값): 비·눈 파티클, 흐린 날 조명
+            VillageMusic.Create();                                        // 마을 브금(섞어서 돌아가며, 비 오는 날은 비 브금)
             ConnectBuildings(canvas.transform, partyPanel, questPanel);
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
@@ -120,8 +126,43 @@ namespace GN3.UI
                     Object.FindFirstObjectByType<MercenaryMarketUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
                     Object.FindFirstObjectByType<QuestBoardUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
                 };
-                if (SaveSystem.HasSave) ContinuePrompt.Create(); // 저장이 있으면 "이어하기 / 새로 시작"
+                TitleScreen.Create(); // 켤 때 한 번: 메인화면(이어하기 · 게임 불러오기 · 새로 시작하기 · 설정)
             }
+        }
+
+        /// <summary>HUD 전용 캔버스: 창(메인 Canvas 0, 상세 창 1, 우편함 2) 위, 중요 알림(4)·타이틀(5)·메뉴(6)·설정(7) 아래.</summary>
+        public const int HudSortingOrder = 3;
+        private const float HudTopBand = 96f; // 화면 위쪽에서 이만큼은 HUD 줄(메뉴·날짜·진행·저장 등)
+
+        /// <summary>메인 Canvas와 같은 크기 맞춤으로 HUD 캔버스를 만든다(MainScene마다 새로, 씬과 함께 사라진다).</summary>
+        private static Transform CreateHudCanvas(Canvas main)
+        {
+            var go = new GameObject("HudCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = go.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = HudSortingOrder;
+            var scaler = go.GetComponent<CanvasScaler>();
+            var mainScaler = main.GetComponent<CanvasScaler>();
+            if (mainScaler != null)
+            {
+                scaler.uiScaleMode = mainScaler.uiScaleMode;
+                scaler.referenceResolution = mainScaler.referenceResolution;
+                scaler.screenMatchMode = mainScaler.screenMatchMode;
+                scaler.matchWidthOrHeight = mainScaler.matchWidthOrHeight;
+            }
+            return go.transform;
+        }
+
+        /// <summary>창 위쪽 끝이 HUD 줄(화면 위 HudTopBand)에 걸리면 그만큼 아래로 내린다.</summary>
+        private static void KeepBelowHud(RectTransform panel, Canvas canvas)
+        {
+            Canvas.ForceUpdateCanvases();
+            var canvasRect = (RectTransform)canvas.transform;
+            var corners = new Vector3[4];
+            panel.GetWorldCorners(corners);
+            float top = canvasRect.InverseTransformPoint(corners[1]).y;
+            float limit = canvasRect.rect.yMax - HudTopBand;
+            if (top > limit) panel.anchoredPosition -= new Vector2(0f, top - limit);
         }
 
         private const string QuestBoardSpritePrefix = "오크 퀘스트 게시판";
@@ -249,8 +290,9 @@ namespace GN3.UI
 
             // 오른쪽 위 작은 버튼 줄(오른쪽부터): 진행 ← 저장 ← 불러오기 ← 배속
             // 저장(자정마다 자동 저장도 된다): 진행 버튼 바로 왼쪽
-            CreateSmallButton(canvasTransform, "SaveButton", "저장", 0, () =>
+            var saveButton = CreateSmallButton(canvasTransform, "SaveButton", "저장", 0, () =>
                 ToastLog.Show(SaveSystem.Save() ? $"저장했습니다 ({GameCalendar.Format(GameClock.CurrentDay)})" : "저장에 실패했습니다", false));
+            saveButton.gameObject.AddComponent<ButtonSound>().Sound = ButtonSounds.SaveLoadSound; // 누르는 소리 대신 저장 소리
             // 불러오기: 저장 기록 목록에서 골라 불러온다(LoadGamePanel)
             CreateSmallButton(canvasTransform, "LoadButton", "불러오기", 1, LoadGamePanel.Open);
             // 가만히 둬도 흐르는 시간의 속도(1배속 ↔ 2배속)
@@ -270,7 +312,7 @@ namespace GN3.UI
 
         /// <summary>
         /// 진행 버튼(AdvanceButton) 왼쪽에 붙는 작은 버튼(저장·불러오기·배속). slot 0이 진행 버튼 바로 왼쪽, 1·2…는 한 칸씩 더 왼쪽.
-        /// 세로는 진행 버튼 높이의 가운데. 진행 버튼처럼 Canvas 맨 뒤라 창이 열리면 그 아래로 깔린다.
+        /// 세로는 진행 버튼 높이의 가운데. HUD 캔버스에 있어 창을 열어도 가려지지 않는다.
         /// </summary>
         private static Button CreateSmallButton(Transform canvasTransform, string name, string label, int slot,
             UnityEngine.Events.UnityAction onClick, int fontSize = 15)

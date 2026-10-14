@@ -36,7 +36,7 @@ namespace GN3.UI
             var go = new GameObject("ImportantAlert", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(ImportantAlertPanel));
             var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 3; // 우편함(2) 위, 이어하기 창(4) 아래
+            canvas.sortingOrder = 4; // 마을 HUD(3)·우편함(2) 위, 타이틀(5) 아래
             var scaler = go.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);

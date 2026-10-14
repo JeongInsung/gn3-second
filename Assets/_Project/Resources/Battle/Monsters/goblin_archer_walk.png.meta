@@ -1,0 +1,533 @@
+fileFormatVersion: 2
+guid: b99ae381890276642b515603aeb01d26
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -2121201954548368812
+    second: goblin_archer_walk_0
+  - first:
+      213: -1237121436599729109
+    second: goblin_archer_walk_1
+  - first:
+      213: 184399659260529048
+    second: goblin_archer_walk_2
+  - first:
+      213: 401186350253660310
+    second: goblin_archer_walk_3
+  - first:
+      213: 4788596186008133660
+    second: goblin_archer_walk_4
+  - first:
+      213: -4930898598903174366
+    second: goblin_archer_walk_5
+  - first:
+      213: -4635546786443557587
+    second: goblin_archer_walk_6
+  - first:
+      213: 4732436534687344292
+    second: goblin_archer_walk_7
+  - first:
+      213: 8004853412635926995
+    second: goblin_archer_walk_8
+  - first:
+      213: 3960435700627713011
+    second: goblin_archer_walk_9
+  - first:
+      213: -707858198096985768
+    second: goblin_archer_walk_10
+  - first:
+      213: -6687004277691457870
+    second: goblin_archer_walk_11
+  - first:
+      213: 723344260168075063
+    second: goblin_archer_walk_12
+  - first:
+      213: -4680419406688544827
+    second: goblin_archer_walk_13
+  - first:
+      213: -1004230508925315170
+    second: goblin_archer_walk_14
+  - first:
+      213: -7456665593766490244
+    second: goblin_archer_walk_15
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: goblin_archer_walk_0
+      rect:
+        serializedVersion: 2
+        x: 74
+        y: 615
+        width: 471
+        height: 416
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 45ab74a9f0aff82e0800000000000000
+      internalID: -2121201954548368812
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_1
+      rect:
+        serializedVersion: 2
+        x: 596
+        y: 616
+        width: 431
+        height: 418
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b24c373ab9cd4dee0800000000000000
+      internalID: -1237121436599729109
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_2
+      rect:
+        serializedVersion: 2
+        x: 1138
+        y: 615
+        width: 420
+        height: 419
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8994dea538e1f8200800000000000000
+      internalID: 184399659260529048
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_3
+      rect:
+        serializedVersion: 2
+        x: 1705
+        y: 610
+        width: 400
+        height: 429
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 698da972cdc419500800000000000000
+      internalID: 401186350253660310
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_4
+      rect:
+        serializedVersion: 2
+        x: 2067
+        y: 1006
+        width: 12
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c102ecf2cd2847240800000000000000
+      internalID: 4788596186008133660
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_5
+      rect:
+        serializedVersion: 2
+        x: 595
+        y: 871
+        width: 11
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 22ba7ec69dde19bb0800000000000000
+      internalID: -4930898598903174366
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_6
+      rect:
+        serializedVersion: 2
+        x: 507
+        y: 809
+        width: 12
+        height: 32
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d25045602ca3bafb0800000000000000
+      internalID: -4635546786443557587
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_7
+      rect:
+        serializedVersion: 2
+        x: 2070
+        y: 838
+        width: 6
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4a6ae1c64fdfca140800000000000000
+      internalID: 4732436534687344292
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_8
+      rect:
+        serializedVersion: 2
+        x: 611
+        y: 799
+        width: 7
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3d1ec3b64c3f61f60800000000000000
+      internalID: 8004853412635926995
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_9
+      rect:
+        serializedVersion: 2
+        x: 597
+        y: 780
+        width: 10
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3fba0b3594b46f630800000000000000
+      internalID: 3960435700627713011
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_10
+      rect:
+        serializedVersion: 2
+        x: 1170
+        y: 691
+        width: 12
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 851c41f18be2d26f0800000000000000
+      internalID: -707858198096985768
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_11
+      rect:
+        serializedVersion: 2
+        x: 92
+        y: 77
+        width: 414
+        height: 413
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2bedea8e90df233a0800000000000000
+      internalID: -6687004277691457870
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_12
+      rect:
+        serializedVersion: 2
+        x: 336
+        y: 69
+        width: 58
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 737c2ada5c5d90a00800000000000000
+      internalID: 723344260168075063
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_13
+      rect:
+        serializedVersion: 2
+        x: 669
+        y: 71
+        width: 382
+        height: 419
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5c71c78f85fcb0fb0800000000000000
+      internalID: -4680419406688544827
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_14
+      rect:
+        serializedVersion: 2
+        x: 1132
+        y: 75
+        width: 471
+        height: 421
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e9795ea3ca14012f0800000000000000
+      internalID: -1004230508925315170
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_walk_15
+      rect:
+        serializedVersion: 2
+        x: 1723
+        y: 70
+        width: 374
+        height: 420
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c7fcbaa462a948890800000000000000
+      internalID: -7456665593766490244
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      goblin_archer_walk_0: -2121201954548368812
+      goblin_archer_walk_1: -1237121436599729109
+      goblin_archer_walk_10: -707858198096985768
+      goblin_archer_walk_11: -6687004277691457870
+      goblin_archer_walk_12: 723344260168075063
+      goblin_archer_walk_13: -4680419406688544827
+      goblin_archer_walk_14: -1004230508925315170
+      goblin_archer_walk_15: -7456665593766490244
+      goblin_archer_walk_2: 184399659260529048
+      goblin_archer_walk_3: 401186350253660310
+      goblin_archer_walk_4: 4788596186008133660
+      goblin_archer_walk_5: -4930898598903174366
+      goblin_archer_walk_6: -4635546786443557587
+      goblin_archer_walk_7: 4732436534687344292
+      goblin_archer_walk_8: 8004853412635926995
+      goblin_archer_walk_9: 3960435700627713011
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
