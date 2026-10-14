@@ -805,6 +805,7 @@ namespace GN3.Battle
             fieldImage.sprite = UITheme.Inset;
             fieldImage.type = Image.Type.Sliced;
             fieldGO.AddComponent<BattleClickTarget>().OnClick = OnGroundClicked;
+            BattleGroundTiles.Build(_field, quest.Region, quest.Title.GetHashCode()); // 지역별 바닥 타일(맨 아래 층)
             _groundLayer = CreateLayer("GroundLayer");
             _unitLayer = CreateLayer("UnitLayer");
             _fxLayer = CreateLayer("FxLayer");
