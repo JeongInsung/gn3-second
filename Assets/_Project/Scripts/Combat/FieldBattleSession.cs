@@ -64,6 +64,8 @@ namespace GN3.Combat
         public const float FieldWidth = 1760f;
         public const float FieldHeight = 560f;
         private const float EdgeMargin = 40f;
+        /// <summary>배치 단계에서 아군을 놓을 수 있는 구역의 오른쪽 끝(왼쪽 끝은 필드 가장자리).</summary>
+        public const float DeployMaxX = 620f;
 
         public const float MeleeRange = 90f;
         public const float RangedRange = 420f;
@@ -187,7 +189,7 @@ namespace GN3.Combat
 
         // ---------- 분대장 명령 ----------
 
-        private bool LeaderCanAct => Leader != null && Leader.IsAlive && !IsOver;
+        private bool LeaderCanAct => HasStarted && Leader != null && Leader.IsAlive && !IsOver;
 
         // 플레이어가 직접 찍은 공격 대상(쫓아간다). 명령 없이 알아서 고른 대상은 사거리를 벗어나면 놓는다.
         private FieldUnit _orderedTarget;
@@ -227,13 +229,32 @@ namespace GN3.Combat
             return true;
         }
 
+        // ---------- 배치 ----------
+
+        /// <summary>배치 단계가 끝나고 전투가 시작됐는지. 시작 전엔 Tick이 아무것도 하지 않는다.</summary>
+        public bool HasStarted { get; private set; }
+
+        public void Begin() => HasStarted = true;
+
+        /// <summary>배치 단계에서 아군을 옮긴다(배치 구역 안으로 맞춤). 전투가 시작된 뒤엔 무시.</summary>
+        public void PlaceForDeploy(FieldUnit unit, Vector2 point)
+        {
+            if (HasStarted || unit == null || !unit.IsPlayerSide) return;
+            unit.Position = ClampToDeploy(point);
+            unit.Facing = 1f;
+        }
+
+        public static Vector2 ClampToDeploy(Vector2 p) => new Vector2(
+            Math.Clamp(p.X, EdgeMargin, DeployMaxX),
+            Math.Clamp(p.Y, EdgeMargin, FieldHeight - EdgeMargin));
+
         // ---------- 진행 ----------
 
         /// <summary>매 프레임 호출. 이번 프레임에 일어난 전투 이벤트(피해·회복)를 돌려준다.</summary>
         public List<BattleEvent> Tick(float dt)
         {
             var events = new List<BattleEvent>();
-            if (IsOver) return events;
+            if (!HasStarted || IsOver) return events;
             Elapsed += dt;
 
             foreach (var u in Units)

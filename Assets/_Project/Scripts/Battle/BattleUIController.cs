@@ -18,6 +18,7 @@ namespace GN3.Battle
     /// <summary>
     /// 직접 진행 전투 화면(필드형). 전투 규칙과 AI는 FieldBattleSession이 맡고, 이 클래스는 유닛을 필드 위
     /// 위치에 그리고 분대장 조작(클릭 이동·적 클릭 공격·Q 스킬)을 세션 명령으로 넘긴다.
+    /// 들어오면 먼저 배치 단계(아군을 끌어 왼쪽 배치 구역 안에 놓음, 시간 정지) → '전투 시작'/Space로 전투.
     /// 필드 좌표는 화면 필드 영역의 로컬 좌표와 1:1(왼쪽 아래가 0,0)이다.
     /// 몬스터 그림이 아직 없어 기본 도형(BattlePlaceholderSprites)으로 그린다 - 그림이 생기면 CreateUnitView의 적 분기만 바꾸면 된다.
     /// </summary>
@@ -31,8 +32,14 @@ namespace GN3.Battle
             public CanvasGroup Group;
             public Image[] Tintables;       // 피격 때 붉게 물들일 그림들
             public Color[] BaseColors;
-            public Image HpFill;
-            public Image ReadyFill;
+            public GameObject Bars;         // 머리 위 체력·공격 대기 막대(쓰러지면 숨김)
+            public RectTransform HpFill;    // 오른쪽 끝(anchorMax.x) = 체력 비율
+            public Image HpFillImage;
+            public RectTransform HpTrail;   // 깎인 만큼 잠깐 남았다 줄어드는 밝은 막대
+            public Text HpText;             // 아군만 "45/60"
+            public RectTransform ReadyFill;
+            public float TrailRatio = 1f;
+            public float TrailHold;
             public Image TargetRing;        // 분대장이 노리는 적
             public Image ClickArea;
             public BattlePortraitAnimator Animator; // 용병만(파츠 조합 캐릭터)
@@ -42,12 +49,22 @@ namespace GN3.Battle
         private Font _font;
         private Expedition _expedition;
         private List<Mercenary> _fighters;
+        private Mercenary _leaderMerc; // 결과 화면 ★ 표시(전투 중 쓰러져도 그대로)
         private FieldBattleSession _session;
         private readonly Dictionary<FieldUnit, UnitView> _views = new Dictionary<FieldUnit, UnitView>();
         private readonly List<UnitView> _drawOrder = new List<UnitView>();
         private bool _picking;      // 스킬 대상 고르는 중
         private bool _resultShown;
         private bool _leaderDownNoticed;
+        private bool _paused;       // Space: 전투 멈춤(멈춘 동안에도 분대장 명령은 내릴 수 있다)
+        private bool _deploying;    // 배치 단계(전투 시작 전)
+        private readonly Dictionary<FieldUnit, Mercenary> _mercOf = new Dictionary<FieldUnit, Mercenary>();
+        private readonly Dictionary<FieldUnit, System.Numerics.Vector2> _defaultPos = new Dictionary<FieldUnit, System.Numerics.Vector2>();
+        private FieldUnit _dragUnit;
+        private Vector2 _dragOffset;           // 잡은 곳과 발 위치의 차이(끄는 동안 유지)
+        private System.Numerics.Vector2 _dragStart;
+        private GameObject _deployZone;
+        private Button _resetButton;
 
         private Canvas _canvas;
         private RectTransform _field;
@@ -58,6 +75,7 @@ namespace GN3.Battle
         private Text _leaderLabel;
         private Text _hintLabel;
         private Text _timerLabel;
+        private GameObject _pauseOverlay;
         private Text _logText;
         private readonly LinkedList<string> _logLines = new LinkedList<string>();
         private Button _skillButton;
@@ -84,6 +102,7 @@ namespace GN3.Battle
             var melee = _fighters.Select(m => IsMeleeClass(m.Class.Kind)).ToList();
             var skills = _fighters.Select(m => ClassSkillFactory.Create(m.Class.Kind)).ToList();
             int leaderIndex = Math.Max(0, _fighters.IndexOf(expedition.Leader));
+            _leaderMerc = expedition.Leader;
 
             var rng = new System.Random();
             var enemies = EnemySquadGenerator.Generate(quest.Region, quest.EnemyCount, quest.Difficulty, rng);
@@ -105,15 +124,123 @@ namespace GN3.Battle
                     : CreateUnitView(unit, null, tier);
                 _views[unit] = view;
                 _drawOrder.Add(view);
+                if (unit.IsPlayerSide)
+                {
+                    _mercOf[unit] = _fighters[i];
+                    _defaultPos[unit] = unit.Position;
+                    if (BattleFormation.TryGet(_fighters[i].Id, out var saved)) // 지난 전투에서 정한 자리
+                        _session.PlaceForDeploy(unit, new System.Numerics.Vector2(saved.x, saved.y));
+                }
             }
 
             PlayMusic();
 
+            _deploying = true;
+            BuildDeployZone();
+            AppendLog("배치 — 대원을 끌어 자리를 정한 뒤 '전투 시작'(Space)");
+            foreach (var v in _views.Values) UpdateUnitView(v);
+            SortByDepth();
+            RefreshDeployPanel();
+        }
+
+        // ---------- 배치 ----------
+
+        /// <summary>배치를 마치고 전투를 시작한다. 정한 자리는 용병별로 기억해 다음 전투에서 그대로 쓴다.</summary>
+        private void BeginBattle()
+        {
+            if (!_deploying) return;
+            EventSystem.current?.SetSelectedGameObject(null);
+            _deploying = false;
+            _dragUnit = null;
+            foreach (var kv in _mercOf)
+                BattleFormation.Remember(kv.Value.Id, new Vector2(kv.Key.Position.X, kv.Key.Position.Y));
+            _session.Begin();
+            if (_deployZone != null) Destroy(_deployZone);
+            _resetButton.gameObject.SetActive(false);
+
             var leader = _session.Leader;
             AppendLog(leader != null
-                ? $"분대장 {leader.Combatant.Name} 지휘 시작 — 땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬"
-                : "전투 시작");
+                ? $"전투 시작! 분대장 {leader.Combatant.Name} 지휘 — 땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬"
+                : "전투 시작!");
             RefreshPanel();
+        }
+
+        private void ResetFormation()
+        {
+            EventSystem.current?.SetSelectedGameObject(null);
+            foreach (var kv in _defaultPos) _session.PlaceForDeploy(kv.Key, kv.Value);
+        }
+
+        private void RefreshDeployPanel()
+        {
+            _timerLabel.text = "배치 중";
+            var leader = _session.Leader;
+            _leaderLabel.text = leader != null ? $"배치 — ★ 분대장 {leader.Combatant.Name}" : "배치";
+            _skillButton.interactable = true;
+            _skillButtonText.text = "전투 시작 (Space)";
+            _hintLabel.text = "대원을 끌어 밝은 구역 안에 놓으세요 · 대원 위에 놓으면 자리 바꿈\n근접은 앞, 원거리·힐러는 뒤가 안전합니다";
+        }
+
+        private bool TryFieldPoint(PointerEventData e, out Vector2 local) =>
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(_field, e.position, e.pressEventCamera, out local);
+
+        private void OnDragBegin(FieldUnit unit, PointerEventData e)
+        {
+            if (!_deploying || !TryFieldPoint(e, out var local)) return;
+            _dragUnit = unit;
+            _dragStart = unit.Position;
+            _dragOffset = new Vector2(unit.Position.X, unit.Position.Y) - local;
+        }
+
+        private void OnDragMove(FieldUnit unit, PointerEventData e)
+        {
+            if (!_deploying || _dragUnit != unit || !TryFieldPoint(e, out var local)) return;
+            var p = local + _dragOffset;
+            _session.PlaceForDeploy(unit, new System.Numerics.Vector2(p.x, p.y));
+        }
+
+        /// <summary>놓은 자리에 다른 대원이 있으면 둘의 자리를 바꾼다(겹쳐 서지 않게).</summary>
+        private void OnDragEnd(FieldUnit unit, PointerEventData e)
+        {
+            if (!_deploying || _dragUnit != unit) return;
+            _dragUnit = null;
+            const float swapRadius = 60f;
+            var other = _session.Units
+                .Where(o => o != unit && o.IsPlayerSide && System.Numerics.Vector2.Distance(o.Position, unit.Position) < swapRadius)
+                .OrderBy(o => System.Numerics.Vector2.Distance(o.Position, unit.Position))
+                .FirstOrDefault();
+            if (other != null) _session.PlaceForDeploy(other, _dragStart);
+        }
+
+        /// <summary>필드 왼쪽의 밝은 배치 구역(오른쪽 경계선·글자). 클릭은 막지 않는다.</summary>
+        private void BuildDeployZone()
+        {
+            _deployZone = CreateImage(_groundLayer, "DeployZone", new Color(0.55f, 0.9f, 0.55f, 0.12f));
+            var rect = (RectTransform)_deployZone.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = Vector2.zero;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = new Vector2(FieldBattleSession.DeployMaxX + 40f, 0f);
+            _deployZone.GetComponent<Image>().raycastTarget = false;
+
+            var edge = CreateImage(_deployZone.transform, "Edge", new Color(0.6f, 1f, 0.6f, 0.6f));
+            var edgeRect = (RectTransform)edge.transform;
+            edgeRect.anchorMin = new Vector2(1f, 0f);
+            edgeRect.anchorMax = Vector2.one;
+            edgeRect.pivot = new Vector2(1f, 0.5f);
+            edgeRect.offsetMin = new Vector2(-3f, 0f);
+            edgeRect.offsetMax = Vector2.zero;
+            edge.GetComponent<Image>().raycastTarget = false;
+
+            var label = CreateText(_deployZone.transform, "배치 구역", 18, TextAnchor.UpperCenter, new Color(0.75f, 1f, 0.75f, 0.85f));
+            label.raycastTarget = false;
+            var labelRect = label.rectTransform;
+            labelRect.anchorMin = new Vector2(0f, 1f);
+            labelRect.anchorMax = Vector2.one;
+            labelRect.pivot = new Vector2(0.5f, 1f);
+            labelRect.offsetMin = new Vector2(0f, -34f);
+            labelRect.offsetMax = new Vector2(0f, -8f);
         }
 
         /// <summary>전투 배경음(Resources/Music). 이 오브젝트에 붙어 있어 씬을 떠나면 같이 멈춘다.</summary>
@@ -143,6 +270,17 @@ namespace GN3.Battle
         {
             if (_session == null || _resultShown) return;
 
+            if (_deploying)
+            {
+                var kb = Keyboard.current;
+                if (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame)) BeginBattle();
+                foreach (var v in _views.Values) UpdateUnitView(v);
+                SortByDepth();
+                if (_deploying) RefreshDeployPanel();
+                else RefreshPanel();
+                return;
+            }
+
             HandleKeys();
             var events = _session.Tick(Time.deltaTime);
             if (events.Count > 0) ApplyEventsVisual(events);
@@ -164,14 +302,34 @@ namespace GN3.Battle
             if (kb == null) return;
             if (kb.qKey.wasPressedThisFrame) PressSkill();
             if (kb.escapeKey.wasPressedThisFrame) _picking = false;
+            if (kb.spaceKey.wasPressedThisFrame) SetPaused(!_paused);
         }
 
         // ---------- 입력 ----------
+
+        /// <summary>Time.timeScale로 전투(세션 Tick·애니메이션·연출)를 통째로 멈춘다. 배경음은 계속.</summary>
+        private void SetPaused(bool paused)
+        {
+            _paused = paused && !_resultShown;
+            Time.timeScale = _paused ? 0f : 1f;
+            _pauseOverlay.SetActive(_paused);
+        }
+
+        private void OnDestroy() => Time.timeScale = 1f; // 멈춘 채 씬을 떠나도 마을 시간이 멈춰 있지 않게
+
+        /// <summary>아래 큰 버튼: 배치 중엔 '전투 시작', 전투 중엔 분대장 스킬.</summary>
+        private void OnMainButton()
+        {
+            if (_deploying) BeginBattle();
+            else PressSkill();
+        }
 
         /// <summary>스킬 버튼·Q: 공격 스킬은 지금 노리는 적이 있으면 바로 그 적에게, 없으면 대상 고르기.
         /// 회복 스킬은 대상 고르기(고르는 중에 한 번 더 누르면 자기 자신).</summary>
         private void PressSkill()
         {
+            // 스킬 버튼을 눌러 선택된 채로 두면 Space가 버튼을 다시 누르는 것으로 먹힐 수 있어 선택을 푼다
+            EventSystem.current?.SetSelectedGameObject(null);
             if (!_session.LeaderSkillReady) return;
             var leader = _session.Leader;
             if (leader.Skill.TargetType == SkillTargetType.Ally)
@@ -186,6 +344,7 @@ namespace GN3.Battle
 
         private void OnGroundClicked(PointerEventData e)
         {
+            if (_deploying) return;
             if (_picking && e.button == PointerEventData.InputButton.Left)
             {
                 _picking = false; // 빈 땅을 누르면 대상 고르기 취소
@@ -200,6 +359,7 @@ namespace GN3.Battle
 
         private void OnUnitClicked(FieldUnit unit, PointerEventData e)
         {
+            if (_deploying) return;
             if (!unit.IsAlive) return;
             if (_picking)
             {
@@ -257,7 +417,7 @@ namespace GN3.Battle
                 ? (skill != null && skill.TargetType == SkillTargetType.Ally
                     ? "치료할 아군을 클릭 (Q: 자신 · Esc: 취소)"
                     : "스킬을 쓸 적을 클릭 (Esc: 취소)")
-                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬";
+                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지";
         }
 
         private void UpdateUnitView(UnitView v)
@@ -268,11 +428,7 @@ namespace GN3.Battle
 
             v.Group.alpha = alive ? 1f : 0.3f;
             v.ClickArea.raycastTarget = alive;
-            float ratio = alive ? (float)u.Combatant.CurrentHealth / Math.Max(1, u.Combatant.Stats.MaxHealth) : 0f;
-            v.HpFill.fillAmount = Mathf.Clamp01(ratio);
-            v.HpFill.color = !u.IsPlayerSide ? new Color(0.8f, 0.3f, 0.25f)
-                : ratio > 0.5f ? new Color(0.4f, 0.75f, 0.35f) : ratio > 0.25f ? new Color(0.85f, 0.7f, 0.3f) : new Color(0.75f, 0.25f, 0.2f);
-            v.ReadyFill.fillAmount = alive ? u.AttackReadyRatio : 0f;
+            UpdateBars(v, alive);
 
             var leader = _session.Leader;
             bool targeted = alive && leader != null && leader.IsAlive && leader.Target == u;
@@ -294,6 +450,47 @@ namespace GN3.Battle
                 float hop = alive && u.IsMoving ? Mathf.Abs(Mathf.Sin(Time.time * 10f + v.HopPhase)) * 8f : 0f;
                 v.Body.anchoredPosition = new Vector2(0f, hop);
             }
+        }
+
+        private static readonly Color HpHigh = new Color(0.35f, 0.85f, 0.3f);
+        private static readonly Color HpMid = new Color(0.95f, 0.8f, 0.2f);
+        private static readonly Color HpLow = new Color(0.95f, 0.25f, 0.2f);
+        private static readonly Color EnemyHp = new Color(0.9f, 0.22f, 0.18f);
+        private const float TrailHoldSeconds = 0.4f;
+        private const float TrailDrainPerSecond = 0.8f;
+
+        /// <summary>체력 막대: 길이 = 비율, 아군은 초록 → 노랑 → 빨강, 적은 빨강. 깎인 부분은 밝은 막대로 잠깐 남았다 줄고,
+        /// 30% 아래면 깜빡여 눈에 띄게 한다.</summary>
+        private void UpdateBars(UnitView v, bool alive)
+        {
+            v.Bars.SetActive(alive);
+            if (!alive) return;
+
+            var c = v.Unit.Combatant;
+            float ratio = Mathf.Clamp01((float)c.CurrentHealth / Math.Max(1, c.Stats.MaxHealth));
+            SetLength(v.HpFill, ratio);
+
+            if (ratio >= v.TrailRatio) { v.TrailRatio = ratio; v.TrailHold = 0f; } // 회복은 바로
+            else if (v.TrailHold < TrailHoldSeconds) v.TrailHold += Time.deltaTime;
+            else v.TrailRatio = Mathf.Max(ratio, v.TrailRatio - TrailDrainPerSecond * Time.deltaTime);
+            SetLength(v.HpTrail, v.TrailRatio);
+            if (v.TrailRatio <= ratio) v.TrailHold = 0f;
+
+            Color color = !v.Unit.IsPlayerSide ? EnemyHp
+                : ratio > 0.5f ? Color.Lerp(HpMid, HpHigh, (ratio - 0.5f) * 2f)
+                : Color.Lerp(HpLow, HpMid, Mathf.Clamp01((ratio - 0.15f) / 0.35f));
+            if (ratio < 0.3f) color = Color.Lerp(color, Color.white, (Mathf.Sin(Time.unscaledTime * 10f) + 1f) * 0.2f);
+            v.HpFillImage.color = color;
+
+            if (v.HpText != null) v.HpText.text = $"{c.CurrentHealth}/{c.Stats.MaxHealth}";
+            SetLength(v.ReadyFill, v.Unit.AttackReadyRatio);
+        }
+
+        private static void SetLength(RectTransform fill, float ratio)
+        {
+            var max = fill.anchorMax;
+            max.x = Mathf.Clamp01(ratio);
+            fill.anchorMax = max;
         }
 
         private bool IsPickable(FieldUnit u)
@@ -344,6 +541,7 @@ namespace GN3.Battle
         {
             if (_resultShown) return;
             _resultShown = true;
+            SetPaused(false);
             _picking = false;
 
             var result = new BattleResult
@@ -355,11 +553,10 @@ namespace GN3.Battle
                 TeamB = _session.EnemyTeam,
             };
             var battle = new ExpeditionBattle.Battle { Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam };
-            string summary = ExpeditionBattle.Conclude(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
+            var report = ExpeditionBattle.ConcludeReport(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
 
             _skillButton.interactable = false;
-            bool victory = _session.Outcome == BattleOutcome.TeamAVictory;
-            BuildResultOverlay(victory, summary);
+            BuildResultOverlay(report);
         }
 
         // ---------- 연출 ----------
@@ -519,6 +716,7 @@ namespace GN3.Battle
             _unitLayer = CreateLayer("UnitLayer");
             _fxLayer = CreateLayer("FxLayer");
 
+            BuildPauseOverlay();
             BuildActionPanel(root);
         }
 
@@ -531,6 +729,26 @@ namespace GN3.Battle
             Stretch(rect);
             rect.pivot = Vector2.zero;
             return rect;
+        }
+
+        /// <summary>필드 위를 어둡게 덮는 '일시정지' 표시. 클릭은 막지 않는다(멈춘 채 명령 가능).</summary>
+        private void BuildPauseOverlay()
+        {
+            _pauseOverlay = CreateImage(_field, "PauseOverlay", new Color(0f, 0f, 0f, 0.35f));
+            var rect = (RectTransform)_pauseOverlay.transform;
+            Stretch(rect);
+            _pauseOverlay.GetComponent<Image>().raycastTarget = false;
+
+            var label = CreateText(_pauseOverlay.transform, "일시정지\n<size=18>Space: 계속 · 멈춘 동안에도 명령할 수 있습니다</size>", 40, TextAnchor.MiddleCenter, Color.white);
+            label.fontStyle = FontStyle.Bold;
+            label.supportRichText = true;
+            label.raycastTarget = false;
+            label.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+            var labelRect = label.rectTransform;
+            labelRect.anchorMin = labelRect.anchorMax = labelRect.pivot = new Vector2(0.5f, 1f);
+            labelRect.anchoredPosition = new Vector2(0f, -40f);
+            labelRect.sizeDelta = new Vector2(900f, 110f);
+            _pauseOverlay.SetActive(false);
         }
 
         private UnitView CreateUnitView(FieldUnit unit, ComposedCharacter appearance, int tier)
@@ -596,15 +814,44 @@ namespace GN3.Battle
             var name = CreateText(root, label, 14, TextAnchor.MiddleCenter, unit.IsLeader ? LeaderColor : unit.IsPlayerSide ? UITheme.BodyText : new Color(1f, 0.75f, 0.7f));
             name.raycastTarget = false;
             name.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
-            PlaceAbove(name.rectTransform, 150f, 150f, 20f);
+            PlaceAbove(name.rectTransform, 154f, 160f, 20f);
 
-            var hpBg = CreateImage(root, "HpBg", new Color(0.05f, 0.05f, 0.06f, 0.9f));
-            PlaceAbove((RectTransform)hpBg.transform, 132f, 80f, 9f);
-            var hpFill = CreateFill(hpBg.transform, new Color(0.4f, 0.75f, 0.35f));
+            // 체력 막대: 테두리(분대장은 금색) 안에 어두운 바탕 → 깎인 자국 → 체력, 위쪽에 얇은 광택. 보스는 더 넓게.
+            float barWidth = tier >= 2 ? 130f : 104f;
+            var bars = new GameObject("Bars", typeof(RectTransform));
+            bars.transform.SetParent(root, false);
+            PlaceAbove((RectTransform)bars.transform, 124f, barWidth, 22f);
 
-            var readyBg = CreateImage(root, "ReadyBg", new Color(0.05f, 0.05f, 0.06f, 0.9f));
-            PlaceAbove((RectTransform)readyBg.transform, 124f, 80f, 4f);
-            var readyFill = CreateFill(readyBg.transform, new Color(0.35f, 0.75f, 0.9f));
+            var frame = CreateImage(bars.transform, "HpFrame", unit.IsLeader ? LeaderColor : new Color(0f, 0f, 0f, 0.95f));
+            PlaceBar((RectTransform)frame.transform, 6f, 16f, 0f);
+            var hpBg = CreateImage(frame.transform, "HpBg", new Color(0.18f, 0.06f, 0.06f, 1f));
+            Inset((RectTransform)hpBg.transform, 2f);
+            var trail = CreateBarFill(hpBg.transform, new Color(1f, 0.92f, 0.6f, 0.9f));
+            var hpFill = CreateBarFill(hpBg.transform, HpHigh);
+            var gloss = CreateImage(hpFill.transform, "Gloss", new Color(1f, 1f, 1f, 0.28f));
+            var glossRect = (RectTransform)gloss.transform;
+            glossRect.anchorMin = new Vector2(0f, 0.55f);
+            glossRect.anchorMax = Vector2.one;
+            glossRect.offsetMin = glossRect.offsetMax = Vector2.zero;
+            gloss.GetComponent<Image>().raycastTarget = false;
+
+            Text hpText = null;
+            if (unit.IsPlayerSide)
+            {
+                hpText = CreateText(frame.transform, "", 11, TextAnchor.MiddleCenter, Color.white);
+                hpText.fontStyle = FontStyle.Bold;
+                hpText.raycastTarget = false;
+                hpText.horizontalOverflow = HorizontalWrapMode.Overflow;
+                hpText.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
+                Stretch(hpText.rectTransform);
+            }
+
+            // 공격 대기: 체력 막대 바로 아래 얇은 하늘색 줄
+            var readyBg = CreateImage(bars.transform, "ReadyBg", new Color(0f, 0f, 0f, 0.85f));
+            PlaceBar((RectTransform)readyBg.transform, 0f, 6f, 2f);
+            var readyInner = CreateImage(readyBg.transform, "ReadyInner", new Color(0.08f, 0.1f, 0.14f, 1f));
+            Inset((RectTransform)readyInner.transform, 1f);
+            var readyFill = CreateBarFill(readyInner.transform, new Color(0.4f, 0.8f, 1f));
 
             // 클릭 영역(그림 크기만큼, 투명)
             var clickGO = CreateImage(root, "Click", new Color(0f, 0f, 0f, 0f));
@@ -615,6 +862,13 @@ namespace GN3.Battle
             var clickImage = clickGO.GetComponent<Image>();
             clickImage.raycastTarget = true;
             clickGO.AddComponent<BattleClickTarget>().OnClick = e => OnUnitClicked(unit, e);
+            if (unit.IsPlayerSide)
+            {
+                var drag = clickGO.AddComponent<BattleDragTarget>();
+                drag.OnBegin = e => OnDragBegin(unit, e);
+                drag.OnMove = e => OnDragMove(unit, e);
+                drag.OnEnd = e => OnDragEnd(unit, e);
+            }
 
             var view = new UnitView
             {
@@ -624,8 +878,12 @@ namespace GN3.Battle
                 Group = rootGO.GetComponent<CanvasGroup>(),
                 Tintables = tintables,
                 BaseColors = tintables.Select(i => i.color).ToArray(),
-                HpFill = hpFill,
-                ReadyFill = readyFill,
+                Bars = bars,
+                HpFill = (RectTransform)hpFill.transform,
+                HpFillImage = hpFill,
+                HpTrail = (RectTransform)trail.transform,
+                HpText = hpText,
+                ReadyFill = (RectTransform)readyFill.transform,
                 TargetRing = targetRing,
                 ClickArea = clickImage,
                 Animator = animator,
@@ -653,18 +911,35 @@ namespace GN3.Battle
             if (img != null) img.raycastTarget = false;
         }
 
-        private Image CreateFill(Transform parent, Color color)
+        /// <summary>막대 묶음 안에서 가로로 꽉 찬 한 줄(아래에서 y, 높이 height, 좌우 여백 pad).</summary>
+        private static void PlaceBar(RectTransform rect, float y, float height, float pad)
+        {
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.offsetMin = new Vector2(pad, y);
+            rect.offsetMax = new Vector2(-pad, y + height);
+            rect.GetComponent<Image>().raycastTarget = false;
+        }
+
+        private static void Inset(RectTransform rect, float border)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(border, border);
+            rect.offsetMax = new Vector2(-border, -border);
+            rect.GetComponent<Image>().raycastTarget = false;
+        }
+
+        /// <summary>왼쪽부터 채워지는 막대. 길이는 anchorMax.x로 정한다(스프라이트 없는 Image는 Filled가 먹지 않아서).</summary>
+        private static Image CreateBarFill(Transform parent, Color color)
         {
             var go = CreateImage(parent, "Fill", color);
             var rect = (RectTransform)go.transform;
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
-            rect.offsetMin = new Vector2(1f, 1f);
-            rect.offsetMax = new Vector2(-1f, -1f);
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
             var img = go.GetComponent<Image>();
-            img.type = Image.Type.Filled;
-            img.fillMethod = Image.FillMethod.Horizontal;
-            img.fillOrigin = (int)Image.OriginHorizontal.Left;
             img.raycastTarget = false;
             return img;
         }
@@ -690,7 +965,12 @@ namespace GN3.Battle
             leaderRect.sizeDelta = new Vector2(420f, 30f);
 
             _skillButton = CreateActionButton(panel.transform, new Vector2(28f, -60f), out _skillButtonText);
-            _skillButton.onClick.AddListener(PressSkill);
+            _skillButton.onClick.AddListener(OnMainButton);
+
+            _resetButton = CreateActionButton(panel.transform, new Vector2(340f, -60f), out var resetLabel);
+            ((RectTransform)_resetButton.transform).sizeDelta = new Vector2(130f, 56f);
+            resetLabel.text = "기본 배치";
+            _resetButton.onClick.AddListener(ResetFormation);
 
             _hintLabel = CreateText(panel.transform, "", 15, TextAnchor.UpperLeft, UITheme.MutedText);
             var hintRect = _hintLabel.rectTransform;
@@ -738,41 +1018,260 @@ namespace GN3.Battle
             return go.GetComponent<Button>();
         }
 
-        private void BuildResultOverlay(bool victory, string summary)
+        // ---------- 결과(보상) 화면 ----------
+
+        private const float ResultWidth = 800f;
+        private const float ResultRowHeight = 58f;
+        private static readonly Color VictoryColor = new Color(1f, 0.82f, 0.35f);
+        private static readonly Color DefeatColor = new Color(0.92f, 0.4f, 0.35f);
+        private static readonly Color GainColor = new Color(0.55f, 0.9f, 0.5f);
+        private static readonly Color RepColor = new Color(0.6f, 0.8f, 1f);
+
+        /// <summary>
+        /// 결과 화면: 승리/패배 머리띠(퀘스트·전투 시간) → 보상 카드 두 장(골드는 0부터 올라가며 셈, 명성) →
+        /// 대원 줄(초상화·이름·체력 변화 막대·오른 능력치 또는 전사) → 귀환 안내와 '마을로 돌아가기'.
+        /// </summary>
+        private void BuildResultOverlay(ExpeditionBattle.Report report)
         {
-            var overlay = CreateImage(_canvas.transform, "ResultOverlay", new Color(0f, 0f, 0f, 0.6f));
+            bool victory = report.Victory;
+            Color accent = victory ? VictoryColor : DefeatColor;
+
+            var overlay = CreateImage(_canvas.transform, "ResultOverlay", new Color(0f, 0f, 0f, 0.72f));
             Stretch((RectTransform)overlay.transform);
             overlay.transform.SetAsLastSibling();
 
+            int rows = report.Members.Count;
+            float height = 150f + 124f + 34f + ResultRowHeight * rows + 124f;
             var panel = CreateImage(overlay.transform, "ResultPanel", Color.white);
-            var rect = (RectTransform)panel.transform;
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(620f, 420f);
+            var panelRect = (RectTransform)panel.transform;
+            panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0.5f, 0.5f);
+            panelRect.sizeDelta = new Vector2(ResultWidth, height);
             var panelImage = panel.GetComponent<Image>();
             panelImage.sprite = UITheme.Panel;
             panelImage.type = Image.Type.Sliced;
 
-            var title = CreateText(panel.transform, victory ? "승리!" : "패배...", 32, TextAnchor.MiddleCenter,
-                victory ? new Color(0.5f, 0.85f, 0.45f) : new Color(0.85f, 0.4f, 0.35f));
-            title.fontStyle = FontStyle.Bold;
-            var titleRect = title.rectTransform;
-            titleRect.anchorMin = titleRect.anchorMax = titleRect.pivot = new Vector2(0.5f, 1f);
-            titleRect.anchoredPosition = new Vector2(0f, -32f);
-            titleRect.sizeDelta = new Vector2(560f, 48f);
+            // 머리띠
+            var band = CreateImage(panel.transform, "Band", new Color(accent.r, accent.g, accent.b, 0.16f));
+            PlaceTop((RectTransform)band.transform, -18f, 116f, 18f);
+            var bandEdge = CreateImage(band.transform, "Edge", new Color(accent.r, accent.g, accent.b, 0.7f));
+            var edgeRect = (RectTransform)bandEdge.transform;
+            edgeRect.anchorMin = Vector2.zero;
+            edgeRect.anchorMax = new Vector2(1f, 0f);
+            edgeRect.pivot = new Vector2(0.5f, 0f);
+            edgeRect.offsetMin = Vector2.zero;
+            edgeRect.offsetMax = new Vector2(0f, 3f);
 
-            var body = CreateText(panel.transform, summary.Replace(" · ", "\n"), 17, TextAnchor.UpperCenter, UITheme.BodyText);
-            var bodyRect = body.rectTransform;
-            bodyRect.anchorMin = bodyRect.anchorMax = bodyRect.pivot = new Vector2(0.5f, 1f);
-            bodyRect.anchoredPosition = new Vector2(0f, -96f);
-            bodyRect.sizeDelta = new Vector2(560f, 230f);
+            var title = CreateText(band.transform, victory ? "승리!" : "패배...", 52, TextAnchor.MiddleCenter, accent);
+            title.fontStyle = FontStyle.Bold;
+            title.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.85f);
+            PlaceTop(title.rectTransform, -6f, 66f, 0f);
+
+            int secs = Mathf.FloorToInt(_session.Elapsed);
+            var subtitle = CreateText(band.transform, $"{QuestDifficulty.RichTitle(_expedition.Quest)}    ·    전투 시간 {secs / 60}:{secs % 60:00}",
+                18, TextAnchor.MiddleCenter, UITheme.BodyText);
+            subtitle.supportRichText = true;
+            PlaceTop(subtitle.rectTransform, -74f, 30f, 0f);
+
+            // 보상 카드
+            const float cardY = -152f;
+            var goldValue = CreateRewardCard(panel.transform, -182f, cardY, victory ? "보상" : "보상 없음",
+                victory ? "+0 G" : "0 G", victory ? VictoryColor : UITheme.MutedText, UIIcons.Load("UIIcons/gold"), null);
+            CreateRewardCard(panel.transform, 182f, cardY, "명성",
+                report.Reputation >= 0 ? $"+{report.Reputation}" : report.Reputation.ToString(),
+                report.Reputation >= 0 ? RepColor : DefeatColor, null, "★");
+
+            // 대원
+            float y = cardY - 124f;
+            var section = CreateText(panel.transform, "대원", 16, TextAnchor.MiddleLeft, UITheme.MutedText);
+            section.fontStyle = FontStyle.Bold;
+            PlaceTop(section.rectTransform, y, 26f, 40f);
+            y -= 34f;
+            for (int i = 0; i < rows; i++)
+            {
+                CreateResultRow(panel.transform, report.Members[i], y, i % 2 == 0);
+                y -= ResultRowHeight;
+            }
+
+            // 귀환 안내 + 버튼
+            int survivors = report.Members.Count(m => !m.Fallen);
+            string footer = survivors > 0
+                ? $"생존 {survivors}명 귀환길에 오릅니다 · 마을까지 {GN3.World.GameClock.FormatDuration(report.ReturnHours)}"
+                : "전멸 — 돌아올 대원이 없습니다";
+            var footerText = CreateText(panel.transform, footer, 16, TextAnchor.MiddleCenter, survivors > 0 ? UITheme.BodyText : DefeatColor);
+            var footerRect = footerText.rectTransform;
+            footerRect.anchorMin = new Vector2(0f, 0f);
+            footerRect.anchorMax = new Vector2(1f, 0f);
+            footerRect.pivot = new Vector2(0.5f, 0f);
+            footerRect.offsetMin = new Vector2(30f, 90f);
+            footerRect.offsetMax = new Vector2(-30f, 116f);
 
             var backButton = CreateActionButton(panel.transform, Vector2.zero, out var backLabel);
-            backLabel.text = "돌아가기";
+            backLabel.text = "마을로 돌아가기";
+            backLabel.fontStyle = FontStyle.Bold;
             var backRect = (RectTransform)backButton.transform;
             backRect.anchorMin = backRect.anchorMax = backRect.pivot = new Vector2(0.5f, 0f);
-            backRect.anchoredPosition = new Vector2(0f, 28f);
-            backRect.sizeDelta = new Vector2(220f, 52f);
+            backRect.anchoredPosition = new Vector2(0f, 24f);
+            backRect.sizeDelta = new Vector2(280f, 56f);
             backButton.onClick.AddListener(() => SceneManager.LoadScene("MainScene"));
+
+            StartCoroutine(PopIn(panelRect));
+            if (victory && report.Gold > 0) StartCoroutine(CountUp(goldValue, report.Gold));
+        }
+
+        /// <summary>부모 위쪽에 가로로 꽉 찬 줄(위에서 y, 높이 height, 좌우 여백 pad).</summary>
+        private static void PlaceTop(RectTransform rect, float y, float height, float pad)
+        {
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.offsetMin = new Vector2(pad, y - height);
+            rect.offsetMax = new Vector2(-pad, y);
+        }
+
+        /// <summary>보상 카드 한 장(아이콘 또는 큰 기호 + 작은 설명 + 큰 값). 값 글자를 돌려준다(셈 연출용).</summary>
+        private Text CreateRewardCard(Transform parent, float x, float y, string caption, string value, Color valueColor, Sprite icon, string glyph)
+        {
+            var card = CreateImage(parent, "RewardCard", Color.white);
+            var rect = (RectTransform)card.transform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(x, y);
+            rect.sizeDelta = new Vector2(340f, 104f);
+            var image = card.GetComponent<Image>();
+            image.sprite = UITheme.Inset;
+            image.type = Image.Type.Sliced;
+
+            RectTransform iconRect;
+            if (icon != null)
+            {
+                var iconGO = CreateImage(card.transform, "Icon", Color.white);
+                var iconImage = iconGO.GetComponent<Image>();
+                iconImage.sprite = icon;
+                iconImage.preserveAspect = true;
+                iconImage.raycastTarget = false;
+                iconRect = (RectTransform)iconGO.transform;
+            }
+            else
+            {
+                var glyphText = CreateText(card.transform, glyph ?? "", 44, TextAnchor.MiddleCenter, valueColor);
+                glyphText.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.6f);
+                iconRect = glyphText.rectTransform;
+            }
+            iconRect.anchorMin = iconRect.anchorMax = new Vector2(0f, 0.5f);
+            iconRect.pivot = new Vector2(0f, 0.5f);
+            iconRect.anchoredPosition = new Vector2(24f, 0f);
+            iconRect.sizeDelta = new Vector2(56f, 56f);
+
+            var captionText = CreateText(card.transform, caption, 15, TextAnchor.UpperLeft, UITheme.MutedText);
+            var captionRect = captionText.rectTransform;
+            captionRect.anchorMin = captionRect.anchorMax = new Vector2(0f, 1f);
+            captionRect.pivot = new Vector2(0f, 1f);
+            captionRect.anchoredPosition = new Vector2(100f, -16f);
+            captionRect.sizeDelta = new Vector2(220f, 22f);
+
+            var valueText = CreateText(card.transform, value, 36, TextAnchor.UpperLeft, valueColor);
+            valueText.fontStyle = FontStyle.Bold;
+            valueText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            valueText.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.7f);
+            var valueRect = valueText.rectTransform;
+            valueRect.anchorMin = valueRect.anchorMax = new Vector2(0f, 1f);
+            valueRect.pivot = new Vector2(0f, 1f);
+            valueRect.anchoredPosition = new Vector2(100f, -40f);
+            valueRect.sizeDelta = new Vector2(220f, 46f);
+            return valueText;
+        }
+
+        /// <summary>대원 한 줄: 초상화 · 이름(★ 분대장) · 체력 막대(이번 전투에서 잃은 만큼 옅은 빨강) · 성장 또는 전사.</summary>
+        private void CreateResultRow(Transform parent, ExpeditionBattle.MemberReport m, float y, bool shaded)
+        {
+            var row = CreateImage(parent, m.Merc.Name, new Color(1f, 1f, 1f, shaded ? 0.05f : 0f));
+            PlaceTop((RectTransform)row.transform, y, ResultRowHeight - 4f, 30f);
+            row.GetComponent<Image>().raycastTarget = false;
+
+            var portrait = CharacterPortraitUI.Create(row.transform, m.Merc.Appearance, 44);
+            var pr = (RectTransform)portrait.transform;
+            pr.anchorMin = pr.anchorMax = new Vector2(0f, 0.5f);
+            pr.pivot = new Vector2(0f, 0.5f);
+            pr.anchoredPosition = new Vector2(8f, 0f);
+            pr.sizeDelta = new Vector2(44f, 44f);
+            if (m.Fallen)
+                foreach (var img in portrait.GetComponentsInChildren<Image>()) img.color = new Color(0.45f, 0.45f, 0.45f, img.color.a);
+
+            bool leader = m.Merc == _leaderMerc;
+            var name = CreateText(row.transform, leader ? $"★ {m.Merc.Name}" : m.Merc.Name, 18, TextAnchor.MiddleLeft,
+                m.Fallen ? new Color(0.6f, 0.55f, 0.55f) : leader ? LeaderColor : UITheme.BodyText);
+            name.fontStyle = FontStyle.Bold;
+            name.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var nameRect = name.rectTransform;
+            nameRect.anchorMin = nameRect.anchorMax = new Vector2(0f, 0.5f);
+            nameRect.pivot = new Vector2(0f, 0.5f);
+            nameRect.anchoredPosition = new Vector2(64f, 0f);
+            nameRect.sizeDelta = new Vector2(160f, 30f);
+
+            // 체력 막대: 남은 체력(색) + 이번 전투에서 잃은 부분(옅은 빨강)
+            float max = Math.Max(1, m.MaxHealth);
+            float before = Mathf.Clamp01(m.HealthBefore / max), after = Mathf.Clamp01(m.HealthAfter / max);
+            var frame = CreateImage(row.transform, "HpFrame", new Color(0f, 0f, 0f, 0.95f));
+            var frameRect = (RectTransform)frame.transform;
+            frameRect.anchorMin = frameRect.anchorMax = new Vector2(0f, 0.5f);
+            frameRect.pivot = new Vector2(0f, 0.5f);
+            frameRect.anchoredPosition = new Vector2(236f, 8f);
+            frameRect.sizeDelta = new Vector2(180f, 14f);
+            var bg = CreateImage(frame.transform, "Bg", new Color(0.18f, 0.06f, 0.06f, 1f));
+            Inset((RectTransform)bg.transform, 2f);
+            var lost = CreateBarFill(bg.transform, new Color(1f, 0.45f, 0.4f, 0.55f));
+            SetLength((RectTransform)lost.transform, before);
+            var hp = CreateBarFill(bg.transform, after > 0.5f ? HpHigh : after > 0.25f ? HpMid : HpLow);
+            SetLength((RectTransform)hp.transform, after);
+
+            string hpLine = m.Fallen ? $"{m.HealthBefore} → 0"
+                : m.HealthAfter < m.HealthBefore ? $"{m.HealthBefore} → {m.HealthAfter} / {m.MaxHealth}"
+                : $"{m.HealthAfter} / {m.MaxHealth}";
+            var hpText = CreateText(row.transform, hpLine, 13, TextAnchor.MiddleLeft, UITheme.MutedText);
+            var hpRect = hpText.rectTransform;
+            hpRect.anchorMin = hpRect.anchorMax = new Vector2(0f, 0.5f);
+            hpRect.pivot = new Vector2(0f, 0.5f);
+            hpRect.anchoredPosition = new Vector2(236f, -12f);
+            hpRect.sizeDelta = new Vector2(180f, 20f);
+
+            string result = m.Fallen ? "전사"
+                : m.Gains.Count > 0 ? "▲ " + string.Join(", ", m.Gains)
+                : "성장 없음";
+            var resultText = CreateText(row.transform, result, m.Fallen ? 20 : 16, TextAnchor.MiddleLeft,
+                m.Fallen ? DefeatColor : m.Gains.Count > 0 ? GainColor : UITheme.MutedText);
+            if (m.Fallen || m.Gains.Count > 0) resultText.fontStyle = FontStyle.Bold;
+            var resultRect = resultText.rectTransform;
+            resultRect.anchorMin = new Vector2(0f, 0f);
+            resultRect.anchorMax = new Vector2(1f, 1f);
+            resultRect.offsetMin = new Vector2(440f, 0f);
+            resultRect.offsetMax = new Vector2(-8f, 0f);
+        }
+
+        /// <summary>결과 창이 살짝 커지며 나타난다.</summary>
+        private IEnumerator PopIn(RectTransform panel)
+        {
+            const float duration = 0.25f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                float k = Mathf.SmoothStep(0f, 1f, t / duration);
+                panel.localScale = Vector3.one * Mathf.Lerp(0.85f, 1f, k);
+                yield return null;
+            }
+            panel.localScale = Vector3.one;
+        }
+
+        /// <summary>보상 골드를 0부터 올라가며 센다.</summary>
+        private IEnumerator CountUp(Text label, int target)
+        {
+            yield return new WaitForSecondsRealtime(0.3f);
+            const float duration = 0.9f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                float k = 1f - Mathf.Pow(1f - t / duration, 3f);
+                label.text = $"+{Mathf.RoundToInt(target * k)} G";
+                yield return null;
+            }
+            label.text = $"+{target} G";
         }
 
         private static GameObject CreateImage(Transform parent, string name, Color color)

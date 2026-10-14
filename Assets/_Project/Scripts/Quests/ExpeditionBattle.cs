@@ -39,8 +39,33 @@ namespace GN3.Quests
         /// 우편함에 퀘스트 결과 편지(중요 → 게임을 멈추고 알림창)를 남기고 도착 편지를 처리 완료로 바꾼다.
         /// alertShown: 이미 결과 화면을 보여 준 곳(직접 진행 전투 씬·파티 패널 로그 재생)은 true — 알림창을 다시 띄우지 않는다.
         /// </summary>
-        public static string Conclude(Expedition expedition, Battle battle, bool alertShown = false)
+        public static string Conclude(Expedition expedition, Battle battle, bool alertShown = false) =>
+            ConcludeReport(expedition, battle, alertShown).Summary;
+
+        /// <summary>결과 화면용 항목별 보고(Conclude와 같은 처리).</summary>
+        public class Report
         {
+            public bool Victory;
+            public int Gold;          // 받은 보상(실패면 0)
+            public int Reputation;    // 명성 변화(실패면 음수)
+            public float ReturnHours; // 귀환까지(생존자가 없으면 0)
+            public string Summary;
+            public List<MemberReport> Members = new List<MemberReport>();
+        }
+
+        public class MemberReport
+        {
+            public Mercenary Merc;
+            public int HealthBefore;
+            public int HealthAfter;
+            public int MaxHealth;
+            public bool Fallen;
+            public List<string> Gains = new List<string>(); // "공격 +3" 등
+        }
+
+        public static Report ConcludeReport(Expedition expedition, Battle battle, bool alertShown = false)
+        {
+            var report = new Report { Victory = battle.Victory };
             var quest = expedition.Quest;
             var fallen = new List<string>();
             var fallenMercs = new List<Mercenary>();
@@ -50,6 +75,14 @@ namespace GN3.Quests
                 var merc = battle.Fighters[i];
                 int before = merc.CurrentHealth;
                 merc.SetHealth(battle.Combatants[i].CurrentHealth);
+                report.Members.Add(new MemberReport
+                {
+                    Merc = merc,
+                    HealthBefore = before,
+                    HealthAfter = merc.CurrentHealth,
+                    MaxHealth = battle.Combatants[i].Stats.MaxHealth,
+                    Fallen = !merc.IsAlive,
+                });
                 if (!merc.IsAlive) damage.Add($"{merc.Name} 전사");
                 else if (merc.CurrentHealth < before) damage.Add($"{merc.Name} {before} → {merc.CurrentHealth}");
                 if (!merc.IsAlive)
@@ -69,16 +102,28 @@ namespace GN3.Quests
                 int rep = Guild.VictoryReputation(questGrade);
                 summary = $"{quest.Title} — 임무 완료! 보상 +{reward}G · 명성 +{rep}";
                 Guild.Add(rep);
+                report.Gold = reward;
+                report.Reputation = rep;
                 QuestClearHistory.RecordClear(quest.Region, quest.Tier); // 이 지역·계층은 다음 게시판에서 덜 나오고, 안 깬 계층이 더 자주 나온다
             }
             else
             {
                 summary = $"{quest.Title} — 임무 실패... 명성 -{Guild.FailPenalty}";
                 Guild.Add(-Guild.FailPenalty);
+                report.Reputation = -Guild.FailPenalty;
             }
 
             // 살아남은 파견원 성장: 승리 1 + 0.5×퀘스트 등급, 실패는 절반(× 나이 배율, GrowthTuning.BattleGrowth).
-            var levelUps = GrantGrowth(expedition.Members.Where(m => m.IsAlive), GrowthTuning.BattleGrowth((int)questGrade, battle.Victory));
+            var levelUps = new List<string>();
+            float growth = GrowthTuning.BattleGrowth((int)questGrade, battle.Victory);
+            foreach (var merc in expedition.Members.Where(m => m.IsAlive))
+            {
+                var gains = merc.AddGrowth(growth);
+                if (gains.Count == 0) continue;
+                levelUps.Add($"{merc.Name} {string.Join(", ", gains)}");
+                var member = report.Members.FirstOrDefault(r => r.Merc == merc);
+                if (member != null) member.Gains.AddRange(gains);
+            }
             var survivorsList = expedition.Members.Where(m => m.IsAlive).ToList();
             MercenaryCondition.AfterBattle(survivorsList, battle.Victory, fallenMercs); // 피로·사기(친밀도 보정 포함)
             // 함께 살아 돌아온 사람끼리 친밀도가 바뀐다(승리면 오르고, 실패면 성격이 안 맞는 사이는 내려간다).
@@ -110,10 +155,11 @@ namespace GN3.Quests
             // 살아남은 사람이 있으면 귀환길에 오른다(며칠 뒤 마을 도착). 전멸이면 바로 끝낸다.
             if (survivorsList.Count > 0) ExpeditionLog.Instance.BeginReturn(expedition);
             else ExpeditionLog.Instance.Complete(expedition);
-            return summary;
+            report.ReturnHours = survivorsList.Count > 0 ? expedition.ReturnHoursFor : 0f;
+            report.Summary = summary;
+            return report;
         }
 
-        /// <summary>경험치를 나눠 주고 "아린 레벨 업! Lv.3" 문구 목록을 돌려준다.</summary>
         /// <summary>살아남은 사람에게 성장량(나이 배율 전)을 준다. 능력치가 오른 사람마다 "카이런 공격 +3, 체력 +6" 한 줄.</summary>
         public static List<string> GrantGrowth(IEnumerable<Mercenary> members, float growth)
         {
