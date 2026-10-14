@@ -102,8 +102,8 @@ namespace GN3.UI
             var old = merc.Weapon;
             GuildStorage.Swap(weapon, old); // 꺼낸 자리에 들고 있던 무기를 넣는다
             merc.Equip(weapon);
-            string back = old != null ? $", {old.Name}은(는) 창고로" : "";
-            ToastLog.Show($"{merc.Name}이(가) {weapon.Name} 장착 ({weapon.DescribeFor(merc.Class.Kind)}){back}");
+            string back = old != null ? $", {Josa.EunNeun(old.Name)} 창고로" : "";
+            ToastLog.Show($"{Josa.IGa(merc.Name)} {weapon.Name} 장착 ({weapon.DescribeFor(merc.Class.Kind)}){back}");
             ShowStorage();
         }
 
@@ -140,7 +140,7 @@ namespace GN3.UI
                 return;
             }
             merc.Equip(null);
-            ToastLog.Show($"{merc.Name}의 {weapon.Name}을(를) 창고에 맡겼습니다");
+            ToastLog.Show($"{merc.Name}의 {Josa.EulReul(weapon.Name)} 창고에 맡겼습니다");
             ShowStorage();
         }
 
@@ -185,7 +185,7 @@ namespace GN3.UI
         {
             if (!item.CanHeal(merc))
             {
-                ToastLog.Show($"{merc.Name}은(는) 다친 곳이 없습니다.");
+                ToastLog.Show($"{Josa.EunNeun(merc.Name)} 다친 곳이 없습니다.");
                 return;
             }
             if (!GuildStorage.Remove(item)) return;

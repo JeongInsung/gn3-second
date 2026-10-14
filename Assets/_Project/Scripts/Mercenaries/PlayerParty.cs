@@ -48,5 +48,9 @@ namespace GN3.Mercenaries
                 OnChanged?.Invoke();
             return removed;
         }
+
+        // ExpeditionLog와 마찬가지로 Domain Reload가 꺼져 있어도 Play 진입마다 파티(와 이전 Play 창들의 구독)를 비운다.
+        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlaySession() => _instance = null;
     }
 }

@@ -98,7 +98,7 @@ namespace GN3.UI
             Stretch(label.GetComponent<RectTransform>());
             var text = label.GetComponent<Text>();
             text.text = "건강";
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 17;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
@@ -157,8 +157,8 @@ namespace GN3.UI
         {
             if (ExpeditionLog.Instance.IsOnExpedition(merc)) return "파견 중";
             if (TrainingHall.IsTraining(merc)) return "훈련 중";
-            if (RestVenues.IsResting(merc)) return $"{RestVenues.Find(merc).Name} 중";
-            if (Hospital.IsAdmitted(merc)) return $"입원 중 (약 {Hospital.RemainingHours(merc):0}시간)";
+            if (RestVenues.IsResting(merc)) return RestVenues.Find(merc).Name; // 위치 칸(105)이 좁아 "중"은 뺀다
+            if (Hospital.IsAdmitted(merc)) return $"입원 {Hospital.RemainingHours(merc):0}시간";
             return "마을";
         }
 
@@ -326,7 +326,7 @@ namespace GN3.UI
 
         private void Build()
         {
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
             _white = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
             _white.name = "HealthWhite"; // 자기 그림으로 보여 테마가 색을 바꾸지 않는다
 

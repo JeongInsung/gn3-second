@@ -35,7 +35,7 @@ namespace GN3.UI
         }
 
         /// <summary>
-        /// 가운데 건물 패널(처음엔 숨김): 화면 전체 어두운 배경(누르면 닫힘) + 520x420 판에 제목·설명·상품 목록 칸·닫기 버튼.
+        /// 가운데 건물 패널(처음엔 숨김): 화면 전체 어두운 배경(누르면 닫힘) + 640x580 판에 제목·설명·상품 목록 칸·닫기 버튼.
         /// 목록 칸은 기본으로 "상품 준비 중"이고, 상점(HospitalShop 등)이 Opened 때 채운다. 상인 그림은 쓰지 않는다.
         /// </summary>
         public static BuildingPanel Create(Transform parent)
@@ -53,7 +53,7 @@ namespace GN3.UI
             box.transform.SetParent(root.transform, false);
             box.GetComponent<Button>().transition = Selectable.Transition.None;
             var boxRect = box.GetComponent<RectTransform>();
-            boxRect.sizeDelta = new Vector2(520f, 420f);
+            boxRect.sizeDelta = new Vector2(640f, 580f); // 목록이 한눈에 더 보이게(예전 520x420은 스크롤이 많았다)
             boxRect.anchoredPosition = Vector2.zero; // 화면 가운데(상인 그림은 빼서 Portrait는 null)
             DraggablePanel.Attach(boxRect); // 판을 잡고 끌어 옮길 수 있다(뒤 어두운 막은 고정)
             box.GetComponent<Image>().color = new Color(0.13f, 0.12f, 0.15f, 0.96f);
@@ -63,12 +63,12 @@ namespace GN3.UI
 
             panel.Description = CreateText(box.transform, "", 18, TextAnchor.UpperLeft);
             panel.Description.color = new Color(0.85f, 0.85f, 0.85f);
-            Place(panel.Description.rectTransform, new Vector2(24f, -66f), new Vector2(472f, 48f));
+            Place(panel.Description.rectTransform, new Vector2(24f, -66f), new Vector2(592f, 48f));
 
             // 상품 목록 칸(빈 스크롤 영역). 나중에 ItemListContent 아래에 상품 줄을 추가하면 된다.
             var list = new GameObject("ItemList", typeof(RectTransform), typeof(Image), typeof(ScrollRect), typeof(RectMask2D));
             list.transform.SetParent(box.transform, false);
-            Place(list.GetComponent<RectTransform>(), new Vector2(24f, -124f), new Vector2(472f, 272f));
+            Place(list.GetComponent<RectTransform>(), new Vector2(24f, -124f), new Vector2(592f, 428f));
             list.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
             var content = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
             content.transform.SetParent(list.transform, false);
@@ -127,7 +127,7 @@ namespace GN3.UI
 
             var text = go.GetComponent<Text>();
             text.text = content;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = fontSize;
             text.alignment = alignment;
             text.color = Color.white;

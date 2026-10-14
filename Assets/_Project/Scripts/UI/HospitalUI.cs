@@ -66,8 +66,8 @@ namespace GN3.UI
             ShopListUI.BeginList(_panel);
 
             var patients = Hospital.Patients;
-            CreateHeaderRow($"입원 중 ({patients.Count}/{Hospital.Capacity}) · 1시간마다 {Hospital.ProgressPerHour * 100f:0}% 회복 · 치료비 시간당 {Hospital.FeePerHour}G");
-            if (patients.Count == 0) ShopListUI.CreateEmptyRow(_panel, "입원한 용병이 없습니다. 다치거나 병든 용병은 스스로 입원합니다.");
+            CreateHeaderRow($"입원 중 {patients.Count}/{Hospital.Capacity} · 시간당 {Hospital.ProgressPerHour * 100f:0}% 회복 · 치료비 {Hospital.FeePerHour}G/시간");
+            if (patients.Count == 0) ShopListUI.CreateEmptyRow(_panel, "입원한 용병이 없습니다.");
             foreach (var merc in patients) CreateMercRow(merc, true);
 
             var waiting = Hospital.Waiting;

@@ -73,7 +73,7 @@ namespace GN3.Mercenaries
             if (merc.Age < GrowthTuning.DeclineStartAge || merc.Age >= GrowthTuning.RetireAge) return;
             var losses = merc.Decline(GrowthTuning.DeclinePerYear);
             if (losses.Count == 0) return;
-            string line = $"{merc.Name}이(가) 나이가 들어 몸이 예전 같지 않다 ({string.Join(", ", losses)})";
+            string line = $"{Josa.IGa(merc.Name)} 나이가 들어 몸이 예전 같지 않다 ({string.Join(", ", losses)})";
             ToastLog.Show(line);
             DailyLog.Add(line);
         }
@@ -81,7 +81,7 @@ namespace GN3.Mercenaries
         private static void Retire(Mercenary merc)
         {
             PlayerParty.Instance.Remove(merc);
-            string line = $"{merc.Name}이(가) {merc.Age}세가 되어 용병 일을 그만두고 은퇴했다.";
+            string line = $"{Josa.IGa(merc.Name)} {merc.Age}세가 되어 용병 일을 그만두고 은퇴했다.";
             ToastLog.Show(line, false);
             DailyLog.Add(line);
             Mailbox.Post(MailKind.Alert, "용병 은퇴", line, important: true);

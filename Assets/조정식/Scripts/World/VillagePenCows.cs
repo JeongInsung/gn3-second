@@ -200,7 +200,8 @@ namespace GN3.World
 
         private void Update()
         {
-            if (_frames == null) return;
+            // Play 중 스크립트를 다시 불러오면 직렬화되지 않는 난수가 비어 있다 → 그 자리에 멈춰 있는다(새 Play면 정상).
+            if (_frames == null || _pen == null || _rng == null) return;
             if (!_walking)
             {
                 _idleTimer -= Time.deltaTime;

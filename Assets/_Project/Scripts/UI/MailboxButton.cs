@@ -75,7 +75,7 @@ namespace GN3.UI
             rect.anchoredPosition = new Vector2(4f, 4f);
             rect.sizeDelta = new Vector2(BadgeSize, BadgeSize);
             var image = badge.GetComponent<Image>();
-            image.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd"); // 동그라미(자기 그림이라 테마가 안 바꾼다)
+            image.sprite = CircleSprite(); // 동그라미(자기 그림이라 테마가 안 바꾼다)
             image.color = UnreadColor;
             image.raycastTarget = false;
 
@@ -86,13 +86,41 @@ namespace GN3.UI
             return badge;
         }
 
+        private static Sprite _circle;
+
+        // Domain Reload가 꺼져 있어도 Play마다 비운다(Sprite.Create로 만든 그림은 Play가 끝나면 파괴된다).
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlaySession() => _circle = null;
+
+        /// <summary>
+        /// 배지용 흰 동그라미(가장자리 1px 부드럽게). 예전엔 내장 "UI/Skin/Knob.psd"를 썼는데 에디터에서만 있어 Play마다 에러가 났다.
+        /// </summary>
+        private static Sprite CircleSprite()
+        {
+            if (_circle != null) return _circle;
+            const int size = 64;
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[size * size];
+            float radius = size * 0.5f, center = radius - 0.5f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float distance = Mathf.Sqrt((x - center) * (x - center) + (y - center) * (y - center));
+                    byte alpha = (byte)(Mathf.Clamp01(radius - distance) * 255f);
+                    pixels[y * size + x] = new Color32(255, 255, 255, alpha);
+                }
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            return _circle = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f));
+        }
+
         private static Text CreateText(Transform parent, string content, int size)
         {
             var go = new GameObject("Text", typeof(RectTransform), typeof(Text));
             go.transform.SetParent(parent, false);
             var text = go.GetComponent<Text>();
             text.text = content;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = size;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;

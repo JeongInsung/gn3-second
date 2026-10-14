@@ -37,11 +37,13 @@ namespace GN3.UI
         {
             // ScrollListWrapper가 listContainer를 새 계층으로 옮기기 전에, 원래 부모(PartyPanel)를 기억해둔다.
             _panelTransform = listContainer.parent;
+            UITheme.StyleWindowTitle(_panelTransform.Find("Title")?.GetComponent<Text>()); // 시장·퀘스트·파티 제목 줄을 같게
 
             // PartyPanel(640x780) 안에서 제목 아래 ~ 결과 텍스트 위까지의 고정 영역
             ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 170f), new Vector2(-20f, -105f));
 
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
+            if (resultText != null && resultText.text.StartsWith("전투 결과가")) resultText.text = ""; // 빈 안내 문구는 지운다(결과가 생기면 채워진다)
 
             PlayerParty.Instance.OnChanged += RefreshList;
             ExpeditionLog.Instance.OnChanged += RefreshList;
@@ -286,7 +288,7 @@ namespace GN3.UI
             var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세", 15, TextAnchor.MiddleLeft);
             classText.color = textColor;
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            classText.gameObject.AddComponent<LayoutElement>().minWidth = 100;
+            classText.gameObject.AddComponent<LayoutElement>().minWidth = 120; // "마법사  39세"와 전투력 칸이 붙지 않게
 
             // 위치(항상): 마을 / 훈련소 / 병원 / 쉼터 이름 / 파견: 퀘스트 / 귀환 중 — 마을 캐릭터 이동은 알림 대신 여기서 본다
             // (onExpedition은 훈련·입원·쉼터까지 '마을에 없음'으로 묶은 값이라 실제 파견은 따로 본다)

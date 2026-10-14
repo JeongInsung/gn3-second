@@ -110,7 +110,7 @@ namespace GN3.UI
             textGO.transform.SetParent(line.transform, false);
             var text = textGO.GetComponent<Text>();
             text.text = message;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 16;
             text.color = UITheme.BodyText;
             text.horizontalOverflow = HorizontalWrapMode.Wrap;

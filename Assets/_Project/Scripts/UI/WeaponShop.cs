@@ -87,22 +87,22 @@ namespace GN3.UI
             }
             if (!Wallet.TrySpend(weapon.Price))
             {
-                ToastLog.Show($"골드가 부족합니다 (필요 {weapon.Price}G, 보유 {Wallet.Gold}G)");
+                ToastLog.Show($"골드가 부족합니다 (필요 {weapon.Price}G, 보유 {Wallet.Gold}G)", false);
                 return;
             }
             GuildStorage.TryAdd(weapon);
-            ToastLog.Show($"{weapon.Name}을(를) 창고에 보관 -{weapon.Price}G");
+            ToastLog.Show($"{Josa.EulReul(weapon.Name)} 창고에 보관 -{weapon.Price}G");
         }
 
         private void Equip(WeaponItem weapon, Mercenary merc)
         {
             if (!Wallet.TrySpend(weapon.Price))
             {
-                ToastLog.Show($"골드가 부족합니다 (필요 {weapon.Price}G, 보유 {Wallet.Gold}G)");
+                ToastLog.Show($"골드가 부족합니다 (필요 {weapon.Price}G, 보유 {Wallet.Gold}G)", false);
                 return;
             }
             merc.Equip(weapon);
-            ToastLog.Show($"{merc.Name}이(가) {weapon.Name} 장착 ({weapon.DescribeFor(merc.Class.Kind)}) -{weapon.Price}G");
+            ToastLog.Show($"{Josa.IGa(merc.Name)} {weapon.Name} 장착 ({weapon.DescribeFor(merc.Class.Kind)}) -{weapon.Price}G");
             ShowWeapons();
         }
     }

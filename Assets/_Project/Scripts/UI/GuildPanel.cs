@@ -14,8 +14,11 @@ namespace GN3.UI
     /// </summary>
     public class GuildPanel : MonoBehaviour
     {
-        private const float Width = 560f;
-        private const float Height = 600f;
+        private const float Width = 680f;
+        private const float Height = 600f;   // 최소 높이. 본문이 길면 FitToBody가 늘린다
+        private const float BodyTop = 144f;   // 판 위에서 본문 시작까지
+        private const float BottomArea = 72f; // 본문 아래 ~ 판 아래(창고 버튼 자리)
+        private const float MaxHeight = 1000f;
         private const string Gold = "#f0c060";
         private const string Dim = "#7a7064";
         private const string Red = "#e05a4a";
@@ -142,7 +145,7 @@ namespace GN3.UI
             for (int i = 0; i < ranks.Length; i++)
             {
                 var r = ranks[i];
-                string line = $"  {i + 1}단계  {r.Name}   명성 {r.Required}   정원 {r.PartySize}명   퀘스트 {r.MaxQuestGrade} · 용병 {r.MaxMercGrade}";
+                string line = $"  {i + 1}단계 {r.Name} · 명성 {r.Required} · 정원 {r.PartySize}명 · 퀘스트 {r.MaxQuestGrade} · 용병 {r.MaxMercGrade}";
                 if (i == rank) line = $"<color={Gold}>{line}  ◀ 현재</color>";
                 else if (i > rank) line = $"<color={Dim}>{line}</color>";
                 sb.Append(line).Append('\n');
@@ -150,16 +153,27 @@ namespace GN3.UI
 
             sb.Append($"\n<color={Dim}>임무 성공 시 명성 +10×(퀘스트 등급+1), 실패 시 −{Guild.FailPenalty}</color>");
             _body.text = sb.ToString();
+            FitToBody();
 
             _storageButton.SetActive(_openStorage != null);
             _storageLabel.text = $"창고 ({GuildStorage.Count} / {GuildStorage.Capacity}칸)";
+        }
+
+        /// <summary>판 높이를 본문 길이에 맞춘다(Height ~ MaxHeight). 본문이 창고 버튼 밑으로 넘치거나 판 밖으로 나가지 않게.</summary>
+        private void FitToBody()
+        {
+            var panelRect = (RectTransform)_panel.transform;
+            float bodyHeight = _body.preferredHeight + 6f;
+            float height = Mathf.Clamp(BodyTop + bodyHeight + BottomArea, Height, MaxHeight);
+            panelRect.sizeDelta = new Vector2(Width, height);
+            _body.rectTransform.sizeDelta = new Vector2(_body.rectTransform.sizeDelta.x, height - BodyTop - BottomArea);
         }
 
         // ---------- 화면 ----------
 
         private void Build()
         {
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
 
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);
@@ -193,8 +207,8 @@ namespace GN3.UI
             _repFill.color = new Color(0.94f, 0.72f, 0.3f);
 
             _repText = CreateText("Rep", 14, FontStyle.Normal, new Vector2(20f, -108f), new Vector2(Width - 40f, 20f));
-            _body = CreateText("Body", 15, FontStyle.Normal, new Vector2(20f, -144f), new Vector2(Width - 40f, Height - 210f));
-            _body.lineSpacing = 1.15f;
+            _body = CreateText("Body", UITheme.BodySize, FontStyle.Normal, new Vector2(20f, -BodyTop), new Vector2(Width - 40f, Height - BodyTop - BottomArea));
+            _body.lineSpacing = 1.05f;
 
             // 창고(아래 가운데): 길드 건물 패널을 "길드 창고"로 연다
             _storageButton = new GameObject("StorageButton", typeof(RectTransform), typeof(Image), typeof(Button));

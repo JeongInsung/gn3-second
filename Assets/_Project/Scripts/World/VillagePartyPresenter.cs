@@ -345,12 +345,14 @@ namespace GN3.World
                 if (now < at) continue;
                 _nextTrainingRoll[pair.Key] = now + RandomRange(TrainingRollMin, TrainingRollMax);
                 if (_rng.NextDouble() >= TrainingChance || !_mercById.TryGetValue(pair.Key, out var merc)) continue;
+                if (!TrainingHall.WantsToTrain(merc)) continue; // 다쳤거나 지쳤으면 훈련하러 가지 않는다
                 float hours = RandomRange(TrainingHall.MinSessionHours, TrainingHall.MaxSessionHours);
                 var buddy = ClosestOutsideFriend(merc, pair.Key); // Refresh가 _wanderers를 바꾸기 전에 고른다
                 if (!TrainingHall.TryAdd(merc, hours)) continue;
                 // 친한 동료가 밖에 있으면 관계 단계의 동행 확률로 같이 훈련하러 간다(정원·피로는 TrainingHall이 거절).
-                if (buddy.merc != null && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && TrainingHall.TryAdd(buddy.merc, hours))
-                    DailyLog.Add($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 훈련했다."); // 이동 알림은 띄우지 않는다(위치는 파티 구성)
+                if (buddy.merc != null && TrainingHall.WantsToTrain(buddy.merc)
+                    && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && TrainingHall.TryAdd(buddy.merc, hours))
+                    DailyLog.Add($"{Josa.WaGwa(merc.Name)} {Josa.IGa(buddy.merc.Name)} 같이 훈련했다."); // 이동 알림은 띄우지 않는다(위치는 파티 구성)
                 return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
             }
         }
@@ -384,7 +386,7 @@ namespace GN3.World
                 if (!venue.TryAdd(merc, hours)) continue;
                 if (buddy.merc != null && venue.VisitChance(buddy.merc) > 0f
                     && _rng.NextDouble() < Affinity.TierOf(buddy.value).TogetherChance && venue.TryAdd(buddy.merc, hours))
-                    DailyLog.Add($"{merc.Name}와(과) {buddy.merc.Name}이(가) 같이 {venue.Name}에 갔다.");
+                    DailyLog.Add($"{Josa.WaGwa(merc.Name)} {Josa.IGa(buddy.merc.Name)} 같이 {venue.Name}에 갔다.");
                 return; // 한 번에 한 무리(Refresh가 _wanderers를 바꾼다)
             }
         }

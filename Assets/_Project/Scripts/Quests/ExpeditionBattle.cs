@@ -44,10 +44,14 @@ namespace GN3.Quests
             var quest = expedition.Quest;
             var fallen = new List<string>();
             var fallenMercs = new List<Mercenary>();
+            var damage = new List<string>(); // 결과 창 "피해: 브렌 26 → 17 · …"
             for (int i = 0; i < battle.Fighters.Count; i++)
             {
                 var merc = battle.Fighters[i];
+                int before = merc.CurrentHealth;
                 merc.SetHealth(battle.Combatants[i].CurrentHealth);
+                if (!merc.IsAlive) damage.Add($"{merc.Name} 전사");
+                else if (merc.CurrentHealth < before) damage.Add($"{merc.Name} {before} → {merc.CurrentHealth}");
                 if (!merc.IsAlive)
                 {
                     fallen.Add(merc.Name);
@@ -92,8 +96,11 @@ namespace GN3.Quests
                 DailyLog.Add(line);
             }
 
-            // 우편함: 결과 편지(중요). 본문은 요약을 줄마다 나누고 성장(오른 능력치)을 덧붙인다.
-            string body = summary.Replace(" · ", "\n");
+            // 우편함: 결과 편지(중요). 본문은 요약을 줄마다 나누고 피해(체력 변화)와 성장(오른 능력치)을 덧붙인다.
+            // 제목이 이미 "퀘스트 — 임무 완료!"라 본문 첫 줄의 퀘스트 이름은 빼고 "임무 완료! 보상 …"부터.
+            string prefix = quest.Title + " — ";
+            string body = (summary.StartsWith(prefix) ? summary.Substring(prefix.Length) : summary).Replace(" · ", "\n");
+            body += "\n\n" + (damage.Count > 0 ? "피해: " + string.Join(" · ", damage) : "피해 없음");
             if (levelUps.Count > 0) body += "\n\n" + string.Join("\n", levelUps);
             var mail = Mailbox.Post(MailKind.QuestResult,
                 battle.Victory ? $"{quest.Title} — 임무 완료!" : $"{quest.Title} — 임무 실패...", body, important: true);

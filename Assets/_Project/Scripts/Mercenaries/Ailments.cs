@@ -55,7 +55,7 @@ namespace GN3.Mercenaries
         public static bool Inflict(Mercenary merc, AilmentSO def, string verb)
         {
             if (!merc.AddAilment(def)) return false;
-            string line = $"{merc.Name}이(가) {verb}: {def.displayName}"; // 효과는 마우스를 올리면 툴팁으로(EffectTooltip)
+            string line = $"{Josa.IGa(merc.Name)} {verb}: {def.displayName}"; // 효과는 마우스를 올리면 툴팁으로(EffectTooltip)
             ToastLog.Show(line);
             DailyLog.Add(line);
             return true;
@@ -103,7 +103,7 @@ namespace GN3.Mercenaries
             ailment.Progress += amount;
             if (ailment.Progress < 1f) return false;
             merc.RemoveAilment(ailment);
-            string line = $"{merc.Name}의 {ailment.Def.displayName}이(가) {place} 나았다.";
+            string line = $"{merc.Name}의 {Josa.IGa(ailment.Def.displayName)} {place} 나았다.";
             ToastLog.Show(line);
             DailyLog.Add(line);
             return true;
@@ -183,7 +183,7 @@ namespace GN3.Mercenaries
             merc.SetHealth(0);
             MercenaryCondition.AfterDeath(merc); // 친한 동료가 슬퍼한다(떠날 수도). 친밀도를 읽어야 해서 파티에서 빼기 전에
             PlayerParty.Instance.Remove(merc);
-            string line = $"{merc.Name}이(가) {cause.displayName}을(를) 치료받지 못해 세상을 떠났다.";
+            string line = $"{Josa.IGa(merc.Name)} {Josa.EulReul(cause.displayName)} 치료받지 못해 세상을 떠났다.";
             ToastLog.Show(line, false);
             DailyLog.Add(line);
             Mailbox.Post(MailKind.Alert, "용병 사망", line, important: true);

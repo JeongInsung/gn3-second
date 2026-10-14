@@ -178,7 +178,7 @@ namespace GN3.UI
             rect.anchoredPosition = topLeft;
             rect.sizeDelta = boxSize;
             var text = go.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = size;
             text.fontStyle = style;
             text.color = Color.white;
@@ -212,7 +212,7 @@ namespace GN3.UI
             labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
             var text = label.GetComponent<Text>();
             text.text = "관계 보기";
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 13;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
@@ -247,7 +247,7 @@ namespace GN3.UI
             labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
             var text = label.GetComponent<Text>();
             text.text = "[테스트] 체력 -30%";
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 13;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
@@ -273,7 +273,7 @@ namespace GN3.UI
             labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
             var text = label.GetComponent<Text>();
             text.text = "X";
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 16;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;

@@ -70,6 +70,15 @@ namespace GN3.Mercenaries
             merc != null && merc.IsAlive && merc.CanGrow && !merc.IsExhausted && !merc.HasAilment
             && !ExpeditionLog.Instance.IsOnExpedition(merc) && !IsTraining(merc) && !Hospital.IsAdmitted(merc) && !RestVenues.IsResting(merc);
 
+        /// <summary>
+        /// 스스로 훈련하러 갈 마음이 드는지(자동 방문용 — 플레이어가 직접 넣을 때는 CanTrain만 본다):
+        /// 훈련할 수 있고, 체력이 최대의 WantHealthRatio 이상이고, 지치지 않았을 때(피로 &lt; TiredFatigue). 다쳐서 돌아온 사람이 바로 훈련하러 가지 않게.
+        /// </summary>
+        public static bool WantsToTrain(Mercenary merc) =>
+            CanTrain(merc) && merc.CurrentHealth >= merc.CurrentStats.MaxHealth * WantHealthRatio && merc.Fatigue < Mercenary.TiredFatigue;
+
+        private const float WantHealthRatio = 0.7f;
+
         /// <summary>훈련을 시작한다(hours = 이번에 훈련할 게임 시간). 밤이거나 정원이 차면 거절.</summary>
         public static bool TryAdd(Mercenary merc, float hours)
         {
@@ -154,7 +163,7 @@ namespace GN3.Mercenaries
                 if (!_sessionGains.TryGetValue(merc.Id, out var session)) _sessionGains[merc.Id] = session = new List<string>();
                 session.AddRange(gains);
                 ToastLog.Show($"훈련: {merc.Name} {string.Join(", ", gains)}");
-                DailyLog.Add($"{merc.Name}이(가) 훈련소에서 강해졌다 ({string.Join(", ", gains)}).");
+                DailyLog.Add($"{Josa.IGa(merc.Name)} 훈련소에서 강해졌다 ({string.Join(", ", gains)}).");
             }
 
             for (int i = 0; i < trainedHours.Count; i++)
@@ -165,10 +174,11 @@ namespace GN3.Mercenaries
             if (finished.Count == 0) return;
             foreach (var merc in finished)
             {
-                string gained = _sessionGains.TryGetValue(merc.Id, out var session) && session.Count > 0 ? string.Join(", ", session) : "오른 능력치 없음";
+                bool grew = _sessionGains.TryGetValue(merc.Id, out var session) && session.Count > 0;
                 _traineeIds.Remove(merc.Id);
+                // 오른 능력치가 있을 때만 하루 보고에 남긴다("오른 능력치 없음"이 하루에 여러 번 쌓이지 않게). 이동 알림은 띄우지 않는다.
+                if (grew) DailyLog.Add($"{Josa.IGa(merc.Name)} 훈련을 마쳤다 ({string.Join(", ", session)}).");
                 Forget(merc.Id);
-                DailyLog.Add($"{merc.Name}이(가) 훈련을 마쳤다 ({gained})."); // 이동 알림은 띄우지 않는다
             }
             OnChanged?.Invoke();
         }

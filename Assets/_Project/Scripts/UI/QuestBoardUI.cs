@@ -26,13 +26,19 @@ namespace GN3.UI
         {
             // QuestPanel(1200x780)에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역.
             // 새로고침 버튼 아래 끝이 위에서 약 88px이라 100px부터 시작해 첫 줄이 버튼과 겹치지 않게 한다.
+            UITheme.StyleWindowTitle(listContainer.parent.Find("Title")?.GetComponent<Text>()); // 시장·퀘스트·파티 제목 줄을 같게
             ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -100f));
 
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
             _board = new QuestBoard(boardSize, minEnemyCount, maxEnemyCount, minDifficulty, maxDifficulty);
 
             if (refreshButton != null)
+            {
                 refreshButton.onClick.AddListener(RefreshBoard);
+                // 용병시장과 같은 자리(제목 줄 오른쪽)에 둔다 — 씬에서는 제목 아래로 내려가 있었다
+                var refreshRect = (RectTransform)refreshButton.transform;
+                refreshRect.anchoredPosition = new Vector2(refreshRect.anchoredPosition.x, -23f);
+            }
         }
 
         private void Start()
@@ -80,7 +86,7 @@ namespace GN3.UI
             hLayout.childControlHeight = true;
 
             // 줄에는 [등급] 이름 · 보상만. 지역·적·권장 전투력·판정·소요 일수는 줄을 클릭하면 열리는 상세 창에서 본다.
-            var titleText = CreateText(row.transform, QuestDifficulty.RichTitle(quest), 20, TextAnchor.MiddleLeft);
+            var titleText = CreateText(row.transform, QuestDifficulty.RichTitle(quest), UITheme.HeadingSize, TextAnchor.MiddleLeft); // 큰 주황 글씨는 창 제목만
             titleText.fontStyle = FontStyle.Bold;
             titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
             titleText.gameObject.AddComponent<LayoutElement>().minWidth = 520;

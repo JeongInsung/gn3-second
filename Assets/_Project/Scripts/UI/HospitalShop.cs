@@ -60,11 +60,11 @@ namespace GN3.UI
             }
             if (!Wallet.TrySpend(item.Price))
             {
-                ToastLog.Show($"골드가 부족합니다 (필요 {item.Price}G, 보유 {Wallet.Gold}G)");
+                ToastLog.Show($"골드가 부족합니다 (필요 {item.Price}G, 보유 {Wallet.Gold}G)", false);
                 return;
             }
             GuildStorage.TryAdd(item);
-            ToastLog.Show($"{item.Name}을(를) 창고에 보관 -{item.Price}G");
+            ToastLog.Show($"{Josa.EulReul(item.Name)} 창고에 보관 -{item.Price}G");
         }
 
         private void BuyForEveryone(HealingItem item)
@@ -77,7 +77,7 @@ namespace GN3.UI
             }
             if (!Wallet.TrySpend(item.Price))
             {
-                ToastLog.Show($"골드가 부족합니다 (필요 {item.Price}G, 보유 {Wallet.Gold}G)");
+                ToastLog.Show($"골드가 부족합니다 (필요 {item.Price}G, 보유 {Wallet.Gold}G)", false);
                 return;
             }
             foreach (var merc in wounded) item.Apply(merc);
@@ -111,12 +111,12 @@ namespace GN3.UI
         {
             if (!item.CanHeal(merc))
             {
-                ToastLog.Show($"{merc.Name}은(는) 다친 곳이 없습니다.");
+                ToastLog.Show($"{Josa.EunNeun(merc.Name)} 다친 곳이 없습니다.");
                 return;
             }
             if (!Wallet.TrySpend(item.Price))
             {
-                ToastLog.Show($"골드가 부족합니다 (필요 {item.Price}G, 보유 {Wallet.Gold}G)");
+                ToastLog.Show($"골드가 부족합니다 (필요 {item.Price}G, 보유 {Wallet.Gold}G)", false);
                 return;
             }
             int healed = item.Apply(merc);

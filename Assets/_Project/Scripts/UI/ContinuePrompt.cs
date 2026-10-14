@@ -5,13 +5,14 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 시작할 때 저장 파일이 있으면 화면 가운데에 "이어하기 / 새로 시작"을 묻는 창.
-    /// 이어하기: SaveSystem.Load. 새로 시작: 파일은 그대로 두고 지금 상태로 시작(다음 자동 저장이 덮어쓴다).
+    /// 시작할 때 저장 파일이 있으면 화면 가운데에 "이어하기 / 다른 저장 불러오기 / 새로 시작"을 묻는 창.
+    /// 이어하기: SaveSystem.Load. 다른 저장 불러오기: 불러오기 창(LoadGamePanel)에서 기록을 고른다.
+    /// 새로 시작: 지금 상태로 시작(다음 저장이 save.json을 덮어쓰지만 이전 저장은 기록에 남아 불러오기로 되돌릴 수 있다).
     /// 고를 때까지 뒤 화면 클릭을 막는다.
     /// </summary>
     public class ContinuePrompt : MonoBehaviour
     {
-        private const float Width = 460f;
+        private const float Width = 560f;
         private const float Height = 240f;
 
         private Font _font;
@@ -34,19 +35,25 @@ namespace GN3.UI
         private void Continue()
         {
             bool ok = SaveSystem.Load();
-            ToastLog.Show(ok ? "저장된 게임을 불러왔습니다" : "저장 파일을 읽지 못해 새로 시작합니다");
+            ToastLog.Show(ok ? "저장된 게임을 불러왔습니다" : "저장 파일을 읽지 못해 새로 시작합니다", false);
             Destroy(gameObject);
         }
 
         private void StartNew()
         {
-            ToastLog.Show("새로 시작합니다 (다음 자동 저장 때 이전 저장을 덮어씁니다)");
+            ToastLog.Show("새로 시작합니다 · 이전 저장은 '불러오기'에 있습니다", false);
             Destroy(gameObject);
+        }
+
+        private void PickOther()
+        {
+            Destroy(gameObject);
+            LoadGamePanel.Open();
         }
 
         private void Build()
         {
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
 
             // 뒤 화면 클릭 막기(화면 전체 어둡게 — 테마 자동 적용에서 빠지는 전체 화면 막)
             var dim = new GameObject("Dim", typeof(RectTransform), typeof(Image));
@@ -81,6 +88,7 @@ namespace GN3.UI
             h.childControlWidth = h.childControlHeight = true;
             h.childForceExpandWidth = h.childForceExpandHeight = true;
             CreateButton(row.transform, "이어하기", Continue, new Color(0.25f, 0.55f, 0.35f, 1f)); // 초록 → 테마 초록 버튼
+            CreateButton(row.transform, "다른 저장 불러오기", PickOther, new Color(0.6f, 0.2f, 0.2f, 1f));
             CreateButton(row.transform, "새로 시작", StartNew, new Color(0.6f, 0.2f, 0.2f, 1f));
         }
 

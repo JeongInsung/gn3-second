@@ -223,7 +223,7 @@ namespace GN3.Mercenaries
             var from = TierOf(before);
             var to = TierOf(after);
             if (from == to) return;
-            string line = $"{a.Name}와(과) {b.Name}의 관계: {from.Name} → {to.Name}";
+            string line = $"{Josa.WaGwa(a.Name)} {b.Name}의 관계: {from.Name} → {to.Name}";
             ToastLog.Show(line);
             DailyLog.Add(line);
         }

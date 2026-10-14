@@ -17,25 +17,59 @@ namespace GN3.UI
 
         private MercenaryMarket _market;
         private readonly List<GameObject> _cardRows = new List<GameObject>();
+        private readonly List<Button> _hireButtons = new List<Button>();
+        private Text _capacityText; // 왼쪽 위 "파티 정원 2/3"
         private Font _font;
+
+        private static readonly Color FullColor = new Color(0.94f, 0.45f, 0.38f, 1f);
 
         private void Awake()
         {
+            var panel = (RectTransform)listContainer.parent; // MarketPanel
+            UITheme.StyleWindowTitle(panel.Find("Title")?.GetComponent<Text>()); // 시장·퀘스트·파티 제목 줄을 같게
             // MarketPanel(1200x780) 안에서 제목/새로고침 버튼 아래 ~ 패널 하단까지의 고정 영역
             ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 20f), new Vector2(-20f, -80f)); // 새로고침 버튼(아래 끝 약 67px)과 띄움
 
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
+
+            // 파티 정원: 제목 줄 왼쪽. 꽉 차면 빨갛게 바꾸고 고용 버튼을 막는다(UpdateCapacity).
+            _capacityText = CreateText(panel, "", 18, TextAnchor.MiddleLeft);
+            _capacityText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var capacityRect = _capacityText.rectTransform;
+            capacityRect.anchorMin = capacityRect.anchorMax = capacityRect.pivot = new Vector2(0f, 1f);
+            capacityRect.anchoredPosition = new Vector2(28f, -22f);
+            capacityRect.sizeDelta = new Vector2(380f, 40f);
 
             var classPool = new List<MercenaryClassSO>(Resources.LoadAll<MercenaryClassSO>("MercenaryClasses"));
             _market = new MercenaryMarket(classPool, marketSize, minLevel, maxLevel);
 
             if (refreshButton != null)
                 refreshButton.onClick.AddListener(RefreshMarket);
+            PlayerParty.Instance.OnChanged += UpdateCapacity; // 해고·전사·불러오기로 정원이 바뀔 때
+        }
+
+        private void OnDestroy()
+        {
+            PlayerParty.Instance.OnChanged -= UpdateCapacity;
         }
 
         private void Start()
         {
             RefreshMarket();
+        }
+
+        /// <summary>"파티 정원 n/m"을 갱신하고, 꽉 찼으면 고용 버튼을 막는다.</summary>
+        private void UpdateCapacity()
+        {
+            var party = PlayerParty.Instance;
+            bool full = party.Members.Count >= party.MaxSize;
+            if (_capacityText != null)
+            {
+                _capacityText.text = $"파티 정원 {party.Members.Count}/{party.MaxSize}" + (full ? " · 해고해야 고용 가능" : "");
+                _capacityText.color = full ? FullColor : UITheme.BodyText;
+            }
+            _hireButtons.RemoveAll(b => b == null);
+            foreach (var button in _hireButtons) button.interactable = !full;
         }
 
         /// <summary>불러오기 직후처럼 밖에서 시장을 새로 뽑을 때.</summary>
@@ -56,8 +90,10 @@ namespace GN3.UI
             _market.MaxGrowth = rank.MarketMaxGrowth;
             _market.MaxGrade = rank.MaxMercGrade;
 
+            _hireButtons.Clear();
             foreach (var merc in _market.Refresh())
                 _cardRows.Add(CreateCard(merc));
+            UpdateCapacity();
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
         }
@@ -85,7 +121,7 @@ namespace GN3.UI
             CharacterPortraitUI.Create(row.transform, merc.Appearance, 48);
 
             // 줄에는 등급·이름·직업·레벨·전투력만. 성격·패시브·능력치는 줄을 클릭하면 열리는 캐릭터 창에서 본다.
-            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}", 22, TextAnchor.MiddleLeft);
+            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}", UITheme.HeadingSize, TextAnchor.MiddleLeft); // 큰 주황 글씨는 창 제목만
             nameText.fontStyle = FontStyle.Bold;
             nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
             nameText.gameObject.AddComponent<LayoutElement>().minWidth = 220;
@@ -119,17 +155,19 @@ namespace GN3.UI
             hireTextRect.offsetMin = Vector2.zero;
             hireTextRect.offsetMax = Vector2.zero;
 
+            hireButtonGO.AddComponent<TooltipTrigger>().Text = PriceReason(merc, cost);
+            _hireButtons.Add(hireButtonGO.GetComponent<Button>());
             hireButtonGO.GetComponent<Button>().onClick.AddListener(() =>
             {
                 var party = PlayerParty.Instance;
                 if (party.Members.Count >= party.MaxSize)
                 {
-                    ToastLog.Show($"파티 정원({party.MaxSize}명)이 가득 찼습니다.");
+                    ToastLog.Show($"파티 정원({party.MaxSize}명)이 가득 찼습니다.", false);
                     return;
                 }
                 if (!Wallet.TrySpend(cost))
                 {
-                    ToastLog.Show($"골드가 부족합니다 (필요 {cost}G, 보유 {Wallet.Gold}G)");
+                    ToastLog.Show($"골드가 부족합니다 (필요 {cost}G, 보유 {Wallet.Gold}G)", false);
                     return;
                 }
                 if (!party.TryAdd(merc))
@@ -145,6 +183,18 @@ namespace GN3.UI
             });
 
             return row;
+        }
+
+        /// <summary>
+        /// 고용 버튼 툴팁: 고용비가 왜 이 값인지(Pricing.HireCost — 전투력·나이·재능·희귀 특성). 재능은 숨은 값이라 배율은 밝히지 않고 뜻만 알려 준다.
+        /// </summary>
+        private static string PriceReason(Mercenary merc, int cost)
+        {
+            float ageRate = GrowthTuning.PriceMultiplier(merc.Age);
+            string age = Mathf.Approximately(ageRate, 1f) ? $"나이 {merc.Age}세" : $"나이 {merc.Age}세(가격 ×{ageRate:0.##})";
+            string text = $"고용비 {cost}G: 전투력 {merc.GradePower} · {age} · 재능(숨겨진 값)";
+            if (merc.HasRarePassive) text += "\n+ 희귀 특성 60G";
+            return text + "\n같은 전투력에 더 비싸면 재능이 좋아 더 빨리 자란다는 뜻입니다.";
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

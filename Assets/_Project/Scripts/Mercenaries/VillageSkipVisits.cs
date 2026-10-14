@@ -38,7 +38,8 @@ namespace GN3.Mercenaries
             var idle = PlayerParty.Instance.Members.Where(IsFree).OrderBy(_ => Rng.Next()).ToList();
             foreach (var merc in idle)
             {
-                if (_hasTrainingHall && Rng.NextDouble() < hours / ConditionTuning.TrainingRollHours && Rng.NextDouble() < ConditionTuning.TrainingVisitChance
+                if (_hasTrainingHall && TrainingHall.WantsToTrain(merc) // 다쳤거나 지쳤으면 훈련 대신 쉼터 굴림으로
+                    && Rng.NextDouble() < hours / ConditionTuning.TrainingRollHours && Rng.NextDouble() < ConditionTuning.TrainingVisitChance
                     && TrainingHall.TryAdd(merc, Random.Range(TrainingHall.MinSessionHours, TrainingHall.MaxSessionHours)))
                     continue;
                 if (Rng.NextDouble() >= hours / ConditionTuning.VenueRollHours) continue;

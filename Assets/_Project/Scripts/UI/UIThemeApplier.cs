@@ -152,7 +152,25 @@ namespace GN3.UI
             image.color = color;
         }
 
+        /// <summary>색(ApplyTextColor)을 정한 뒤 글꼴과 크기를 맞춘다: Galmuri(UITheme.Font), 굵은 글씨는 진짜 굵은 글꼴(BoldFont),
+        /// 크기는 4단계(UITheme.SnapSize). 제목 판정이 원래 크기를 보므로 크기는 마지막에 바꾼다.</summary>
         private static bool ApplyText(Text text)
+        {
+            bool done = ApplyTextColor(text);
+            if (text.fontStyle == FontStyle.Bold || text.fontStyle == FontStyle.BoldAndItalic)
+            {
+                text.font = UITheme.BoldFont;
+                text.fontStyle = text.fontStyle == FontStyle.BoldAndItalic ? FontStyle.Italic : FontStyle.Normal;
+            }
+            else if (text.font == null || text.font != UITheme.BoldFont)
+            {
+                text.font = UITheme.Font;
+            }
+            text.fontSize = UITheme.SnapSize(text.fontSize);
+            return done;
+        }
+
+        private static bool ApplyTextColor(Text text)
         {
             string name = text.gameObject.name;
             bool inButton = text.GetComponentInParent<Button>() != null

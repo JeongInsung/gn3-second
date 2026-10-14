@@ -308,7 +308,7 @@ namespace GN3.UI
 
         private static void AutoSave()
         {
-            if (SaveSystem.Save()) ToastLog.Show("자동 저장됨");
+            if (SaveSystem.Save(auto: true)) ToastLog.Show("자동 저장됨", false); // 저장 알림은 우편함에 쌓지 않는다
         }
 
         /// <summary>불러오기 직후: 낮/밤과 시각 표시를 게임 시계에 맞춘다.</summary>
@@ -412,7 +412,7 @@ namespace GN3.UI
             rect.sizeDelta = new Vector2(800f, 48f);
             rect.anchoredPosition = new Vector2(0f, y);
             var text = go.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = size;
             text.fontStyle = style;
             text.color = color;

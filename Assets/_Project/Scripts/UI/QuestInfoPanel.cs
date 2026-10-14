@@ -12,7 +12,7 @@ namespace GN3.UI
     /// </summary>
     public class QuestInfoPanel : MonoBehaviour
     {
-        private const float Width = 460f;
+        private const float Width = 340f; // 화면 오른쪽 빈 곳(게시판 오른쪽 끝 ~ 화면 끝)에 들어가게 — 넓으면 게시판 수락 버튼을 덮었다
         private const float Height = 400f;
         private const float RefreshInterval = 0.5f;
 
@@ -120,7 +120,7 @@ namespace GN3.UI
 
         private void Build()
         {
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
 
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);

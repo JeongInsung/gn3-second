@@ -14,34 +14,63 @@ namespace GN3.Save
 {
     /// <summary>
     /// 진행 상황을 Application.persistentDataPath/save.json에 저장·불러온다(JsonUtility).
+    /// 저장할 때마다 같은 내용을 saves/에 시간 붙은 기록으로도 남긴다(자동·직접 각각 최근 HistoryKeep개). 불러오기 창(LoadGamePanel)이 그 목록에서 고른다.
     /// 저장: 골드·일차·시각·명성·파티 용병(외형 포함)·진행 중인 파견. 시장·게시판은 불러온 뒤 새로 뽑는다.
     /// </summary>
     public static class SaveSystem
     {
         private static readonly System.Random LegacyRng = new System.Random(); // 레벨제(버전 2 이하) 저장의 나이·생일 정하기
 
+        private const int HistoryKeep = 10;
+        private const string AutoTag = "auto";
+        private const string ManualTag = "manual";
+
         public static string FilePath => Path.Combine(Application.persistentDataPath, "save.json");
+        public static string HistoryFolder => Path.Combine(Application.persistentDataPath, "saves");
 
         public static bool HasSave => File.Exists(FilePath);
 
         /// <summary>불러오기가 끝났을 때(화면 쪽이 시계·시장·게시판을 다시 맞춘다).</summary>
         public static event Action OnLoaded;
 
+        /// <summary>불러오기 목록의 한 줄: 기록 파일 하나.</summary>
+        public sealed class SaveEntry
+        {
+            public string Path;
+            public bool IsAuto;
+            public DateTime SavedAt;
+            public string Description;
+        }
+
         // ---------- 저장 ----------
 
-        public static bool Save()
+        /// <summary>save.json에 쓰고, 같은 내용을 기록(saves/)으로도 남긴다. auto = 자정 자동 저장.</summary>
+        public static bool Save(bool auto = false)
         {
+            // 기록 기능 이전의 save.json은 덮어쓰기 전에 기록으로 옮겨 둔다(처음 한 번).
+            try { ImportCurrentSaveOnce(); }
+            catch (Exception e) { Debug.LogError($"[SaveSystem] 기존 저장을 기록으로 옮기지 못함: {e}"); }
+
+            string json;
             try
             {
-                var data = Capture();
-                File.WriteAllText(FilePath, JsonUtility.ToJson(data, true));
-                return true;
+                json = JsonUtility.ToJson(Capture(), true);
+                File.WriteAllText(FilePath, json);
             }
             catch (Exception e)
             {
                 Debug.LogError($"[SaveSystem] 저장 실패: {e}");
                 return false;
             }
+            try
+            {
+                WriteHistory(json, auto);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[SaveSystem] 저장 기록을 남기지 못함(저장 자체는 됨): {e}");
+            }
+            return true;
         }
 
         public static void Delete()
@@ -49,10 +78,62 @@ namespace GN3.Save
             if (HasSave) File.Delete(FilePath);
         }
 
-        /// <summary>저장 파일의 짧은 설명("650년 3월 12일 · 은빛 길드 · 용병 4명"). 이어하기 창에 쓴다.</summary>
-        public static string Describe()
+        private static void WriteHistory(string json, bool auto)
         {
-            var data = Read();
+            Directory.CreateDirectory(HistoryFolder);
+            string tag = auto ? AutoTag : ManualTag;
+            string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string path = Path.Combine(HistoryFolder, $"save_{stamp}_{tag}.json");
+            for (int n = 2; File.Exists(path); n++)
+                path = Path.Combine(HistoryFolder, $"save_{stamp}_{tag}_{n}.json");
+            File.WriteAllText(path, json);
+
+            // 같은 종류는 최근 HistoryKeep개만 남긴다.
+            var old = new DirectoryInfo(HistoryFolder).GetFiles($"save_*_{tag}*.json")
+                .OrderByDescending(f => f.LastWriteTimeUtc).Skip(HistoryKeep);
+            foreach (var file in old) file.Delete();
+        }
+
+        /// <summary>기록 기능 이전의 save.json도 목록에 나오게: saves/가 비어 있으면 지금 save.json을 기록 하나로 복사한다(파일 시각 유지).</summary>
+        private static void ImportCurrentSaveOnce()
+        {
+            if (!HasSave) return;
+            if (Directory.Exists(HistoryFolder) && Directory.EnumerateFiles(HistoryFolder, "save_*.json").Any()) return;
+            Directory.CreateDirectory(HistoryFolder);
+            var time = File.GetLastWriteTime(FilePath);
+            string path = Path.Combine(HistoryFolder, $"save_{time:yyyyMMdd_HHmmss}_{ManualTag}.json");
+            File.Copy(FilePath, path, true);
+            File.SetLastWriteTime(path, time);
+        }
+
+        /// <summary>불러올 수 있는 기록(최신순). 읽지 못하는 파일은 뺀다.</summary>
+        public static List<SaveEntry> ListSaves()
+        {
+            try { ImportCurrentSaveOnce(); }
+            catch (Exception e) { Debug.LogError($"[SaveSystem] 기존 저장을 기록으로 옮기지 못함: {e}"); }
+
+            var list = new List<SaveEntry>();
+            if (!Directory.Exists(HistoryFolder)) return list;
+            foreach (var file in new DirectoryInfo(HistoryFolder).GetFiles("save_*.json").OrderByDescending(f => f.LastWriteTime))
+            {
+                string description = Describe(file.FullName);
+                if (string.IsNullOrEmpty(description)) continue;
+                list.Add(new SaveEntry
+                {
+                    Path = file.FullName,
+                    IsAuto = file.Name.Contains("_" + AutoTag),
+                    SavedAt = file.LastWriteTime,
+                    Description = description,
+                });
+            }
+            return list;
+        }
+
+        /// <summary>저장 파일의 짧은 설명("650년 3월 12일 · 은빛 길드 · 용병 4명 · 300G"). 이어하기 창·불러오기 창에 쓴다.
+        /// path가 없으면 save.json, savedAt이 있으면 둘째 줄에 "저장: …".</summary>
+        public static string Describe(string path = null)
+        {
+            var data = Read(path);
             if (data == null) return "";
             int rank = 0;
             for (int i = 0; i < Guild.Ranks.Length; i++)
@@ -154,12 +235,14 @@ namespace GN3.Save
 
         // ---------- 불러오기 ----------
 
-        private static SaveData Read()
+        /// <summary>path가 없으면 save.json.</summary>
+        private static SaveData Read(string path = null)
         {
+            path ??= FilePath;
             try
             {
-                if (!HasSave) return null;
-                var data = JsonUtility.FromJson<SaveData>(File.ReadAllText(FilePath));
+                if (!File.Exists(path)) return null;
+                var data = JsonUtility.FromJson<SaveData>(File.ReadAllText(path));
                 if (data == null || data.version > SaveData.CurrentVersion) return null;
                 return data;
             }
@@ -170,10 +253,10 @@ namespace GN3.Save
             }
         }
 
-        /// <summary>저장 파일을 읽어 지금 게임 상태를 그것으로 바꾼다. 실패하면 false(상태는 그대로).</summary>
-        public static bool Load()
+        /// <summary>저장 파일(path가 없으면 save.json, 있으면 그 기록)을 읽어 지금 게임 상태를 그것으로 바꾼다. 실패하면 false(상태는 그대로).</summary>
+        public static bool Load(string path = null)
         {
-            var data = Read();
+            var data = Read(path);
             if (data == null) return false;
 
             var classes = Resources.LoadAll<MercenaryClassSO>("MercenaryClasses");

@@ -191,7 +191,7 @@ namespace GN3.Mercenaries
                 return;
             }
             LeavingIds[merc.Id] = reason;
-            DailyLog.Add($"{merc.Name}이(가) {reason} 돌아가면 길드를 떠나겠다고 한다.");
+            DailyLog.Add($"{Josa.IGa(merc.Name)} {reason} 돌아가면 길드를 떠나겠다고 한다.");
         }
 
         /// <summary>길드를 떠난다: 파티에서 빼고 중요 알림(게임을 멈추고 알림창, 시간 넘기기도 여기서 멈춘다).</summary>
@@ -199,7 +199,7 @@ namespace GN3.Mercenaries
         {
             LeavingIds.Remove(merc.Id);
             PlayerParty.Instance.Remove(merc);
-            string line = $"{merc.Name}이(가) {reason} 길드를 떠났다.";
+            string line = $"{Josa.IGa(merc.Name)} {reason} 길드를 떠났다.";
             ToastLog.Show(line, false);
             DailyLog.Add(line);
             Mailbox.Post(MailKind.Alert, "용병 이탈", line, important: true);
@@ -251,7 +251,7 @@ namespace GN3.Mercenaries
                     if (other == merc) continue;
                     var tier = Affinity.TierBetween(merc, other);
                     bonus += tier.BattleMorale;
-                    if (tier == Affinity.Tiers[0]) DailyLog.Add($"{merc.Name}은(는) 앙숙 {other.Name}와(과) 같이 싸우는 게 불편했다.");
+                    if (tier == Affinity.Tiers[0]) DailyLog.Add($"{Josa.EunNeun(merc.Name)} 앙숙 {Josa.WaGwa(other.Name)} 같이 싸우는 게 불편했다.");
                 }
                 merc.AddMorale(Mathf.Clamp(bonus, -MaxAffinityBattleMorale, MaxAffinityBattleMorale));
             }
@@ -280,8 +280,8 @@ namespace GN3.Mercenaries
                     var tier = Affinity.TierBetween(merc, dead);
                     if (tier.MournMorale == 0) continue;
                     merc.AddMorale(tier.MournMorale);
-                    DailyLog.Add($"{merc.Name}이(가) {tier.Name} {dead.Name}을(를) 잃은 슬픔에 잠겼다. (사기 {tier.MournMorale})");
-                    ConsiderLeaving(merc, $"{tier.Name} {dead.Name}을(를) 잃은 슬픔에");
+                    DailyLog.Add($"{Josa.IGa(merc.Name)} {tier.Name} {Josa.EulReul(dead.Name)} 잃은 슬픔에 잠겼다. (사기 {tier.MournMorale})");
+                    ConsiderLeaving(merc, $"{tier.Name} {Josa.EulReul(dead.Name)} 잃은 슬픔에");
                 }
         }
 

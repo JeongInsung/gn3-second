@@ -17,7 +17,7 @@ namespace GN3.UI
         public const float IconSize = 48f;
 
         private static Font _font;
-        private static Font Font => _font != null ? _font : _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        private static Font Font => _font != null ? _font : _font = UITheme.Font;
 
         public static IEnumerable<Mercenary> MercsInVillage() =>
             PlayerParty.Instance.Members.Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m));

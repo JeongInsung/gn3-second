@@ -7,7 +7,7 @@ namespace GN3.UI
 {
     /// <summary>
     /// 화면 오른쪽 위의 큰 "진행 N시간" 버튼과 그 아래 시간 슬라이더(1~24시간, 끌어서 정함).
-    /// 왼쪽 클릭 = 슬라이더로 정한 시간만큼 진행(TimeAdvanceController.RequestAdvance),
+    /// 왼쪽 클릭 = 슬라이더로 정한 시간만큼 진행(TimeAdvanceController.RequestAdvance). 슬라이더는 시간만 정하고 진행시키지 않는다.
     /// 우클릭 = 슬라이더 아래에 "하루 / 4일 / 일주일" 메뉴. 메뉴는 고르거나, 바깥을 누르거나, ESC·다시 우클릭하면 닫힌다.
     /// 메인 Canvas 맨 뒤(첫 자식)에 두어 파티·시장 창이 열리면 그 아래로 깔린다.
     /// </summary>
@@ -56,7 +56,7 @@ namespace GN3.UI
         /// <summary>버튼 바로 아래 "1h ━━●━━ 24h" 슬라이더. 끌면 진행 버튼이 넘길 시간이 바뀐다.</summary>
         private void BuildSlider(TimeAdvanceController controller)
         {
-            var root = new GameObject("AdvanceHoursSlider", typeof(RectTransform), typeof(TooltipTrigger));
+            var root = new GameObject("AdvanceHoursSlider", typeof(RectTransform), typeof(TooltipTrigger), typeof(SwallowClick));
             root.transform.SetParent(transform, false);
             _sliderRect = root.GetComponent<RectTransform>();
             _sliderRect.anchorMin = _sliderRect.anchorMax = new Vector2(1f, 0f);
@@ -208,12 +208,18 @@ namespace GN3.UI
             rect.offsetMin = rect.offsetMax = Vector2.zero;
             var text = go.GetComponent<Text>();
             text.text = content;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = size;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
             text.raycastTarget = false;
             return text;
         }
+    }
+
+    /// <summary>슬라이더 위 클릭이 부모(진행 버튼)로 올라가 시간이 넘어가지 않게 여기서 받아 버린다.</summary>
+    internal class SwallowClick : MonoBehaviour, IPointerClickHandler
+    {
+        public void OnPointerClick(PointerEventData eventData) { }
     }
 }

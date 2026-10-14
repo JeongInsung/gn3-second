@@ -20,6 +20,43 @@ namespace GN3.UI
         public static readonly Color MutedText = Hex(0xa3937c);
         private static readonly Color Outline = new Color(0.03f, 0.02f, 0.02f, 1f);
 
+        // ---------- 글씨 ----------
+        // 한글 픽셀 폰트 Galmuri11(OFL, Resources/Fonts — 라이선스 Galmuri-OFL.txt). 못 읽으면 Unity 내장 폰트로.
+        private static Font _font, _boldFont;
+        public static Font Font => _font != null ? _font : _font = LoadFont("Fonts/Galmuri11");
+        public static Font BoldFont => _boldFont != null ? _boldFont : _boldFont = LoadFont("Fonts/Galmuri11-Bold");
+
+        private static Font LoadFont(string path)
+        {
+            var font = Resources.Load<Font>(path);
+            return font != null ? font : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        }
+
+        // 글씨 크기 4단계. UIThemeApplier가 화면의 글씨를 가장 가까운 단계로 맞춘다(SnapSize).
+        public const int TitleSize = 24;   // 창 제목
+        public const int HeadingSize = 18; // 이름·머리줄
+        public const int BodySize = 16;    // 본문·버튼
+        public const int SmallSize = 13;   // 부제·설명
+
+        /// <summary>씬에 만들어 둔 큰 창(시장·퀘스트·파티)의 제목을 같은 자리·크기로: 위에서 14 내려 높이 56, 제목 크기.
+        /// 창마다 위치(0/-14)·크기(24/32)가 달라 제목 줄이 들쭉날쭉했다.</summary>
+        public static void StyleWindowTitle(UnityEngine.UI.Text title)
+        {
+            if (title == null) return;
+            var rect = title.rectTransform;
+            rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, -14f);
+            rect.sizeDelta = new Vector2(rect.sizeDelta.x, 56f);
+            title.fontSize = TitleSize;
+        }
+
+        /// <summary>11~14 → 13, 15~17 → 16, 18~19 → 18, 20~29 → 24(UIThemeApplier가 20 이상을 제목으로 본다). 30 이상(큰 숫자 연출)과 10 이하는 그대로.</summary>
+        public static int SnapSize(int size) =>
+            size <= 10 || size >= 30 ? size
+            : size <= 14 ? SmallSize
+            : size <= 17 ? BodySize
+            : size <= 19 ? HeadingSize
+            : TitleSize;
+
         private static Sprite _panel, _button, _inset;
 
         public static Sprite Panel => _panel != null ? _panel : _panel = BuildPanel();

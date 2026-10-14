@@ -81,11 +81,7 @@ namespace GN3.Quests
         private static void RecordProgress()
         {
             var active = ExpeditionLog.Instance.Active;
-            if (active.Count == 0)
-            {
-                Add("진행 중인 파견 없음");
-                return;
-            }
+            if (active.Count == 0) return; // 매일 "파견 없음"을 적지 않는다(아무 일 없는 날은 보고서가 QuietDay로 표시)
 
             foreach (var expedition in active)
             {

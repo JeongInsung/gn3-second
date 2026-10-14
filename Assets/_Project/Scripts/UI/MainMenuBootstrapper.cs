@@ -153,14 +153,14 @@ namespace GN3.UI
             {
                 // 대장간 → 건물 패널(무기상점, WeaponShop이 "대장간" 이름을 보고 상품 칸을 채운다)
                 var smithy = VillageProps.EnsureClickable(blacksmith);
-                smithy.SetInfo("대장간", "무기를 사서 용병에게 쥐여 줄 수 있습니다. 맞는 클래스가 들면 공격 보너스 ×1.5.");
+                smithy.SetInfo("대장간", "무기를 사서 용병에게 쥐여 줍니다. 맞는 직업이 들면 공격 보너스 ×1.5.");
             }
             var trainingHall = VillageProps.FindRenderer(TrainingHallSpritePrefix);
             if (trainingHall != null)
             {
                 // 훈련소 → 건물 패널(TrainingHallUI가 "훈련소" 이름을 보고 목록을 채운다)
                 VillageProps.EnsureClickable(trainingHall)
-                    .SetInfo("훈련소", $"용병들이 가끔 스스로 찾아와 {TrainingHall.MinSessionHours:0}~{TrainingHall.MaxSessionHours:0}시간 훈련하며 경험치를 얻습니다. (최대 {TrainingHall.Capacity}명)");
+                    .SetInfo("훈련소", $"훈련할수록 능력치가 오릅니다. 직접 보내거나 스스로 찾아옵니다. (최대 {TrainingHall.Capacity}명)");
             }
             var hospital = VillageProps.FindRenderer(HospitalSpritePrefix);
             Hospital.Available = hospital != null; // 병원 건물이 있어야 입원한다
@@ -168,7 +168,7 @@ namespace GN3.UI
             {
                 // 병원 → 건물 패널(HospitalUI가 "병원" 이름을 보고 입원 환자 목록을 채운다)
                 VillageProps.EnsureClickable(hospital).SetInfo("병원",
-                    $"다치거나 병든 용병이 스스로 입원합니다. 시간당 {Hospital.ProgressPerHour * 100f:0}%씩 나으며, 퇴원할 때 입원 시간당 {Hospital.FeePerHour}G를 냅니다. (최대 {Hospital.Capacity}명)");
+                    $"다치거나 병든 용병이 스스로 입원해 치료받고, 퇴원할 때 치료비를 냅니다. (최대 {Hospital.Capacity}명)");
                 Hospital.AdmitWaiting();
             }
 
@@ -218,7 +218,7 @@ namespace GN3.UI
             rect.anchoredPosition = new Vector2(MenuBarMargin + menuBarWidth + MenuBarMargin, -MenuBarMargin);
 
             var layout = barGO.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 16f; // 칸 폭은 글씨에 딱 맞추고(최소 폭 없음) 칸 사이만 띄운다. 글씨가 길어지면 판도 같이 늘어난다
+            layout.spacing = 24f; // 칸 폭은 글씨에 딱 맞추고(최소 폭 없음) 칸 사이만 띄운다. 글씨가 길어지면 판도 같이 늘어난다
             layout.padding = new RectOffset(14, 14, 0, 0); // 위아래 0 → 판 높이 40 = 메뉴 버튼 높이
             layout.childAlignment = TextAnchor.UpperLeft; // 메뉴 버튼(높이 40, 위 맞춤)과 같은 줄에 오도록 위로 붙인다
             layout.childForceExpandWidth = false;
@@ -232,7 +232,7 @@ namespace GN3.UI
             var dayTextLayout = dayTextGO.GetComponent<LayoutElement>();
             dayTextLayout.minHeight = 40f;
             var dayText = dayTextGO.GetComponent<Text>();
-            dayText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            dayText.font = UITheme.Font;
             dayText.fontSize = 18;
             dayText.alignment = TextAnchor.MiddleLeft;
             dayText.color = Color.white;
@@ -247,11 +247,14 @@ namespace GN3.UI
             var button = AdvanceButton.Create(canvasTransform, controller);
             controller.Init(dayText, button);
 
+            // 오른쪽 위 작은 버튼 줄(오른쪽부터): 진행 ← 저장 ← 불러오기 ← 배속
+            // 저장(자정마다 자동 저장도 된다): 진행 버튼 바로 왼쪽
+            CreateSmallButton(canvasTransform, "SaveButton", "저장", 0, () =>
+                ToastLog.Show(SaveSystem.Save() ? $"저장했습니다 ({GameCalendar.Format(GameClock.CurrentDay)})" : "저장에 실패했습니다", false));
+            // 불러오기: 저장 기록 목록에서 골라 불러온다(LoadGamePanel)
+            CreateSmallButton(canvasTransform, "LoadButton", "불러오기", 1, LoadGamePanel.Open);
             // 가만히 둬도 흐르는 시간의 속도(1배속 ↔ 2배속)
-            controller.SetSpeedButton(CreateSpeedButton(canvasTransform, controller)); // 오른쪽 위 저장 버튼 왼쪽
-
-            // 저장(자정마다 자동 저장도 된다): 오른쪽 위 진행 버튼 바로 왼쪽
-            CreateSaveButton(canvasTransform);
+            controller.SetSpeedButton(CreateSmallButton(canvasTransform, "SpeedButton", "1배속", 2, controller.ToggleSpeed));
 
             // 지나간 알림(왼쪽 아래 토스트) 다시 보기: 화면 오른쪽 아래 우편함 아이콘, 안 읽은 알림이 있으면 "!"
             MailboxButton.Create(canvasTransform);
@@ -259,45 +262,33 @@ namespace GN3.UI
             HealthPanel.CreateButton(canvasTransform);    // 관계 버튼 왼쪽: 용병 건강 창
         }
 
-        private static readonly Vector2 SmallButtonSize = new Vector2(70f, 40f); // 배속·저장 버튼(예전 바 안 크기)
+        private static readonly Vector2 SmallButtonSize = new Vector2(84f, 40f); // 배속·저장 버튼(예전 바 안 크기)
         private const float TopRightSpacing = 8f;
 
         /// <summary>오른쪽 위 작은 버튼의 세로 위치: 진행 버튼 높이의 가운데.</summary>
         private static float SmallButtonTop => -(AdvanceButton.Margin + (AdvanceButton.ButtonSize.y - SmallButtonSize.y) * 0.5f);
 
-        /// <summary>저장 버튼 왼쪽, 세로 가운데를 맞춘 1배속/2배속 토글.</summary>
-        private static Button CreateSpeedButton(Transform canvasTransform, TimeAdvanceController controller)
+        /// <summary>
+        /// 진행 버튼(AdvanceButton) 왼쪽에 붙는 작은 버튼(저장·불러오기·배속). slot 0이 진행 버튼 바로 왼쪽, 1·2…는 한 칸씩 더 왼쪽.
+        /// 세로는 진행 버튼 높이의 가운데. 진행 버튼처럼 Canvas 맨 뒤라 창이 열리면 그 아래로 깔린다.
+        /// </summary>
+        private static Button CreateSmallButton(Transform canvasTransform, string name, string label, int slot,
+            UnityEngine.Events.UnityAction onClick, int fontSize = 15)
         {
-            var go = new GameObject("SpeedButton", typeof(RectTransform), typeof(Image), typeof(Button));
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(canvasTransform, false);
             go.transform.SetAsFirstSibling();
             var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
             rect.anchoredPosition = new Vector2(
-                -(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing + SmallButtonSize.x + TopRightSpacing),
+                -(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing + slot * (SmallButtonSize.x + TopRightSpacing)),
                 SmallButtonTop);
             rect.sizeDelta = SmallButtonSize;
             go.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
-            CreateFillText(go.transform, "1배속", 15);
+            CreateFillText(go.transform, label, fontSize);
             var button = go.GetComponent<Button>();
-            button.onClick.AddListener(controller.ToggleSpeed);
+            button.onClick.AddListener(onClick);
             return button;
-        }
-
-        /// <summary>진행 버튼(AdvanceButton) 왼쪽, 배속 버튼과 같은 크기·세로 가운데로 붙는 저장 버튼. 진행 버튼처럼 Canvas 맨 뒤라 창이 열리면 그 아래로 깔린다.</summary>
-        private static void CreateSaveButton(Transform canvasTransform)
-        {
-            var go = new GameObject("SaveButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            go.transform.SetParent(canvasTransform, false);
-            go.transform.SetAsFirstSibling();
-            var rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
-            rect.anchoredPosition = new Vector2(-(AdvanceButton.Margin + AdvanceButton.ButtonSize.x + TopRightSpacing), SmallButtonTop);
-            rect.sizeDelta = SmallButtonSize;
-            go.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
-            CreateFillText(go.transform, "저장", 15);
-            go.GetComponent<Button>().onClick.AddListener(() =>
-                ToastLog.Show(SaveSystem.Save() ? $"저장했습니다 ({GameCalendar.Format(GameClock.CurrentDay)})" : "저장에 실패했습니다"));
         }
 
         private static Button CreateSkipButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick)
@@ -346,7 +337,7 @@ namespace GN3.UI
             var layout = go.GetComponent<LayoutElement>();
             layout.minHeight = 40f;
             var text = go.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 18;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.MiddleLeft;
@@ -372,7 +363,7 @@ namespace GN3.UI
             var layout = go.GetComponent<LayoutElement>();
             layout.minHeight = 40f;
             var text = go.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 16;
             text.alignment = TextAnchor.MiddleLeft;
             text.color = UITheme.BodyText;
@@ -481,7 +472,7 @@ namespace GN3.UI
 
             var text = go.GetComponent<Text>();
             text.text = content;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = fontSize;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;

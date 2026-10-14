@@ -21,6 +21,10 @@ namespace GN3.UI
         private Text _when;
         private Text _body;
         private ScrollRect _scroll;
+        private RectTransform _panelRect, _bodyView; // 본문 길이에 맞춰 높이를 줄인다(FitToBody)
+
+        private const float MinBodyHeight = 90f;
+        private const float ChromeHeight = 170f; // 판 높이 - 본문 칸 높이(제목 줄 + 버튼 줄 + 여백)
         private GameObject _arrivalRow;
         private GameObject _noticeRow;
         private Font _font;
@@ -79,15 +83,26 @@ namespace GN3.UI
 
             _root.SetActive(true);
             LayoutRebuilder.ForceRebuildLayoutImmediate(_body.rectTransform);
+            FitToBody();
             _scroll.verticalNormalizedPosition = 1f;
             UIThemeApplier.ApplyNow(_root.transform);
+        }
+
+        /// <summary>본문 칸을 글 길이에 맞춘다(MinBodyHeight ~ 원래 높이, 넘치면 스크롤). 판도 같이 줄어 짧은 알림에 빈 회색 칸이 남지 않는다.</summary>
+        private void FitToBody()
+        {
+            float bodyHeight = Mathf.Clamp(_body.preferredHeight + 20f, MinBodyHeight, Height - ChromeHeight);
+            _bodyView.sizeDelta = new Vector2(_bodyView.sizeDelta.x, bodyHeight);
+            _panelRect.sizeDelta = new Vector2(_panelRect.sizeDelta.x, bodyHeight + ChromeHeight);
         }
 
         private void Close()
         {
             _current = null;
             _root.SetActive(false);
-            // 멈춤은 다음 Update에서 다음 편지가 없을 때 푼다(연달아 뜰 때 잠깐 풀렸다 멈추지 않게).
+            // 다음 편지가 없으면 바로 멈춤을 푼다("확인" 직후 누른 진행·건너뛰기가 무시되지 않게).
+            // 다음 편지가 있으면 멈춘 채로 두고 다음 Update가 띄운다(연달아 뜰 때 잠깐 풀렸다 멈추지 않게).
+            if (Mailbox.NextUnacknowledgedImportant() == null) GamePause.Pop(this);
         }
 
         private void Confirm()
@@ -108,8 +123,8 @@ namespace GN3.UI
         private void Auto()
         {
             var mail = _current;
+            MailActions.AutoFight(mail.Expedition); // 결과 편지가 다음 차례로 뜬다 — 먼저 만들어 두어 Close가 멈춤을 풀지 않게
             Confirm();
-            MailActions.AutoFight(mail.Expedition); // 결과 편지가 다음 차례로 뜬다
         }
 
         private void Direct()
@@ -132,7 +147,7 @@ namespace GN3.UI
 
         private void Build()
         {
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
 
             // 뒤 화면 클릭 막기(화면 전체 어둡게 — 테마 자동 적용에서 빠지는 전체 화면 막)
             _root = new GameObject("Dim", typeof(RectTransform), typeof(Image));
@@ -145,7 +160,7 @@ namespace GN3.UI
 
             var panel = new GameObject("AlertPanel", typeof(RectTransform), typeof(Image));
             panel.transform.SetParent(_root.transform, false);
-            var rect = panel.GetComponent<RectTransform>();
+            var rect = _panelRect = panel.GetComponent<RectTransform>();
             rect.sizeDelta = new Vector2(Width, Height);
             rect.anchoredPosition = new Vector2(0f, 30f);
             panel.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.13f, 0.97f);
@@ -159,12 +174,18 @@ namespace GN3.UI
             _title = CreateText(panel.transform, "", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             _title.fontStyle = FontStyle.Bold;
             _title.supportRichText = true;
+            _title.resizeTextForBestFit = true; // 긴 퀘스트 제목은 두 줄로 넘치지 않고 작아진다
+            _title.verticalOverflow = VerticalWrapMode.Truncate; // 크기 맞춤은 칸을 넘치지 못하게 해야 동작한다
+            _title.horizontalOverflow = HorizontalWrapMode.Wrap;
+            _title.resizeTextMinSize = UITheme.HeadingSize - 2;
+            _title.resizeTextMaxSize = UITheme.TitleSize;
             Place(_title.rectTransform, new Vector2(22f, -48f), new Vector2(Width - 44f, 36f));
 
             // 본문(길면 스크롤)
             var view = new GameObject("Body", typeof(RectTransform), typeof(Image), typeof(ScrollRect), typeof(RectMask2D));
             view.transform.SetParent(panel.transform, false);
-            Place(view.GetComponent<RectTransform>(), new Vector2(18f, -92f), new Vector2(Width - 36f, Height - 170f));
+            _bodyView = view.GetComponent<RectTransform>();
+            Place(_bodyView, new Vector2(18f, -92f), new Vector2(Width - 36f, Height - ChromeHeight));
             view.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f); // UIThemeApplier가 어두운 칸으로
             _body = CreateText(view.transform, "", 16, TextAnchor.UpperLeft, UITheme.BodyText);
             _body.supportRichText = true;

@@ -26,7 +26,7 @@ namespace GN3.UI
 
             var text = go.GetComponent<Text>();
             text.text = name;
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 16;
             text.fontStyle = FontStyle.Bold;
             text.alignment = TextAnchor.LowerCenter;

@@ -88,7 +88,7 @@ namespace GN3.UI
             Stretch(label.GetComponent<RectTransform>());
             var text = label.GetComponent<Text>();
             text.text = "관계";
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 17;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
@@ -259,7 +259,7 @@ namespace GN3.UI
 
         private void Build()
         {
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
             _white = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
             _white.name = "RelationsWhite"; // 자기 그림으로 보여 테마가 색을 바꾸지 않는다
 

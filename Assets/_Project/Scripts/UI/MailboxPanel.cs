@@ -269,7 +269,7 @@ namespace GN3.UI
 
         private void Build()
         {
-            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _font = UITheme.Font;
 
             _panel = new GameObject("MailboxPanel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);

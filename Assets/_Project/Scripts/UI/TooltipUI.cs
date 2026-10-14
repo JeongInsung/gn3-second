@@ -61,7 +61,7 @@ namespace GN3.UI
             var textGO = new GameObject("Text", typeof(RectTransform), typeof(Text));
             textGO.transform.SetParent(tooltipGO.transform, false);
             var text = textGO.GetComponent<Text>();
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = UITheme.Font;
             text.fontSize = 16;
             text.color = Color.white;
             text.horizontalOverflow = HorizontalWrapMode.Overflow;

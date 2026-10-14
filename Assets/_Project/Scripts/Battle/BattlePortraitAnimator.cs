@@ -12,6 +12,7 @@ namespace GN3.Battle
     /// 실시간으로 갈아 끼운다. 클립마다 있는 파츠가 다를 수 있어서(검격만 weapon/slash_fx가 있는 식)
     /// 처음에 세 클립에 쓰일 수 있는 파츠 레이어를 전부 만들어두고, 그 클립에 없는 파츠는 매 프레임
     /// 레이어 자체를 꺼서 안 보이게 한다(Image.sprite를 null로 비우면 흰 사각형이 뜨는 Unity 기본 동작을 피함).
+    /// 외형(idle로 조합)에 출처가 없는 파츠(검·검광)는 몸 캐릭터 폴더의 것을 쓴다.
     /// 배경 슬롯 이미지가 없어 CharacterPortraitUI와 달리 포트레이트 자리에 네모난 칸이 보이지 않는다.
     /// </summary>
     public class BattlePortraitAnimator : MonoBehaviour
@@ -77,7 +78,21 @@ namespace GN3.Battle
         public void PlayWalk() => Play("walk", true);
 
         /// <summary>검격 1회 재생(비반복). 재생 중엔 PlayIdle/PlayWalk 요청을 무시해 끊기지 않는다.</summary>
-        public void PlaySlash(Action onComplete = null) => Play("slash", false, onComplete);
+        public void PlaySlash(Action onComplete = null) => Play(SlashClip, false, onComplete);
+
+        /// <summary>검격을 계속 반복한다(훈련소 창의 훈련 중인 용병).</summary>
+        public void PlaySlashLoop() => Play(SlashClip, true);
+
+        private const string SlashClip = "slash";
+        // 검광(slash_fx)이 크게 나오는 프레임 = 검이 맞는 순간. 지금 캐릭터 시트는 모두 12프레임 중 5번째(0부터).
+        // (slash_fx 시트는 빈 프레임도 들어 있어 "레이어가 켜지는 순간"으로는 알 수 없다.)
+        private const int SlashHitFrame = 5;
+
+        /// <summary>검이 맞는 순간(검격 SlashHitFrame). 훈련소 허수아비가 받아 흔들린다.</summary>
+        public event Action Hit;
+
+        /// <summary>true면 실제 시간으로 재생한다(UI 창 — 일시정지로 timeScale이 0이어도 움직이게). 전투 씬은 false.</summary>
+        public bool UseUnscaledTime { get; set; }
 
         private void Play(string clip, bool loop, Action onComplete = null)
         {
@@ -99,7 +114,7 @@ namespace GN3.Battle
         private void Update()
         {
             float frameDuration = 1f / Mathf.Max(1, _fps);
-            _timer += Time.deltaTime;
+            _timer += UseUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
             if (_timer < frameDuration) return;
             _timer -= frameDuration;
             _frame++;
@@ -139,7 +154,9 @@ namespace GN3.Battle
                 string part = kv.Key;
                 var layer = kv.Value;
                 Sprite sprite = null;
-                if (_partSources.TryGetValue(part, out var sourceChar))
+                // 외형은 idle로 조합돼 검격에만 있는 검·검광(weapon/slash_fx)의 출처가 없다 → 몸 캐릭터 것을 쓴다(손 위치가 맞는다).
+                if (!_partSources.TryGetValue(part, out var sourceChar)) sourceChar = _bodyCharacter;
+                if (!string.IsNullOrEmpty(sourceChar))
                     sprite = CharacterAnimLibrary.LoadFrame(sourceChar, _clip, part, _frame);
 
                 if (sprite == null)
@@ -150,6 +167,7 @@ namespace GN3.Battle
                 layer.sprite = sprite;
                 layer.gameObject.SetActive(true);
             }
+            if (_clip == SlashClip && _frame == SlashHitFrame) Hit?.Invoke();
         }
     }
 }

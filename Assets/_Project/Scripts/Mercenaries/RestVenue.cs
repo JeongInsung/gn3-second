@@ -108,6 +108,18 @@ namespace GN3.Mercenaries
             return true;
         }
 
+        /// <summary>쉼터 조건(eligible)을 채우는지(연구소 = 마법사·수련 최대 아님·안 지침 등). 조건이 없으면 true.</summary>
+        public bool IsEligible(Mercenary merc) => merc != null && (_eligible == null || _eligible(merc));
+
+        /// <summary>쉼터에서 내보낸다(플레이어가 "빼기"). 그때까지 쌓인 효과는 그대로 남는다.</summary>
+        public bool Remove(Mercenary merc)
+        {
+            if (merc == null || !_guestIds.Remove(merc.Id)) return false;
+            Forget(merc.Id);
+            OnChanged?.Invoke();
+            return true;
+        }
+
         /// <summary>이번에 남은 시간(게임 시간).</summary>
         public float RemainingHours(Mercenary merc) =>
             merc != null && _remainingHours.TryGetValue(merc.Id, out float h) ? h : 0f;
@@ -196,7 +208,7 @@ namespace GN3.Mercenaries
                 if (morale > 0) parts.Add($"사기 +{morale}");
                 if (relief > 0) parts.Add($"피로 -{relief}");
                 else if (relief < 0) parts.Add($"피로 +{-relief}");
-                DailyLog.Add($"{merc.Name}이(가) {Name}에서 쉬었다" + (parts.Count > 0 ? $" ({string.Join(" · ", parts)})." : "."));
+                DailyLog.Add($"{Josa.IGa(merc.Name)} {Name}에서 쉬었다" + (parts.Count > 0 ? $" ({string.Join(" · ", parts)})." : "."));
             }
             OnChanged?.Invoke();
         }
@@ -258,8 +270,7 @@ namespace GN3.Mercenaries
             ConditionTuning.HotSpringMinHours, ConditionTuning.HotSpringMaxHours,
             ConditionTuning.HotSpringFatigueReliefPerHour, ConditionTuning.HotSpringMoralePerHour, false,
             merc => ConditionTuning.HotSpringVisitChance(merc.Fatigue),
-            $"지친 용병들이 가끔 스스로 찾아와 {ConditionTuning.HotSpringMinHours:0}~{ConditionTuning.HotSpringMaxHours:0}시간 쉬며 피로를 풉니다. " +
-            $"1시간마다 피로 -{ConditionTuning.HotSpringFatigueReliefPerHour:0}, 사기 +{ConditionTuning.HotSpringMoralePerHour:0}. (최대 {ConditionTuning.HotSpringCapacity}명)",
+            $"지친 용병이 쉬며 피로를 푸는 곳. 직접 보내거나 스스로 찾아옵니다. (최대 {ConditionTuning.HotSpringCapacity}명)",
             $"피로 -{ConditionTuning.HotSpringFatigueReliefPerHour:0} · 사기 +{ConditionTuning.HotSpringMoralePerHour:0}");
 
         public static readonly RestVenue GamblingDen = new RestVenue(
@@ -267,8 +278,7 @@ namespace GN3.Mercenaries
             ConditionTuning.GamblingMinHours, ConditionTuning.GamblingMaxHours,
             ConditionTuning.GamblingFatigueReliefPerHour, ConditionTuning.GamblingMoralePerHour, true,
             merc => ConditionTuning.GamblingVisitChance(merc.Fatigue, merc.Morale),
-            $"사기가 떨어지거나 지친 용병들이 가끔 스스로 찾아와 {ConditionTuning.GamblingMinHours:0}~{ConditionTuning.GamblingMaxHours:0}시간 놀다 갑니다. " +
-            $"1시간마다 사기 +{ConditionTuning.GamblingMoralePerHour:0}(사기 {ConditionTuning.GamblingMoraleCap} 미만일 때), 피로 -{ConditionTuning.GamblingFatigueReliefPerHour:0}. 밤에도 엽니다. (최대 {ConditionTuning.GamblingCapacity}명)",
+            $"사기가 떨어진 용병이 기분을 푸는 곳(사기 {ConditionTuning.GamblingMoraleCap} 미만일 때만 오름). 밤에도 엽니다. (최대 {ConditionTuning.GamblingCapacity}명)",
             $"사기 +{ConditionTuning.GamblingMoralePerHour:0} · 피로 -{ConditionTuning.GamblingFatigueReliefPerHour:0}",
             moraleCap: ConditionTuning.GamblingMoraleCap);
 
@@ -276,8 +286,7 @@ namespace GN3.Mercenaries
             "마법 연구소", "터키석 수정의 마법사 연구소", 0.41f, ConditionTuning.StudyCapacity,
             ConditionTuning.StudyMinHours, ConditionTuning.StudyMaxHours, -StudyFatiguePerHour, 0f, false,
             merc => ConditionTuning.StudyVisitChance,
-            $"마법사들이 가끔 스스로 찾아와 {ConditionTuning.StudyMinHours:0}~{ConditionTuning.StudyMaxHours:0}시간 연구합니다. 연구 {Mercenary.ResearchHoursPerBonus:0}시간마다 마력 +1 영구 상승(최대 +{Mercenary.MaxResearchLevel}). " +
-            $"1시간마다 피로 +{StudyFatiguePerHour:0}. 마법사만 이용할 수 있습니다. (최대 {ConditionTuning.StudyCapacity}명)",
+            $"마법사가 연구해 마력을 영구히 올리는 곳(최대 +{Mercenary.MaxResearchLevel}). 마법사 전용. (최대 {ConditionTuning.StudyCapacity}명)",
             $"{Mercenary.ResearchHoursPerBonus:0}시간마다 마력 +1 · 피로 +{StudyFatiguePerHour:0}",
             eligible: merc => merc.Class.Kind == MercenaryClassKind.Mage && merc.CanResearchMore && !merc.IsExhausted,
             onStayed: Research);
@@ -286,8 +295,7 @@ namespace GN3.Mercenaries
             "성당", "장미창과 종탑의 중세 성당", 0.49f, ConditionTuning.StudyCapacity,
             ConditionTuning.StudyMinHours, ConditionTuning.StudyMaxHours, -StudyFatiguePerHour, ConditionTuning.StudyMoralePerHour, false,
             merc => ConditionTuning.StudyVisitChance,
-            $"힐러들이 가끔 스스로 찾아와 {ConditionTuning.StudyMinHours:0}~{ConditionTuning.StudyMaxHours:0}시간 기도합니다. 기도 {Mercenary.ResearchHoursPerBonus:0}시간마다 신성력 +{Mercenary.HealerHolyPerResearchLevel} 영구 상승(최대 {Mercenary.MaxResearchLevel}단계). " +
-            $"1시간마다 피로 +{StudyFatiguePerHour:0}, 사기 +{ConditionTuning.StudyMoralePerHour:0}. 힐러만 이용할 수 있습니다. (최대 {ConditionTuning.StudyCapacity}명)",
+            $"힐러가 기도해 신성력을 영구히 올리는 곳(최대 {Mercenary.MaxResearchLevel}단계). 힐러 전용. (최대 {ConditionTuning.StudyCapacity}명)",
             $"{Mercenary.ResearchHoursPerBonus:0}시간마다 신성력 +{Mercenary.HealerHolyPerResearchLevel} · 피로 +{StudyFatiguePerHour:0}",
             eligible: merc => merc.Class.Kind == MercenaryClassKind.Healer && merc.CanResearchMore && !merc.IsExhausted,
             onStayed: Research);
@@ -304,7 +312,7 @@ namespace GN3.Mercenaries
             if (gained <= 0) return;
             string label = merc.ResearchLabel;
             ToastLog.Show($"{label}: {merc.Name} {merc.ResearchLevel}단계 달성 (총 {merc.ResearchBonusText()})");
-            DailyLog.Add($"{merc.Name}이(가) {label}로 능력치가 올랐다. ({label} {merc.ResearchLevel}단계 · {merc.ResearchBonusText()})");
+            DailyLog.Add($"{Josa.IGa(merc.Name)} {label}로 능력치가 올랐다. ({label} {merc.ResearchLevel}단계 · {merc.ResearchBonusText()})");
         }
 
         /// <summary>어느 쉼터든 들어가 있거나 나가면 울린다.</summary>
