@@ -91,6 +91,28 @@ namespace GN3.Battle
         // (slash_fx 시트는 빈 프레임도 들어 있어 "레이어가 켜지는 순간"으로는 알 수 없다.)
         private const int SlashHitFrame = 5;
 
+        /// <summary>검격 시작부터 검이 맞는 순간(SlashHitFrame)까지(초). 전투 피격 연출을 이만큼 늦춘다.</summary>
+        public float SlashHitDelay => SlashHitFrame / (float)SlashFps;
+
+        /// <summary>검격 한 번 전체 길이(초). 그동안 그 용병은 움직이지 않는다(FieldUnit.AttackAnimSeconds).</summary>
+        public float SlashSeconds
+        {
+            get
+            {
+                var frames = CharacterAnimLibrary.LoadFrames(_bodyCharacter, SlashClip, CharacterPartId.Torso);
+                return (frames.Length > 0 ? frames.Length : 1) / (float)SlashFps;
+            }
+        }
+
+        private int SlashFps
+        {
+            get
+            {
+                var manifest = CharacterAnimLibrary.LoadManifest(_bodyCharacter, SlashClip);
+                return manifest != null && manifest.fps > 0 ? manifest.fps : DefaultFps;
+            }
+        }
+
         /// <summary>검이 맞는 순간(검격 SlashHitFrame). 훈련소 허수아비가 받아 흔들린다.</summary>
         public event Action Hit;
 

@@ -49,6 +49,29 @@ namespace GN3.UI
             title.fontSize = TitleSize;
         }
 
+        /// <summary>테마 버튼: 숯빛 버튼 그림 + 마우스를 올리면 밝게·누르면 어둡게·꺼지면 흐리게 + 크기 반응(ButtonFeedback).
+        /// UIThemeApplier가 자동으로 입히는 것과 같다. 직접 만든 창이 다음 스캔을 기다리지 않고 바로 입힐 때 쓴다.</summary>
+        public static void StyleButton(UnityEngine.UI.Button button)
+        {
+            var image = button.GetComponent<UnityEngine.UI.Image>();
+            if (image != null)
+            {
+                image.sprite = Button;
+                image.type = UnityEngine.UI.Image.Type.Sliced;
+                image.fillCenter = true;
+                image.color = Color.white;
+            }
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.15f, 1.1f, 1.05f, 1f);
+            colors.pressedColor = new Color(0.75f, 0.7f, 0.7f, 1f);
+            colors.selectedColor = Color.white;
+            colors.disabledColor = new Color(0.55f, 0.5f, 0.5f, 0.6f);
+            colors.colorMultiplier = 1f;
+            button.colors = colors;
+            if (button.GetComponent<ButtonFeedback>() == null) button.gameObject.AddComponent<ButtonFeedback>();
+        }
+
         /// <summary>11~14 → 13, 15~17 → 16, 18~19 → 18, 20~29 → 24(UIThemeApplier가 20 이상을 제목으로 본다). 30 이상(큰 숫자 연출)과 10 이하는 그대로.</summary>
         public static int SnapSize(int size) =>
             size <= 10 || size >= 30 ? size

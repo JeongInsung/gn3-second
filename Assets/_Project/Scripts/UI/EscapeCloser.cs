@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 namespace GN3.UI
 {
@@ -114,7 +115,8 @@ namespace GN3.UI
                     topOrder = order;
                 }
             }
-            top?.TryClose();
+            if (top != null) top.TryClose();
+            else if (SceneManager.GetActiveScene().name == "MainScene") PauseMenu.Open(); // 열린 창이 없으면 메뉴(계속하기 · 설정 · 타이틀로)
         }
 
         /// <summary>새 Main 창이 열렸다: 이번 프레임에 같이 열린 창을 빼고, 열려 있던 Main·Linked 창을 닫는다(Popup은 그대로).</summary>

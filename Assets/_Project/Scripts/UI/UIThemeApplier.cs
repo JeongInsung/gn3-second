@@ -85,17 +85,7 @@ namespace GN3.UI
 
             if (isButton)
             {
-                SetSprite(image, UITheme.Button, Color.white);
-                var button = image.GetComponent<Button>();
-                var colors = button.colors;
-                colors.normalColor = Color.white;
-                colors.highlightedColor = new Color(1.15f, 1.1f, 1.05f, 1f);
-                colors.pressedColor = new Color(0.75f, 0.7f, 0.7f, 1f);
-                colors.selectedColor = Color.white;
-                colors.disabledColor = new Color(0.55f, 0.5f, 0.5f, 0.6f);
-                colors.colorMultiplier = 1f;
-                button.colors = colors;
-                if (button.GetComponent<ButtonFeedback>() == null) button.gameObject.AddComponent<ButtonFeedback>();
+                UITheme.StyleButton(image.GetComponent<Button>());
                 return true;
             }
 

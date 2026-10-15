@@ -1,0 +1,1469 @@
+fileFormatVersion: 2
+guid: 67a487d1c65c6354e8fbc25a15ab1230
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 200283038253669613
+    second: goblin_archer_die_0
+  - first:
+      213: -2450466161055693542
+    second: goblin_archer_die_1
+  - first:
+      213: 6489830736607071539
+    second: goblin_archer_die_2
+  - first:
+      213: -2844557855579543574
+    second: goblin_archer_die_3
+  - first:
+      213: 9209120124192108854
+    second: goblin_archer_die_4
+  - first:
+      213: 8642767242617704053
+    second: goblin_archer_die_5
+  - first:
+      213: 2412396791081668245
+    second: goblin_archer_die_6
+  - first:
+      213: 2588843504436289917
+    second: goblin_archer_die_7
+  - first:
+      213: -3014653379369552933
+    second: goblin_archer_die_8
+  - first:
+      213: 4270797235645566485
+    second: goblin_archer_die_9
+  - first:
+      213: 6840702342532954042
+    second: goblin_archer_die_10
+  - first:
+      213: 5818699404489870870
+    second: goblin_archer_die_11
+  - first:
+      213: -1088719842625882337
+    second: goblin_archer_die_12
+  - first:
+      213: -4933461503411594332
+    second: goblin_archer_die_13
+  - first:
+      213: -380053782063439875
+    second: goblin_archer_die_14
+  - first:
+      213: -743183265237692159
+    second: goblin_archer_die_15
+  - first:
+      213: -7466621835406007690
+    second: goblin_archer_die_16
+  - first:
+      213: 7550321019527254662
+    second: goblin_archer_die_17
+  - first:
+      213: -9200399558197238093
+    second: goblin_archer_die_18
+  - first:
+      213: 5457110026859089429
+    second: goblin_archer_die_19
+  - first:
+      213: -7046121425450704880
+    second: goblin_archer_die_20
+  - first:
+      213: -2739849101991619408
+    second: goblin_archer_die_21
+  - first:
+      213: 3713506144959342782
+    second: goblin_archer_die_22
+  - first:
+      213: 1142356624223900963
+    second: goblin_archer_die_23
+  - first:
+      213: 3534123479192857076
+    second: goblin_archer_die_24
+  - first:
+      213: 3583170311940107802
+    second: goblin_archer_die_25
+  - first:
+      213: 6399371256965950578
+    second: goblin_archer_die_26
+  - first:
+      213: 6686735324224893247
+    second: goblin_archer_die_27
+  - first:
+      213: 3358188205205106215
+    second: goblin_archer_die_28
+  - first:
+      213: 4924786754724827806
+    second: goblin_archer_die_29
+  - first:
+      213: -6917920261189470651
+    second: goblin_archer_die_30
+  - first:
+      213: -1521657266624170222
+    second: goblin_archer_die_31
+  - first:
+      213: -7860487006522516189
+    second: goblin_archer_die_32
+  - first:
+      213: 71747498467949884
+    second: goblin_archer_die_33
+  - first:
+      213: -3858368367166839091
+    second: goblin_archer_die_34
+  - first:
+      213: -5707301158568775771
+    second: goblin_archer_die_35
+  - first:
+      213: 6229632906828380907
+    second: goblin_archer_die_36
+  - first:
+      213: -2084990683537910140
+    second: goblin_archer_die_37
+  - first:
+      213: 5392757652952359314
+    second: goblin_archer_die_38
+  - first:
+      213: 923978005012650492
+    second: goblin_archer_die_39
+  - first:
+      213: 1139369988598810949
+    second: goblin_archer_die_40
+  - first:
+      213: -5037542834594269706
+    second: goblin_archer_die_41
+  - first:
+      213: -2467269578429986284
+    second: goblin_archer_die_42
+  - first:
+      213: 1795131490499943823
+    second: goblin_archer_die_43
+  - first:
+      213: -2779890301144425800
+    second: goblin_archer_die_44
+  - first:
+      213: -7645251670099597761
+    second: goblin_archer_die_45
+  - first:
+      213: -9189594931992009511
+    second: goblin_archer_die_46
+  - first:
+      213: -3604980614813022500
+    second: goblin_archer_die_47
+  - first:
+      213: -106349622779914290
+    second: goblin_archer_die_48
+  - first:
+      213: -2352236862328365687
+    second: goblin_archer_die_49
+  - first:
+      213: -1162209881194918770
+    second: goblin_archer_die_50
+  - first:
+      213: 1869815723049502507
+    second: goblin_archer_die_51
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: goblin_archer_die_0
+      rect:
+        serializedVersion: 2
+        x: 98
+        y: 594
+        width: 433
+        height: 473
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dec55a5bc5c87c200800000000000000
+      internalID: 200283038253669613
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_1
+      rect:
+        serializedVersion: 2
+        x: 435
+        y: 1061
+        width: 52
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a15092872023efdd0800000000000000
+      internalID: -2450466161055693542
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_2
+      rect:
+        serializedVersion: 2
+        x: 477
+        y: 1056
+        width: 10
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 33d40eb9ba2801a50800000000000000
+      internalID: 6489830736607071539
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_3
+      rect:
+        serializedVersion: 2
+        x: 594
+        y: 596
+        width: 477
+        height: 473
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ae7622393b91688d0800000000000000
+      internalID: -2844557855579543574
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_4
+      rect:
+        serializedVersion: 2
+        x: 971
+        y: 1066
+        width: 10
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6313f5006fd5dcf70800000000000000
+      internalID: 9209120124192108854
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_5
+      rect:
+        serializedVersion: 2
+        x: 971
+        y: 1048
+        width: 10
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 57e4c9c040741f770800000000000000
+      internalID: 8642767242617704053
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_6
+      rect:
+        serializedVersion: 2
+        x: 977
+        y: 1048
+        width: 96
+        height: 33
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 59e07bd991e8a7120800000000000000
+      internalID: 2412396791081668245
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_7
+      rect:
+        serializedVersion: 2
+        x: 1182
+        y: 1056
+        width: 18
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d71a005737b6de320800000000000000
+      internalID: 2588843504436289917
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_8
+      rect:
+        serializedVersion: 2
+        x: 1225
+        y: 989
+        width: 134
+        height: 92
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bd33fb949bcc926d0800000000000000
+      internalID: -3014653379369552933
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_9
+      rect:
+        serializedVersion: 2
+        x: 1266
+        y: 999
+        width: 6
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 51ecf5a457be44b30800000000000000
+      internalID: 4270797235645566485
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_10
+      rect:
+        serializedVersion: 2
+        x: 1281
+        y: 1013
+        width: 15
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ab7fbd4798e0fee50800000000000000
+      internalID: 6840702342532954042
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_11
+      rect:
+        serializedVersion: 2
+        x: 1426
+        y: 1040
+        width: 52
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 61e4563974c20c050800000000000000
+      internalID: 5818699404489870870
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_12
+      rect:
+        serializedVersion: 2
+        x: 1458
+        y: 1029
+        width: 14
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f177d58421714e0f0800000000000000
+      internalID: -1088719842625882337
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_13
+      rect:
+        serializedVersion: 2
+        x: 1469
+        y: 991
+        width: 43
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4ab5618b6e2d88bb0800000000000000
+      internalID: -4933461503411594332
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_14
+      rect:
+        serializedVersion: 2
+        x: 1509
+        y: 800
+        width: 105
+        height: 265
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dff909c4917c9baf0800000000000000
+      internalID: -380053782063439875
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_15
+      rect:
+        serializedVersion: 2
+        x: 1715
+        y: 917
+        width: 122
+        height: 85
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1011e7002ceafa5f0800000000000000
+      internalID: -743183265237692159
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_16
+      rect:
+        serializedVersion: 2
+        x: 1813
+        y: 1007
+        width: 42
+        height: 66
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6722374200b316890800000000000000
+      internalID: -7466621835406007690
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_17
+      rect:
+        serializedVersion: 2
+        x: 1817
+        y: 993
+        width: 10
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6825615c6f028c860800000000000000
+      internalID: 7550321019527254662
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_18
+      rect:
+        serializedVersion: 2
+        x: 1826
+        y: 979
+        width: 27
+        height: 32
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3b62efdf85d915080800000000000000
+      internalID: -9200399558197238093
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_19
+      rect:
+        serializedVersion: 2
+        x: 1852
+        y: 979
+        width: 25
+        height: 37
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 51e882b08ac8bbb40800000000000000
+      internalID: 5457110026859089429
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_20
+      rect:
+        serializedVersion: 2
+        x: 1872
+        y: 1014
+        width: 27
+        height: 37
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 010edbf35e5273e90800000000000000
+      internalID: -7046121425450704880
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_21
+      rect:
+        serializedVersion: 2
+        x: 1876
+        y: 961
+        width: 39
+        height: 51
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0b4dd9112c91af9d0800000000000000
+      internalID: -2739849101991619408
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_22
+      rect:
+        serializedVersion: 2
+        x: 1896
+        y: 1044
+        width: 21
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: eb82881f926098330800000000000000
+      internalID: 3713506144959342782
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_23
+      rect:
+        serializedVersion: 2
+        x: 1898
+        y: 995
+        width: 36
+        height: 50
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3251ea91c477adf00800000000000000
+      internalID: 1142356624223900963
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_24
+      rect:
+        serializedVersion: 2
+        x: 1942
+        y: 995
+        width: 82
+        height: 63
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4f968a9649abb0130800000000000000
+      internalID: 3534123479192857076
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_25
+      rect:
+        serializedVersion: 2
+        x: 2009
+        y: 892
+        width: 72
+        height: 117
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a1e6aec0a6af9b130800000000000000
+      internalID: 3583170311940107802
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_26
+      rect:
+        serializedVersion: 2
+        x: 1130
+        y: 594
+        width: 426
+        height: 390
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 27cec4db0422fc850800000000000000
+      internalID: 6399371256965950578
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_27
+      rect:
+        serializedVersion: 2
+        x: 1511
+        y: 951
+        width: 29
+        height: 32
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f313b7b795e0ccc50800000000000000
+      internalID: 6686735324224893247
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_28
+      rect:
+        serializedVersion: 2
+        x: 1981
+        y: 974
+        width: 19
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 72e2824516eaa9e20800000000000000
+      internalID: 3358188205205106215
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_29
+      rect:
+        serializedVersion: 2
+        x: 1587
+        y: 957
+        width: 6
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e921ce5f57b585440800000000000000
+      internalID: 4924786754724827806
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_30
+      rect:
+        serializedVersion: 2
+        x: 1850
+        y: 951
+        width: 21
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 546f257dc2c9eff90800000000000000
+      internalID: -6917920261189470651
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_31
+      rect:
+        serializedVersion: 2
+        x: 2041
+        y: 944
+        width: 24
+        height: 26
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 21779f037ccf1eae0800000000000000
+      internalID: -1521657266624170222
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_32
+      rect:
+        serializedVersion: 2
+        x: 493
+        y: 902
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 32dd6a6d6b0f9e290800000000000000
+      internalID: -7860487006522516189
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_33
+      rect:
+        serializedVersion: 2
+        x: 1681
+        y: 604
+        width: 399
+        height: 299
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c3d74bf38f5eef000800000000000000
+      internalID: 71747498467949884
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_34
+      rect:
+        serializedVersion: 2
+        x: 1846
+        y: 925
+        width: 47
+        height: 23
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dc6aa6e9962547ac0800000000000000
+      internalID: -3858368367166839091
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_35
+      rect:
+        serializedVersion: 2
+        x: 1846
+        y: 896
+        width: 25
+        height: 26
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5af2559b5d79bc0b0800000000000000
+      internalID: -5707301158568775771
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_36
+      rect:
+        serializedVersion: 2
+        x: 1858
+        y: 929
+        width: 7
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: beaf69c6f1a147650800000000000000
+      internalID: 6229632906828380907
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_37
+      rect:
+        serializedVersion: 2
+        x: 1870
+        y: 892
+        width: 21
+        height: 35
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 48659b32500a013e0800000000000000
+      internalID: -2084990683537910140
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_38
+      rect:
+        serializedVersion: 2
+        x: 1922
+        y: 890
+        width: 76
+        height: 64
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 291aef7638ce6da40800000000000000
+      internalID: 5392757652952359314
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_39
+      rect:
+        serializedVersion: 2
+        x: 2035
+        y: 896
+        width: 7
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cf99d01a911a2dc00800000000000000
+      internalID: 923978005012650492
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_40
+      rect:
+        serializedVersion: 2
+        x: 2047
+        y: 886
+        width: 10
+        height: 18
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5494c2ec7fadfcf00800000000000000
+      internalID: 1139369988598810949
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_41
+      rect:
+        serializedVersion: 2
+        x: 2049
+        y: 915
+        width: 16
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6f5b1336b7d071ab0800000000000000
+      internalID: -5037542834594269706
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_42
+      rect:
+        serializedVersion: 2
+        x: 2059
+        y: 921
+        width: 14
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 41a8d8cf36f72cdd0800000000000000
+      internalID: -2467269578429986284
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_43
+      rect:
+        serializedVersion: 2
+        x: 2067
+        y: 886
+        width: 10
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f8ddd50649699e810800000000000000
+      internalID: 1795131490499943823
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_44
+      rect:
+        serializedVersion: 2
+        x: 2076
+        y: 917
+        width: 37
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8ba9bb5ef78db69d0800000000000000
+      internalID: -2779890301144425800
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_45
+      rect:
+        serializedVersion: 2
+        x: 1563
+        y: 771
+        width: 12
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f366041cc1c96e590800000000000000
+      internalID: -7645251670099597761
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_46
+      rect:
+        serializedVersion: 2
+        x: 1006
+        y: 677
+        width: 11
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9d4e2e01910087080800000000000000
+      internalID: -9189594931992009511
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_47
+      rect:
+        serializedVersion: 2
+        x: 477
+        y: 653
+        width: 7
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cd686e71b3988fdc0800000000000000
+      internalID: -3604980614813022500
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_48
+      rect:
+        serializedVersion: 2
+        x: 483
+        y: 652
+        width: 6
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ec7d430e49b268ef0800000000000000
+      internalID: -106349622779914290
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_49
+      rect:
+        serializedVersion: 2
+        x: 981
+        y: 594
+        width: 23
+        height: 21
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 98d9651590d2b5fd0800000000000000
+      internalID: -2352236862328365687
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_50
+      rect:
+        serializedVersion: 2
+        x: 981
+        y: 604
+        width: 8
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e8c8dec45400fdfe0800000000000000
+      internalID: -1162209881194918770
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: goblin_archer_die_51
+      rect:
+        serializedVersion: 2
+        x: 2076
+        y: 594
+        width: 19
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b274ecf4e7be2f910800000000000000
+      internalID: 1869815723049502507
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      goblin_archer_die_0: 200283038253669613
+      goblin_archer_die_1: -2450466161055693542
+      goblin_archer_die_10: 6840702342532954042
+      goblin_archer_die_11: 5818699404489870870
+      goblin_archer_die_12: -1088719842625882337
+      goblin_archer_die_13: -4933461503411594332
+      goblin_archer_die_14: -380053782063439875
+      goblin_archer_die_15: -743183265237692159
+      goblin_archer_die_16: -7466621835406007690
+      goblin_archer_die_17: 7550321019527254662
+      goblin_archer_die_18: -9200399558197238093
+      goblin_archer_die_19: 5457110026859089429
+      goblin_archer_die_2: 6489830736607071539
+      goblin_archer_die_20: -7046121425450704880
+      goblin_archer_die_21: -2739849101991619408
+      goblin_archer_die_22: 3713506144959342782
+      goblin_archer_die_23: 1142356624223900963
+      goblin_archer_die_24: 3534123479192857076
+      goblin_archer_die_25: 3583170311940107802
+      goblin_archer_die_26: 6399371256965950578
+      goblin_archer_die_27: 6686735324224893247
+      goblin_archer_die_28: 3358188205205106215
+      goblin_archer_die_29: 4924786754724827806
+      goblin_archer_die_3: -2844557855579543574
+      goblin_archer_die_30: -6917920261189470651
+      goblin_archer_die_31: -1521657266624170222
+      goblin_archer_die_32: -7860487006522516189
+      goblin_archer_die_33: 71747498467949884
+      goblin_archer_die_34: -3858368367166839091
+      goblin_archer_die_35: -5707301158568775771
+      goblin_archer_die_36: 6229632906828380907
+      goblin_archer_die_37: -2084990683537910140
+      goblin_archer_die_38: 5392757652952359314
+      goblin_archer_die_39: 923978005012650492
+      goblin_archer_die_4: 9209120124192108854
+      goblin_archer_die_40: 1139369988598810949
+      goblin_archer_die_41: -5037542834594269706
+      goblin_archer_die_42: -2467269578429986284
+      goblin_archer_die_43: 1795131490499943823
+      goblin_archer_die_44: -2779890301144425800
+      goblin_archer_die_45: -7645251670099597761
+      goblin_archer_die_46: -9189594931992009511
+      goblin_archer_die_47: -3604980614813022500
+      goblin_archer_die_48: -106349622779914290
+      goblin_archer_die_49: -2352236862328365687
+      goblin_archer_die_5: 8642767242617704053
+      goblin_archer_die_50: -1162209881194918770
+      goblin_archer_die_51: 1869815723049502507
+      goblin_archer_die_6: 2412396791081668245
+      goblin_archer_die_7: 2588843504436289917
+      goblin_archer_die_8: -3014653379369552933
+      goblin_archer_die_9: 4270797235645566485
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

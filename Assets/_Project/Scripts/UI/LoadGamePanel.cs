@@ -9,7 +9,7 @@ namespace GN3.UI
     /// 불러오기 창: 저장 기록(SaveSystem.ListSaves, 최신순)을 한 줄씩 보여 주고 골라 불러온다.
     /// 줄: "650년 3월 10일 · 견습 길드 · 용병 3명 · 368G" / "2026-10-14 20:35 · 자동|직접" + [불러오기].
     /// 지금 진행 중 저장하지 않은 부분이 사라지므로 버튼을 한 번 누르면 "정말 불러오기?"로 바뀌고 한 번 더 눌러야 불러온다.
-    /// 오른쪽 위 "불러오기" 버튼과 시작 창(ContinuePrompt)의 "다른 저장 불러오기"가 연다. ESC·X·바깥 어두운 곳으로 닫힌다.
+    /// 오른쪽 위 "불러오기" 버튼과 타이틀 화면(TitleScreen)의 "게임 불러오기"가 연다. ESC·X·바깥 어두운 곳으로 닫힌다.
     /// </summary>
     public class LoadGamePanel : MonoBehaviour
     {
@@ -35,7 +35,7 @@ namespace GN3.UI
             var go = new GameObject("LoadGamePanel", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(LoadGamePanel));
             var canvas = go.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 5; // 시작 창(4)·도착 알림창(3) 위
+            canvas.sortingOrder = 6; // 타이틀 화면(5)·도착 알림창(4)·마을 HUD(3) 위
             var scaler = go.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
