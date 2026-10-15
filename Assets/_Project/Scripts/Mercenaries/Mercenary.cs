@@ -359,20 +359,20 @@ namespace GN3.Mercenaries
         }
 
         /// <summary>
-        /// 성장할 능력치를 직업 성향대로 고른다: 가중치 = 직업 성장치 × 전투력 가중치(공격·마력 4 · 방어 3 · 체력 1 · 속도 2 · 신성력 3, GradeTable.CombatPower와 같음).
+        /// 성장할 능력치를 직업 성향대로 고른다: 가중치 = 직업 성장치(마법사 공격 3 · 체력 3 · 속도 1이면 43% · 43% · 14%).
+        /// 2026-10-16 전투력 가중치(공격 4 · 체력 1 …)를 곱하던 것을 뺐다 — 공격으로 70%까지 쏠려 원거리 직업이 키울수록 체력 낮은 유리대포가 됐다.
         /// 성장치가 0인 능력치(마법사 방어 등)는 오르지 않는다. onlyGrown이면 성장 횟수가 남은 능력치에서만(쇠퇴).
         /// </summary>
         private int PickGrowthStat(Random rng, bool onlyGrown)
         {
             int[] growth = { Class.AttackGrowth, Class.DefenseGrowth, Class.HealthGrowth, Class.MoveSpeedGrowth, Class.HolyGrowth };
             int[] counts = { GrowthAttack, GrowthDefense, GrowthHealth, GrowthSpeed, GrowthHoly };
-            int[] power = { 4, 3, 1, 2, 3 };
             var weights = new int[growth.Length];
             int total = 0;
             for (int i = 0; i < growth.Length; i++)
             {
                 if (onlyGrown && counts[i] <= 0) continue;
-                weights[i] = Math.Max(0, growth[i]) * power[i];
+                weights[i] = Math.Max(0, growth[i]);
                 total += weights[i];
             }
             if (total == 0) // 성장치가 모두 0이거나(이상한 직업) 쇠퇴할 게 남은 능력치의 성장치가 0일 때

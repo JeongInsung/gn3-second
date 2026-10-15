@@ -12,9 +12,9 @@ namespace GN3.World
     public class WeatherEffects : MonoBehaviour
     {
         private const int SortingOrder = 97;      // 새·나비(96) 위
-        private const float RainSpeed = 14f;      // 유닛/초
-        private const float RainSlant = -2.5f;    // 바람에 왼쪽으로 기운다
-        private const float SnowSpeed = 0.9f;
+        internal const float RainSpeed = 14f;      // 유닛/초
+        internal const float RainSlant = -2.5f;    // 바람에 왼쪽으로 기운다
+        internal const float SnowSpeed = 0.9f;
 
         private Camera _camera;
         private float _referenceArea;
@@ -24,9 +24,9 @@ namespace GN3.World
         private bool _clearedForSkip; // 이번 건너뛰기에서 입자를 이미 지웠는지
 
         private const int VeilSortingOrder = 98;   // 비·눈(97) 위, UI 아래 — 빗줄기도 같이 가라앉는다
-        private const float VeilMaxAlpha = 0.12f; // 0.3은 비·흐림에서 화면이 너무 뿌옇게 떠 보였다
-        private static readonly Color VeilGrey = new Color(0.45f, 0.5f, 0.58f);
-        private static readonly Color VeilSnow = new Color(0.88f, 0.9f, 0.96f);
+        internal const float VeilMaxAlpha = 0.06f; // 0.3·0.12도 비·흐림에서 화면이 너무 뿌옇게 떠 보였다
+        internal static readonly Color VeilGrey = new Color(0.45f, 0.5f, 0.58f);
+        internal static readonly Color VeilSnow = new Color(0.88f, 0.9f, 0.96f);
 
         private void Start()
         {
@@ -95,7 +95,7 @@ namespace GN3.World
         }
 
         /// <summary>시작 화면 넓이 기준 초당 개수.</summary>
-        private static float Rate(WeatherKind kind) => kind switch
+        internal static float Rate(WeatherKind kind) => kind switch
         {
             WeatherKind.SunShower => 120f,
             WeatherKind.Rain => 250f,
@@ -196,7 +196,7 @@ namespace GN3.World
         }
 
         /// <summary>2×16 흰 선, 위로 갈수록 투명(빗줄기 꼬리).</summary>
-        private static Texture2D RainTexture()
+        internal static Texture2D RainTexture()
         {
             const int w = 2, h = 16;
             var texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
@@ -208,7 +208,7 @@ namespace GN3.World
         }
 
         /// <summary>8×8 부드러운 흰 점.</summary>
-        private static Texture2D SnowTexture()
+        internal static Texture2D SnowTexture()
         {
             const int size = 8;
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };

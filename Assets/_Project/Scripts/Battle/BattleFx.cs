@@ -220,6 +220,166 @@ namespace GN3.Battle
             if (dim != null) Object.Destroy(dim);
         }
 
+        // ---------- 독 ----------
+
+        /// <summary>독 피해 한 번: 초록 거품 몇 개가 몸에서 피어올라 사라진다.</summary>
+        public static IEnumerator PoisonPuff(RectTransform layer, Vector2 position)
+        {
+            const int count = 5;
+            const float duration = 0.8f;
+            var bubbles = new List<(RectTransform rect, RawImage image, Vector2 drift)>();
+            for (int i = 0; i < count; i++)
+            {
+                var go = new GameObject("PoisonBubble", typeof(RectTransform), typeof(RawImage));
+                go.transform.SetParent(layer, false);
+                var rect = (RectTransform)go.transform;
+                rect.anchorMin = rect.anchorMax = Vector2.zero;
+                rect.anchoredPosition = position + new Vector2(Random.Range(-22f, 22f), Random.Range(-14f, 14f));
+                float size = Random.Range(10f, 18f);
+                rect.sizeDelta = new Vector2(size, size);
+                var image = go.GetComponent<RawImage>();
+                image.texture = BattleDecor.Glow;
+                image.color = new Color(0.55f, 0.95f, 0.3f, 0.9f);
+                image.raycastTarget = false;
+                bubbles.Add((rect, image, new Vector2(Random.Range(-14f, 14f), Random.Range(40f, 70f))));
+            }
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                float k = t / duration;
+                foreach (var (rect, image, drift) in bubbles)
+                {
+                    if (rect == null) continue;
+                    rect.anchoredPosition += drift * Time.deltaTime;
+                    var c = image.color;
+                    c.a = 0.9f * (1f - k);
+                    image.color = c;
+                }
+                yield return null;
+            }
+            foreach (var (rect, _, _) in bubbles)
+                if (rect != null) Object.Destroy(rect.gameObject);
+        }
+
+        /// <summary>날아가는 포자가 흘리는 작은 가루 한 점(살짝 떨어지며 사라진다).</summary>
+        public static IEnumerator SporeMote(RectTransform layer, Vector2 position)
+        {
+            var go = new GameObject("SporeMote", typeof(RectTransform), typeof(RawImage));
+            go.transform.SetParent(layer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.anchoredPosition = position + Random.insideUnitCircle * 6f;
+            float size = Random.Range(6f, 10f);
+            rect.sizeDelta = new Vector2(size, size);
+            var image = go.GetComponent<RawImage>();
+            image.texture = BattleDecor.Glow;
+            image.raycastTarget = false;
+            const float duration = 0.5f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                if (go == null) yield break;
+                rect.anchoredPosition += new Vector2(0f, -20f * Time.deltaTime);
+                image.color = new Color(0.8f, 1f, 0.35f, 0.8f * (1f - t / duration));
+                yield return null;
+            }
+            if (go != null) Object.Destroy(go);
+        }
+
+        /// <summary>중독된 몸에서 계속 피어오르는 초록 거품 한 알(흔들리며 떠올라 사라진다).</summary>
+        public static IEnumerator PoisonBubble(RectTransform layer, Vector2 position)
+        {
+            var go = new GameObject("PoisonBubble", typeof(RectTransform), typeof(RawImage));
+            go.transform.SetParent(layer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.anchoredPosition = position + new Vector2(Random.Range(-20f, 20f), Random.Range(-10f, 10f));
+            float size = Random.Range(9f, 15f);
+            var image = go.GetComponent<RawImage>();
+            image.texture = BattleDecor.Glow;
+            image.raycastTarget = false;
+            float phase = Random.value * 6f;
+            const float duration = 0.9f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                if (go == null) yield break;
+                float k = t / duration;
+                rect.anchoredPosition += new Vector2(Mathf.Sin(phase + t * 9f) * 18f, 55f) * Time.deltaTime;
+                rect.sizeDelta = Vector2.one * size * (0.6f + 0.6f * k);
+                image.color = new Color(0.45f, 1f, 0.3f, 0.95f * (1f - k * k));
+                yield return null;
+            }
+            if (go != null) Object.Destroy(go);
+        }
+
+        /// <summary>중독 꼬리표: 체력 막대 왼쪽의 초록 판에 "독 3"(남은 횟수). 보스 꼬리표처럼 숨 쉬듯 커졌다 작아진다.
+        /// 유닛 루트(발 기준)에 단다 — BattleUnitLabels가 빛 막 위로 옮긴다. 처음엔 꺼져 있다.</summary>
+        public static Text CreatePoisonTag(Transform unitRoot, Vector2 position)
+        {
+            var go = new GameObject("PoisonTag", typeof(RectTransform), typeof(Image), typeof(BossTagPulse));
+            go.transform.SetParent(unitRoot, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0f);
+            rect.pivot = new Vector2(1f, 0f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = new Vector2(46f, 22f);
+            var image = go.GetComponent<Image>();
+            image.color = new Color(0.3f, 0.68f, 0.12f); // 청동 판은 초록을 입히면 거의 검게 보여 단색 판에 테두리만
+            image.raycastTarget = false;
+            var border = go.AddComponent<Outline>();
+            border.effectColor = new Color(0.08f, 0.2f, 0.04f, 1f);
+            border.effectDistance = new Vector2(2f, -2f);
+
+            var labelGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            labelGo.transform.SetParent(go.transform, false);
+            var labelRect = (RectTransform)labelGo.transform;
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+            var text = labelGo.GetComponent<Text>();
+            text.font = UITheme.BoldFont;
+            text.fontSize = 14;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.color = Color.white;
+            text.raycastTarget = false;
+            labelGo.AddComponent<Outline>().effectColor = new Color(0f, 0.2f, 0f, 0.95f);
+            go.SetActive(false);
+            return text;
+        }
+
+        // ---------- 보스 표시 ----------
+
+        /// <summary>보스 머리 위 "BOSS" 꼬리표: 붉은 판(청동 테두리)에 흰 굵은 글씨, 숨 쉬듯 살짝 커졌다 작아진다.
+        /// 유닛 루트(발 기준)에 y 높이로 단다 — 이름·막대처럼 BattleUnitLabels가 빛 막 위로 옮긴다.</summary>
+        public static void CreateBossTag(Transform unitRoot, float y)
+        {
+            var go = new GameObject("BossTag", typeof(RectTransform), typeof(Image), typeof(BossTagPulse));
+            go.transform.SetParent(unitRoot, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = new Vector2(0f, y);
+            rect.sizeDelta = new Vector2(64f, 22f);
+            var image = go.GetComponent<Image>();
+            image.sprite = BarPlate(false); // 체력 막대와 같은 청동 베벨 판
+            image.type = Image.Type.Sliced;
+            image.color = new Color(1f, 0.45f, 0.4f);
+            image.raycastTarget = false;
+
+            var labelGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            labelGo.transform.SetParent(go.transform, false);
+            var labelRect = (RectTransform)labelGo.transform;
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+            var text = labelGo.GetComponent<Text>();
+            text.text = "BOSS";
+            text.font = UITheme.BoldFont;
+            text.fontSize = 14;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.white;
+            text.raycastTarget = false;
+            labelGo.AddComponent<Outline>().effectColor = new Color(0.25f, 0f, 0f, 0.9f);
+        }
+
         // ---------- 분위기 ----------
 
         /// <summary>판 바로 위(유닛 위, 아래 패널·결과창 아래)에 비네트와 떨어지는 잎을 깐다. 클릭은 막지 않는다.</summary>
@@ -416,6 +576,9 @@ namespace GN3.Battle
     {
         Sword,
         Archer,
+        Wolf,
+        Mushroom,
+        GoblinRider,
     }
 
     /// <summary>
@@ -437,7 +600,7 @@ namespace GN3.Battle
         private const float CellSize = 544f;    // 정리된 시트의 칸(clean_monster_sheet.py CELL)
         private const float SourceCell = 443.5f; // 원본 칸 — 그림 크기·발 위치는 이 칸 기준으로 잰 값
         private const float Padding = (CellSize - SourceCell) / 2f;
-        private const float FeetOffset = 0.05f;  // 발이 원본 칸 아래에서 이 비율만큼 떠 있다(그림자 위에 세우려고 그만큼 내린다)
+        private const float DefaultFeetOffset = 0.05f; // 발이 원본 칸 아래에서 이 비율만큼 떠 있다(그림자 위에 세우려고 그만큼 내린다). 고블린 실측
         private const string Folder = "Battle/Monsters/";
 
         private class Sheets
@@ -448,6 +611,8 @@ namespace GN3.Battle
             public float AttackFps;
             public int DieFrames;
             public float DieFps;
+            public float FeetOffset = DefaultFeetOffset; // 발이 원본 칸 아래에서 떠 있는 비율(시트마다 다르다)
+            public float SizeScale = 1f;                  // 전투 화면 크기 배율(BattleUIController의 MonsterSize에 곱한다)
         }
 
         private static readonly Dictionary<MonsterKind, Sheets> Kinds = new Dictionary<MonsterKind, Sheets>
@@ -457,6 +622,7 @@ namespace GN3.Battle
             {
                 Idle = "goblin_idle", Walk = "goblin_walk", Attack = "goblin_attack", Die = "goblin_die",
                 IdleFps = 8f, WalkFps = 10f, AttackFrames = 7, AttackHitFrame = 3, AttackFps = 16f, DieFrames = 4, DieFps = 8f,
+                SizeScale = GoblinSizeScale,
             },
             // 고블린 궁수: 공격 = 사격 7장(원본 아래줄 두 번째, 화살만 따로 날아가는 칸을 뺌), 5번째 장 다음에 활을 놓는다.
             // 걷기 = 8장(원본 윗줄 발 높이가 17px 낮아 맞춰 구움). 쓰러짐 = 원본 윗줄 4장.
@@ -464,8 +630,53 @@ namespace GN3.Battle
             {
                 Idle = "goblin_archer_idle", Walk = "goblin_archer_walk", Attack = "goblin_archer_attack", Die = "goblin_archer_die",
                 IdleFps = 8f, WalkFps = 10f, AttackFrames = 7, AttackHitFrame = 5, AttackFps = 12f, DieFrames = 4, DieFps = 8f,
+                SizeScale = GoblinSizeScale,
+            },
+            // 늑대(다이어울프·얼음늑대): 대기 8장 · 달리기 8장 · 물기 8장(3·4번째 장 으르렁 → 5번째 장 앞으로 뛰어 문다).
+            // 고블린처럼 오른쪽을 보는 그림 그대로 구웠다(적 방향은 UI가 Facing으로 뒤집는다).
+            // 쓰러짐 8장(서 있다 엎드려 눕는다) — bake_monster_set.py --ground로 아랫줄도 발밑에 맞춰 구웠다.
+            // 발이 원본 칸 아래 11.7% 위에 있다(대기 시트 실측).
+            [MonsterKind.Wolf] = new Sheets
+            {
+                Idle = "wolf_idle", Walk = "wolf_walk", Attack = "wolf_attack", Die = "wolf_die",
+                IdleFps = 8f, WalkFps = 12f, AttackFrames = 8, AttackHitFrame = 4, AttackFps = 14f, DieFrames = 8, DieFps = 10f,
+                FeetOffset = 0.117f,
+            },
+            // 독버섯: 걷기 8장 · 포자 공격 8장(움츠렸다가 5번째 장에서 포자를 터뜨린다) · 쓰러짐 8장(갓 밑으로 주저앉는다).
+            // 원거리 몹: 뒷줄에서 연두 포자를 쏘고(FieldBattleSession), 맞히면 독(PoisonSporePassive)을 건다.
+            // 대기 시트는 없어 걷기 첫 장을 숨 쉬듯 늘였다 줄인 8장을 구웠다(bake_monster_set.py --idle).
+            // 공격·쓰러짐은 그림 크기가 달라 걷기 첫 장 크기·발밑에 맞춰 구웠다. 갓이 커서 칸을 많이 채우므로 작게 그린다.
+            [MonsterKind.Mushroom] = new Sheets
+            {
+                Idle = "mushroom_idle", Walk = "mushroom_walk", Attack = "mushroom_attack", Die = "mushroom_die",
+                IdleFps = 6f, WalkFps = 10f, AttackFrames = 8, AttackHitFrame = 4, AttackFps = 12f, DieFrames = 8, DieFps = 10f,
+                FeetOffset = 0.054f, SizeScale = 0.72f,
+            },
+            // 고블린 늑대기수: 대기 8장 · 걷기 8장 · 공격 8장(3번째 장에 검을 치켜들고 4번째 장에 늑대가 뛰어오르며 벤다)
+            // · 쓰러짐 8장(늑대가 엎드리고 고블린이 엎어진다). 공격·쓰러짐 시트가 작게 그려져 대기 크기에 맞춰 키우면 칸을 넘어
+            // 모두 0.85배로 구웠고(bake_monster_set.py --shrink 0.85) 화면 크기는 SizeScale로 되돌린다.
+            [MonsterKind.GoblinRider] = new Sheets
+            {
+                Idle = "goblin_rider_idle", Walk = "goblin_rider_walk", Attack = "goblin_rider_attack", Die = "goblin_rider_die",
+                IdleFps = 8f, WalkFps = 16f, AttackFrames = 8, AttackHitFrame = 3, AttackFps = 14f, DieFrames = 8, DieFps = 10f, // 걷기는 빨리 달려 16fps
+                FeetOffset = 0.02f, SizeScale = 1f / 0.85f,
             },
         };
+
+        /// <summary>적 이름으로 그림 종류: 늑대기수는 늑대 탄 고블린, 늑대 계열(늑대·울프)은 늑대, 버섯은 독버섯,
+        /// 그 밖엔 근접 검 고블린 / 원거리 고블린 궁수.</summary>
+        public static MonsterKind KindFor(string name, bool melee) =>
+            name != null && name.Contains("늑대기수") ? MonsterKind.GoblinRider // 이름에 "늑대"도 있어 늑대보다 먼저
+            : IsWolf(name) ? MonsterKind.Wolf
+            : name != null && name.Contains("버섯") ? MonsterKind.Mushroom
+            : melee ? MonsterKind.Sword : MonsterKind.Archer;
+
+        private const float GoblinSizeScale = 0.8f; // 고블린(검·궁수)은 용병보다 조금 작게 — 예전 크기는 커 보였다
+
+        /// <summary>전투 화면 크기 배율(종류별). BattleUIController가 몬스터 칸 크기에 곱한다.</summary>
+        public static float SizeScale(MonsterKind kind) => Kinds[kind].SizeScale;
+
+        public static bool IsWolf(string name) => name != null && (name.Contains("늑대") || name.Contains("울프"));
 
         private static readonly Dictionary<string, Sprite[]> _cache = new Dictionary<string, Sprite[]>();
 
@@ -487,12 +698,12 @@ namespace GN3.Battle
         public static Sprite[] Frames() => Slice(Kinds[MonsterKind.Sword].Idle);
 
         /// <summary>몬스터 그림 칸을 놓는다. size = 원본 칸 기준 크기(보스 배율 포함). 여백까지 담게 키우고, 발이 그림자 위에 오게 내린다.</summary>
-        public static void Layout(RectTransform rect, float size)
+        public static void Layout(RectTransform rect, float size, MonsterKind kind = MonsterKind.Sword)
         {
             float scale = size / SourceCell;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
             rect.sizeDelta = new Vector2(CellSize * scale, CellSize * scale);
-            rect.anchoredPosition = new Vector2(0f, -(Padding + SourceCell * FeetOffset) * scale);
+            rect.anchoredPosition = new Vector2(0f, -(Padding + SourceCell * Kinds[kind].FeetOffset) * scale);
         }
 
         /// <summary>시트를 8장으로 자른다(시트마다 한 번). 시트가 없거나 name이 null이면 null.</summary>
@@ -624,6 +835,12 @@ namespace GN3.Battle
         public bool IsWalking => _moving && !_dead && _attackTime < 0f;
     }
 
+    /// <summary>보스 꼬리표가 숨 쉬듯 살짝 커졌다 작아진다(전투 일시정지와 상관없이).</summary>
+    public class BossTagPulse : MonoBehaviour
+    {
+        private void Update() => transform.localScale = Vector3.one * (1f + 0.08f * Mathf.Sin(Time.unscaledTime * 4f));
+    }
+
     /// <summary>배치 구역 점선 경계: 위아래로 천천히 흐르고 밝기가 숨쉬듯 오르내린다.</summary>
     public class DeployEdge : MonoBehaviour
     {
@@ -662,6 +879,8 @@ namespace GN3.Battle
         private class Leaf
         {
             public RectTransform Rect;
+            public RawImage Image;
+            public Color Color;     // 원래 색(빛 막 위에 있어 BattleLighting.LightColor를 직접 곱한다)
             public Vector2 Position;
             public Vector2 Velocity;
             public float Phase, SwayAmount, Spin, Angle;
@@ -684,9 +903,10 @@ namespace GN3.Battle
                 rect.sizeDelta = new Vector2(24f, 15f) * scale;
                 var image = go.GetComponent<RawImage>();
                 image.texture = BattleFx.Leaf;
-                image.color = Colors[Random.Range(0, Colors.Length)];
+                var color = Colors[Random.Range(0, Colors.Length)];
+                image.color = color;
                 image.raycastTarget = false;
-                _leaves[i] = new Leaf { Rect = rect };
+                _leaves[i] = new Leaf { Rect = rect, Image = image, Color = color };
                 Respawn(_leaves[i], size, scatter: true);
             }
         }
@@ -710,9 +930,11 @@ namespace GN3.Battle
         {
             var size = _area.rect.size;
             float dt = Time.deltaTime;
+            var light = BattleLighting.LightColor; // 밤·비엔 잎도 함께 어둡게
             foreach (var leaf in _leaves)
             {
                 if (leaf == null) continue;
+                leaf.Image.color = new Color(leaf.Color.r * light.r, leaf.Color.g * light.g, leaf.Color.b * light.b, leaf.Color.a);
                 leaf.Phase += dt * 2.2f;
                 leaf.Position += leaf.Velocity * dt;
                 leaf.Angle += leaf.Spin * dt;

@@ -29,7 +29,9 @@ namespace GN3.EditorTools
         private const float TowerLift = 1.0f;
         private const string FenceFolder = "Assets/조정식/Decorations/울타리/";
         private const float FenceLift = 0.4f;  // 울타리 높이(가로 울타리 그림이 월드 약 0.5 — 위에서 본 윗면 빼고 0.4)
-        private const int SweepSteps = 3;  // 납작 그림자를 몇 장으로 쓸어 채울지(간격 ≤ 1.0×1.5/3 < 세로벽 폭 0.69)
+        // 납작 그림자를 몇 장으로 쓸어 채울지(간격 ≤ 1.0×1.5/3 < 세로벽 폭 0.69).
+        // 가는 울타리 기둥은 이 간격으로도 빈틈이 보여, 실행 중에는 ProjectedShadow가 0.05 간격 숨은 사본으로 더 촘촘히 메운다.
+        private const int SweepSteps = 3;
         private const string SweepChildName = "Shadow Sweep";
 
         [MenuItem("GN3/Shadow/그림자 만들기 (현재 씬)")]

@@ -179,17 +179,18 @@ namespace GN3.World
             public float Sun, Ambient, Saturation, Contrast, Overcast, Snow;
         }
 
-        /// <summary>날씨별 목표 조명. 흐림부터는 햇빛이 크게 줄어 그림자가 거의 사라지고, 색이 빠지고, 회색으로 가라앉는다.</summary>
+        /// <summary>날씨별 목표 조명. 흐림부터는 햇빛이 줄어 그림자가 옅어지고, 색이 조금 빠지고, 회색으로 가라앉는다.</summary>
         private static Look Targets(WeatherKind kind) => kind switch
         {
-            // 대비는 조금만 낮춘다(많이 낮추면 화면이 물 빠진 듯 뿌옇게 뜬다)
-            WeatherKind.Cloudy => new Look { Sun = 0.42f, Ambient = 0.83f, Saturation = -28f, Contrast = -4f, Overcast = 0.42f },
+            // 대비는 조금만 낮춘다(많이 낮추면 화면이 물 빠진 듯 뿌옇게 뜬다).
+            // 어둡기·색 빠짐은 날씨 느낌만 날 만큼만: 예전 값(폭우 햇빛 0.1·주변광 0.55·채도 −55)은 흐린 날·폭우에 화면이 너무 안 보였다.
+            WeatherKind.Cloudy => new Look { Sun = 0.65f, Ambient = 0.95f, Saturation = -12f, Contrast = -2f, Overcast = 0.3f },
             WeatherKind.SunShower => new Look { Sun = 0.85f, Ambient = 0.95f, Saturation = -5f, Overcast = 0.1f },
-            WeatherKind.Rain => new Look { Sun = 0.2f, Ambient = 0.65f, Saturation = -45f, Contrast = -6f, Overcast = 0.8f },
-            WeatherKind.HeavyRain => new Look { Sun = 0.1f, Ambient = 0.55f, Saturation = -55f, Contrast = -6f, Overcast = 1f },
+            WeatherKind.Rain => new Look { Sun = 0.5f, Ambient = 0.9f, Saturation = -20f, Contrast = -3f, Overcast = 0.55f },
+            WeatherKind.HeavyRain => new Look { Sun = 0.38f, Ambient = 0.85f, Saturation = -25f, Contrast = -3f, Overcast = 0.7f },
             WeatherKind.SunnySnow => new Look { Sun = 0.8f, Ambient = 1f, Saturation = -8f, Overcast = 0.1f, Snow = 0.3f },
-            WeatherKind.Snow => new Look { Sun = 0.35f, Ambient = 1f, Saturation = -35f, Contrast = -4f, Overcast = 0.5f, Snow = 0.6f },
-            WeatherKind.HeavySnow => new Look { Sun = 0.15f, Ambient = 0.85f, Saturation = -45f, Contrast = -6f, Overcast = 0.9f, Snow = 0.8f },
+            WeatherKind.Snow => new Look { Sun = 0.55f, Ambient = 1f, Saturation = -15f, Contrast = -2f, Overcast = 0.35f, Snow = 0.6f },
+            WeatherKind.HeavySnow => new Look { Sun = 0.4f, Ambient = 0.95f, Saturation = -22f, Contrast = -3f, Overcast = 0.6f, Snow = 0.8f },
             _ => new Look { Sun = 1f, Ambient = 1f },
         };
     }

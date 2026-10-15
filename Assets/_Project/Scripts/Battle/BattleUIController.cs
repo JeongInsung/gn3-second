@@ -31,6 +31,10 @@ namespace GN3.Battle
             public RectTransform Body;      // 그림(바라보는 방향으로 좌우 뒤집음)
             public CanvasGroup Group;
             public Image[] Tintables;       // 피격 때 붉게 물들일 그림들
+            public bool PoisonTinted;       // 중독으로 초록빛을 입혔는가(풀리면 원래 색으로)
+            public Text PoisonTag;          // 체력 막대 왼쪽 "독 3"(남은 횟수, 중독 중에만)
+            public float PoisonBubbleTimer; // 중독 중 몸에서 거품을 피워 올리는 간격
+            public bool PoisonShown;        // 독을 건 공격이 화면에서 닿았는가(그 전엔 중독 표시를 미룬다)
             public Color[] BaseColors;
             public GameObject Bars;         // 머리 위 체력·공격 대기 막대(쓰러지면 숨김)
             public RectTransform HpFill;    // 오른쪽 끝(anchorMax.x) = 체력 비율
@@ -205,7 +209,8 @@ namespace GN3.Battle
             var w = _expedition.Quest.Waves[wave];
             bool last = wave == _session.WaveCount - 1;
             AppendLog($"<color=#ffd36b>{wave + 1}라운드 시작 — {(w.IsBoss ? "보스 " : "")}{w.EnemyName} ×{w.Count}</color>");
-            StartCoroutine(Banner(last ? $"마지막 {wave + 1}라운드" : $"{wave + 1}라운드", $"{(w.IsBoss ? "보스 " : "")}{w.EnemyName} ×{w.Count}",
+            StartCoroutine(Banner(w.IsBoss ? "보스 등장!" : last ? $"마지막 {wave + 1}라운드" : $"{wave + 1}라운드",
+                w.IsBoss ? $"{wave + 1}라운드 — {w.EnemyName}" : $"{w.EnemyName} ×{w.Count}",
                 w.IsBoss ? new Color(1f, 0.45f, 0.4f) : Color.white));
         }
 
@@ -534,7 +539,12 @@ namespace GN3.Battle
             v.Group.alpha = Mathf.Lerp(1f, 0.3f, fall);
             v.ClickArea.raycastTarget = alive;
             v.Kick = Vector2.MoveTowards(v.Kick, Vector2.zero, KickRecoverPerSecond * Time.deltaTime);
-            UpdateBars(v, alive);
+            // 중독은 판정(쏘는 순간)이 아니라 포자가 닿은 뒤부터 보인다(여러 마리가 연달아 쏴도 첫 포자가 닿으면 바로).
+            if (!u.Combatant.IsPoisoned) v.PoisonShown = false;
+            else if (v.PendingHits == 0) v.PoisonShown = true;
+            bool poisoned = alive && u.Combatant.IsPoisoned && v.PoisonShown;
+            UpdateBars(v, alive, poisoned);
+            UpdatePoison(v, poisoned);
 
             var leader = _session.Leader;
             bool targeted = alive && leader != null && leader.IsAlive && leader.Target == u;
@@ -584,7 +594,7 @@ namespace GN3.Battle
 
         /// <summary>체력 막대: 길이 = 비율, 아군은 초록 → 노랑 → 빨강, 적은 빨강. 깎인 부분은 밝은 막대로 잠깐 남았다 줄고,
         /// 30% 아래면 깜빡여 눈에 띄게 한다.</summary>
-        private void UpdateBars(UnitView v, bool alive)
+        private void UpdateBars(UnitView v, bool alive, bool poisoned)
         {
             v.Bars.SetActive(alive);
             if (!alive) return;
@@ -604,6 +614,8 @@ namespace GN3.Battle
             Color color = !v.Unit.IsPlayerSide ? EnemyHp
                 : ratio > 0.5f ? Color.Lerp(HpMid, HpHigh, (ratio - 0.5f) * 2f)
                 : Color.Lerp(HpLow, HpMid, Mathf.Clamp01((ratio - 0.15f) / 0.35f));
+            // 중독: 형광 연두 ↔ 짙은 독초록으로 맥박(평소 이끼 초록 막대와 구별되게)
+            if (poisoned) color = Color.Lerp(PoisonBarDark, PoisonBarColor, (Mathf.Sin(Time.time * 6f) + 1f) * 0.5f);
             if (ratio < 0.3f) color = Color.Lerp(color, Color.white, (Mathf.Sin(Time.unscaledTime * 10f) + 1f) * 0.2f);
             v.HpFillImage.color = color;
 
@@ -640,6 +652,18 @@ namespace GN3.Battle
             foreach (var evt in events)
             {
                 AppendLog(FormatEvent(evt));
+                if (evt.IsPoison) // 독 한 번: 공격 동작·투사체 없이 맞은 쪽에 초록 숫자와 독 거품만
+                {
+                    var poisoned = _session.UnitOf(evt.Target);
+                    if (poisoned != null && _views.TryGetValue(poisoned, out var poisonedView) && poisonedView.Root != null)
+                    {
+                        Vector2 feet = poisonedView.Root.anchoredPosition;
+                        StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(UnityEngine.Random.Range(-12f, 12f), 130f),
+                            $"-{evt.Damage}", PoisonColor, false));
+                        StartCoroutine(BattleFx.PoisonPuff(_fxLayer, feet + new Vector2(0f, 70f)));
+                    }
+                    continue;
+                }
                 var attacker = _session.UnitOf(evt.Attacker);
                 var target = _session.UnitOf(evt.Target);
                 if (attacker == null || target == null) continue;
@@ -696,6 +720,7 @@ namespace GN3.Battle
         private void LandHit(UnitView attacker, UnitView target, string label, Color color, bool hit, int damage)
         {
             target.PendingHits = Math.Max(0, target.PendingHits - 1);
+            if (hit && target.Unit.Combatant.IsPoisoned) target.PoisonShown = true; // 독을 건 포자가 닿았다
             if (hit) target.ShownHealth = Math.Max(target.Unit.Combatant.CurrentHealth, target.ShownHealth - damage);
             if (target.Root == null) return;
             PlayHit(attacker, target, label, color, hit, damage);
@@ -769,7 +794,8 @@ namespace GN3.Battle
             }
 
             bool arrow = from.Monster != null && from.Monster.Kind == MonsterKind.Archer;
-            var go = new GameObject(arrow ? "Arrow" : "Projectile", typeof(RectTransform), typeof(RawImage));
+            bool spore = from.Monster != null && from.Monster.Kind == MonsterKind.Mushroom; // 독버섯: 흔들리며 날아가는 연두 포자
+            var go = new GameObject(arrow ? "Arrow" : spore ? "Spore" : "Projectile", typeof(RectTransform), typeof(RawImage));
             go.transform.SetParent(_fxLayer, false);
             var rect = (RectTransform)go.transform;
             rect.anchorMin = rect.anchorMax = Vector2.zero;
@@ -781,6 +807,12 @@ namespace GN3.Battle
                 rect.sizeDelta = new Vector2(ArrowLength, ArrowLength * texture.height / texture.width); // 그림 비율 그대로
                 rect.pivot = new Vector2(1f, 0.5f); // 화살촉이 위치점 — 촉이 대상에 닿을 때 맞는다
                 img.texture = texture;
+            }
+            else if (spore)
+            {
+                rect.sizeDelta = new Vector2(30f, 30f);
+                img.texture = BattleDecor.Glow;
+                img.color = new Color(0.75f, 1f, 0.3f, 0.95f);
             }
             else
             {
@@ -801,6 +833,12 @@ namespace GN3.Battle
                 end = to.Root.anchoredPosition + new Vector2(0f, 60f); // 움직이는 대상을 따라간다
                 var pos = Vector2.Lerp(start, end, t / duration);
                 if (arrow) AimArrow(rect, pos, end); // 지금 자리에서 맞을 캐릭터 몸 가운데를 향한다
+                if (spore) // 포자는 위아래로 흔들리며 부풀었다 줄고, 지나간 자리에 작은 가루를 흘린다
+                {
+                    pos += new Vector2(0f, Mathf.Sin(t * 18f) * 8f);
+                    rect.localScale = Vector3.one * (1f + 0.2f * Mathf.Sin(t * 25f));
+                    if (UnityEngine.Random.value < 0.35f) StartCoroutine(BattleFx.SporeMote(_fxLayer, pos));
+                }
                 rect.anchoredPosition = pos;
                 yield return null;
             }
@@ -835,6 +873,50 @@ namespace GN3.Battle
                 yield return null;
             }
             Destroy(go);
+        }
+
+        private static readonly Color PoisonColor = new Color(0.56f, 0.86f, 0.35f);
+
+        private static readonly Color PoisonBarColor = new Color(0.75f, 1f, 0.2f);
+        private static readonly Color PoisonBarDark = new Color(0.2f, 0.45f, 0.12f);
+
+        /// <summary>중독 표시: 걸리는 순간 "중독!" 알림과 거품, 걸려 있는 동안 머리 위 "독 n" 꼬리표·진한 초록 몸·피어오르는 거품
+        /// (피격 번쩍임이 그 위에 덮이고, 끝나면 다시 초록). 풀리면 원래 색으로.</summary>
+        private void UpdatePoison(UnitView v, bool poisoned)
+        {
+            if (v.PoisonTag != null)
+            {
+                v.PoisonTag.transform.parent.gameObject.SetActive(poisoned);
+                if (poisoned) v.PoisonTag.text = $"독 {v.Unit.Combatant.PoisonTicks}";
+            }
+            if (!poisoned)
+            {
+                if (!v.PoisonTinted) return;
+                v.PoisonTinted = false;
+                for (int i = 0; i < v.Tintables.Length; i++)
+                    if (v.Tintables[i] != null) v.Tintables[i].color = v.BaseColors[i];
+                return;
+            }
+
+            var feet = v.Root.anchoredPosition;
+            if (!v.PoisonTinted)
+            {
+                StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(0f, 175f), "중독!", PoisonColor, true));
+                StartCoroutine(BattleFx.PoisonPuff(_fxLayer, feet + new Vector2(0f, 70f)));
+                v.PoisonBubbleTimer = 0f;
+            }
+            v.PoisonTinted = true;
+            v.PoisonBubbleTimer -= Time.deltaTime;
+            if (v.PoisonBubbleTimer <= 0f)
+            {
+                v.PoisonBubbleTimer = 0.35f;
+                StartCoroutine(BattleFx.PoisonBubble(_fxLayer, feet + new Vector2(0f, 60f)));
+            }
+
+            float k = 0.45f + 0.15f * Mathf.Sin(Time.time * 5f); // 진하게, 그래도 얼굴·옷은 알아보게
+            var green = new Color(0.4f, 1f, 0.3f);
+            for (int i = 0; i < v.Tintables.Length; i++)
+                if (v.Tintables[i] != null) v.Tintables[i].color = Color.Lerp(v.BaseColors[i], green * v.BaseColors[i], k);
         }
 
         private IEnumerator HitFlash(UnitView v)
@@ -885,6 +967,7 @@ namespace GN3.Battle
 
         private static string FormatEvent(BattleEvent evt)
         {
+            if (evt.IsPoison) return $"<color=#8fdc5a>{evt.Target.Name} 독 피해 : {evt.Damage}{(evt.TargetDefeated ? " (처치)" : "")}</color>";
             if (evt.Damage < 0) return $"{evt.Attacker.Name} → {evt.Target.Name} : +{-evt.Damage} 회복";
             string suffix = evt.Evaded ? " (회피)" : evt.TargetDefeated ? " (처치)" : "";
             return $"{evt.Attacker.Name} → {evt.Target.Name} : {evt.Damage}{suffix}";
@@ -954,6 +1037,7 @@ namespace GN3.Battle
             _groundLayer = CreateLayer("GroundLayer");
             _unitLayer = CreateLayer("UnitLayer");
             _fxLayer = CreateLayer("FxLayer");
+            BattleLighting.Create(_field, _unitLayer); // 마을과 같은 시간대 빛·날씨·유닛 그림자 층
 
             BuildPauseOverlay();
             BuildActionPanel(root);
@@ -1041,14 +1125,15 @@ namespace GN3.Battle
             else if (BattleMonsterSprite.Frames() != null)
             {
                 // 몬스터 그림(고블린 숨쉬기 8프레임). 보스는 더 크게. 칸 아래 여백만큼 내려 발을 그림자 위에 세운다.
-                float s = MonsterSize * BattlePlaceholderSprites.SizeForTier(tier);
+                var kind = BattleMonsterSprite.KindFor(unit.Combatant.Name, unit.IsMelee); // 늑대 계열은 늑대, 그 밖엔 검 고블린·고블린 궁수
+                float s = MonsterSize * BattlePlaceholderSprites.SizeForTier(tier) * BattleMonsterSprite.SizeScale(kind); // 종류별 크기(고블린은 작게)
                 var monster = CreateImage(body, "Monster", Color.white);
                 var image = monster.GetComponent<Image>();
                 image.raycastTarget = false;
                 image.preserveAspect = true;
-                BattleMonsterSprite.Layout((RectTransform)monster.transform, s); // 시트 여백까지 담고 발을 그림자 위에
+                BattleMonsterSprite.Layout((RectTransform)monster.transform, s, kind); // 시트 여백까지 담고 발을 그림자 위에
                 monsterSprite = monster.AddComponent<BattleMonsterSprite>();
-                monsterSprite.Init(unit.IsMelee ? MonsterKind.Sword : MonsterKind.Archer); // 원거리 적은 고블린 궁수
+                monsterSprite.Init(kind);
                 tintables = new[] { image };
                 unit.AttackAnimSeconds = monsterSprite.AttackSeconds; // 공격 동작이 끝날 때까지 제자리
                 headLift = (s - MonsterSize) * MonsterHeadRatio;
@@ -1065,14 +1150,21 @@ namespace GN3.Battle
                 br.anchoredPosition = new Vector2(0f, 4f);
                 tintables = new[] { blob.GetComponent<Image>() };
             }
+            BattleShadow.AttachUnit(root, tintables, shadow.GetComponent<Image>()); // 마을과 같은 해 그림자(발밑 기준)
 
             // 머리 위: 이름 · 체력 · 공격 대기
-            string label = unit.IsLeader ? $"★{unit.Combatant.Name}" : unit.Combatant.Name;
-            var name = CreateText(root, label, UITheme.SmallSize, TextAnchor.MiddleCenter, unit.IsLeader ? LeaderColor : unit.IsPlayerSide ? UITheme.BodyText : new Color(0.92f, 0.66f, 0.6f));
-            name.font = UITheme.Font;
+            bool boss = !unit.IsPlayerSide && tier >= 2;
+            string label = unit.IsLeader ? $"★{unit.Combatant.Name}"
+                : boss ? $"<color=#ff6a4a>보스</color> {unit.Combatant.Name}" // 보스는 이름 앞에 붉은 "보스"
+                : unit.Combatant.Name;
+            var name = CreateText(root, label, boss ? UITheme.BodySize : UITheme.SmallSize, TextAnchor.MiddleCenter,
+                unit.IsLeader ? LeaderColor : unit.IsPlayerSide ? UITheme.BodyText : boss ? new Color(1f, 0.82f, 0.35f) : new Color(0.92f, 0.66f, 0.6f));
+            name.font = boss ? UITheme.BoldFont : UITheme.Font;
+            name.supportRichText = true;
             name.raycastTarget = false;
-            name.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
-            PlaceAbove(name.rectTransform, 154f + headLift, 160f, 20f);
+            name.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, boss ? 1f : 0.8f);
+            PlaceAbove(name.rectTransform, 154f + headLift, boss ? 220f : 160f, boss ? 24f : 20f);
+            if (boss) BattleFx.CreateBossTag(root, 180f + headLift); // 이름 위 붉은 "BOSS" 꼬리표(숨 쉬듯 커졌다 작아짐)
 
             // 머리 위 막대 판(우리 UI와 같은 청동 베벨, 분대장은 금빛): 위 칸 = 체력(깎인 자국 → 체력, 위 광택·아래 그림자),
             // 아래 칸 = 공격 대기(청동색으로 차오르고 다 차면 밝게). 보스는 더 넓게.
@@ -1169,6 +1261,7 @@ namespace GN3.Battle
                 Animator = animator,
                 Monster = monsterSprite,
                 HopPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
+                PoisonTag = BattleFx.CreatePoisonTag(root, new Vector2(-barWidth * 0.5f - 4f, 122f + headLift)), // 체력 막대 왼쪽
             };
             UpdateUnitView(view);
             return view;

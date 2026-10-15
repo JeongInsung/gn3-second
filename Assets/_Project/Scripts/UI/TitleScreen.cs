@@ -87,6 +87,7 @@ namespace GN3.UI
                 return;
             }
             if (SaveSystem.HasSave) ToastLog.Show("새로 시작합니다 · 이전 저장은 '불러오기'에 있습니다", false);
+            TutorialGuide.Begin(); // 타이틀이 흐려지며 닫힌 뒤 보인다
             Close();
         }
 

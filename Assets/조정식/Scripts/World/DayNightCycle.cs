@@ -78,7 +78,7 @@ namespace GN3.World
 
         [Header("그림자 (ProjectedShadow)")]
         [Tooltip("해가 지평선 근처일 때 그림자 최대 길이(실제 높이 대비 배율). 실제로는 무한대로 길어진다.")]
-        [SerializeField] private float maxShadowLengthRatio = 1.5f;
+        [SerializeField] private float maxShadowLengthRatio = 0.8f;
         [Tooltip("이 고도(°) 아래에서는 그림자가 서서히 흐려진다(해가 낮으면 빛이 약하고 퍼진다).")]
         [SerializeField] private float shadowFadeAltitude = 12f;
         [Range(0f, 1f)] [SerializeField] private float shadowAlpha = 0.35f;
@@ -259,21 +259,69 @@ namespace GN3.World
             Apply();
         }
 
-        private void Apply()
+        /// <summary>한 시각의 하늘: 조명 색·세기와 그림자. 마을(이 컴포넌트)과 전투씬(BattleLighting)이 같은 식으로 구한다.</summary>
+        public struct SkySample
         {
-            GetSunPosition(out float altitudeDeg, out float azimuthDeg);
+            public float AltitudeDeg;
+            public Vector2 SunGround;     // 해가 있는 지면 방향(화면 = 북쪽이 위인 지도)
+            public float Day, Night;      // 0~1
+            public float Lamp;            // 가로등이 켜진 정도 0~1
+            public Color AmbientColor;
+            public float AmbientIntensity;
+            public Color SunColor;
+            public float SunIntensity;
+            public Vector2 ShadowDir;     // 실제 높이 1당 그림자가 뻗는 지면 벡터
+            public float ShadowAlpha;     // 그림자 진하기(밤·흐림이면 옅다)
+        }
+
+        private struct Tuning
+        {
+            public Gradient AmbientColor, SunColor;
+            public AnimationCurve AmbientIntensity, SunIntensity;
+            public float MaxShadowLengthRatio, ShadowFadeAltitude, ShadowAlpha, OvercastShadowFloor;
+        }
+
+        private Tuning InstanceTuning() => new Tuning
+        {
+            AmbientColor = ambientColor, SunColor = sunColor,
+            AmbientIntensity = ambientIntensity, SunIntensity = sunIntensity,
+            MaxShadowLengthRatio = maxShadowLengthRatio, ShadowFadeAltitude = shadowFadeAltitude,
+            ShadowAlpha = shadowAlpha, OvercastShadowFloor = overcastShadowFloor,
+        };
+
+        private static Tuning? _defaultTuning;
+        private const float DefaultLatitude = 37.5f;
+
+        /// <summary>
+        /// 이 컴포넌트가 없는 씬(전투)에서 같은 하늘을 구한다. 기본 설정값(MainScene과 같다)과 게임 달력 날짜를 쓴다.
+        /// 날씨는 Play 중에만 반영한다.
+        /// </summary>
+        public static SkySample Sample(float hour)
+        {
+            _defaultTuning ??= new Tuning
+            {
+                AmbientColor = DefaultAmbientColor(), SunColor = DefaultSunColor(),
+                AmbientIntensity = DefaultAmbientIntensity(), SunIntensity = DefaultSunIntensity(),
+                MaxShadowLengthRatio = 0.8f, ShadowFadeAltitude = 12f, ShadowAlpha = 0.35f, OvercastShadowFloor = 0.5f,
+            };
+            int n = Application.isPlaying ? GameCalendar.DayOfYear(GameClock.CurrentDay) : System.DateTime.Now.DayOfYear;
+            SunPosition(DefaultLatitude, n, hour, out float altitude, out float azimuth);
+            return Compute(_defaultTuning.Value, altitude, azimuth);
+        }
+
+        private static SkySample Compute(Tuning t, float altitudeDeg, float azimuthDeg)
+        {
+            var s = new SkySample { AltitudeDeg = altitudeDeg };
             // elevation = sin(고도). 밤에는 음수(지평선 아래). 낮·밤·가로등 전환은 이 값으로 정한다.
             float elevation = Mathf.Sin(altitudeDeg * Mathf.Deg2Rad);
-            float day = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.1f, 0.15f, elevation));
-            float night = 1f - day;
+            s.Day = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.1f, 0.15f, elevation));
+            s.Night = 1f - s.Day;
             // 가로등은 해가 완전히 지기 조금 전부터 켜진다.
-            float lamp = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.05f, 0.25f, elevation));
-            NightLightFactor = lamp;
+            s.Lamp = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.05f, 0.25f, elevation));
 
             // 화면은 북쪽이 위, 동쪽이 오른쪽인 지도. 해가 있는 방향(지면 기준)과 높이로 조명 위치를 잡는다.
             float azimuth = azimuthDeg * Mathf.Deg2Rad;
-            Vector2 sunGround = new Vector2(Mathf.Sin(azimuth), Mathf.Cos(azimuth));
-            Vector2 sunDir = sunGround;
+            s.SunGround = new Vector2(Mathf.Sin(azimuth), Mathf.Cos(azimuth));
 
             // 날씨(Weather): 흐리거나 비 오면 햇빛·주변광이 약해지고, 눈 오는 날은 주변광이 차가운 흰빛으로. Play 중에만.
             bool weather = Application.isPlaying;
@@ -281,39 +329,63 @@ namespace GN3.World
             float ambientWeather = weather ? Weather.AmbientFactor : 1f;
             float snowWhite = weather ? Weather.SnowWhiteness : 0f;
 
+            var ambient = t.AmbientColor.Evaluate(Mathf.InverseLerp(GradientMinAltitude, GradientMaxAltitude, altitudeDeg));
+            ambient = Color.Lerp(ambient, SnowAmbient, snowWhite * s.Day);
+            s.AmbientColor = Color.Lerp(ambient, OvercastAmbient, (weather ? Weather.Overcast : 0f) * 0.6f * s.Day); // 흐린 하늘: 회청색
+            s.AmbientIntensity = Mathf.Max(0f, t.AmbientIntensity.Evaluate(altitudeDeg)) * ambientWeather;
+
+            var sun = t.SunColor.Evaluate(Mathf.InverseLerp(0f, GradientMaxAltitude, altitudeDeg));
+            float warmth = weather ? Weather.SunWarmth : 0f; // 기온: 더우면 노랗게, 추우면 푸르스름하게
+            s.SunColor = Color.Lerp(sun, warmth >= 0f ? HotSun : ColdSun, Mathf.Abs(warmth) * 0.35f);
+            s.SunIntensity = Mathf.Max(0f, t.SunIntensity.Evaluate(altitudeDeg)) * sunWeather;
+
+            // 그림자는 해 반대쪽으로, 길이 = 높이 × cot(고도). 흐린 날 그림자는 옅게(아예 사라지진 않게).
+            float shadowDay = s.Day * Mathf.Lerp(t.OvercastShadowFloor, 1f, Mathf.Clamp01(sunWeather));
+            float alt = Mathf.Max(altitudeDeg, 0.1f) * Mathf.Deg2Rad;
+            float length = Mathf.Min(1f / Mathf.Tan(alt), t.MaxShadowLengthRatio);
+            float lowSunFade = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, t.ShadowFadeAltitude, altitudeDeg));
+            s.ShadowDir = -s.SunGround * length;
+            s.ShadowAlpha = t.ShadowAlpha * shadowDay * lowSunFade;
+            return s;
+        }
+
+        private void Apply()
+        {
+            GetSunPosition(out float altitudeDeg, out float azimuthDeg);
+            var s = Compute(InstanceTuning(), altitudeDeg, azimuthDeg);
+            NightLightFactor = s.Lamp;
+            Vector2 sunDir = s.SunGround;
+
             if (globalLight != null)
             {
-                var ambient = ambientColor.Evaluate(Mathf.InverseLerp(GradientMinAltitude, GradientMaxAltitude, altitudeDeg));
-                ambient = Color.Lerp(ambient, SnowAmbient, snowWhite * day);
-                globalLight.color = Color.Lerp(ambient, OvercastAmbient, (weather ? Weather.Overcast : 0f) * 0.6f * day); // 흐린 하늘: 회청색
-                globalLight.intensity = Mathf.Max(0f, ambientIntensity.Evaluate(altitudeDeg)) * ambientWeather;
+                globalLight.color = s.AmbientColor;
+                globalLight.intensity = s.AmbientIntensity;
             }
 
             if (sunLight != null)
             {
                 sunLight.transform.position = (Vector3)(orbitCenter + sunDir * orbitDistance);
-                var sun = sunColor.Evaluate(Mathf.InverseLerp(0f, GradientMaxAltitude, altitudeDeg));
-                float warmth = weather ? Weather.SunWarmth : 0f; // 기온: 더우면 노랗게, 추우면 푸르스름하게
-                sunLight.color = Color.Lerp(sun, warmth >= 0f ? HotSun : ColdSun, Mathf.Abs(warmth) * 0.35f);
-                sunLight.intensity = Mathf.Max(0f, sunIntensity.Evaluate(altitudeDeg)) * sunWeather;
+                sunLight.color = s.SunColor;
+                sunLight.intensity = s.SunIntensity;
                 sunLight.shadowsEnabled = sunCastsShadows;
                 sunLight.enabled = sunLight.intensity > 0.001f;
             }
 
-            ApplyProjectedShadows(altitudeDeg, sunGround, day * Mathf.Lerp(overcastShadowFloor, 1f, Mathf.Clamp01(sunWeather))); // 흐린 날 그림자는 옅게(아예 사라지진 않게)
+            Shader.SetGlobalVector(ShadowDirId, s.ShadowDir);
+            Shader.SetGlobalFloat(ShadowAlphaId, s.ShadowAlpha);
 
             if (moonLight != null)
             {
                 moonLight.transform.position = (Vector3)(orbitCenter - sunDir * orbitDistance);
                 moonLight.color = moonColor;
-                moonLight.intensity = moonIntensity * night;
+                moonLight.intensity = moonIntensity * s.Night;
                 moonLight.shadowsEnabled = moonCastsShadows;
                 moonLight.enabled = moonLight.intensity > 0.001f;
             }
 
-            SetLampIntensity(lampLights, lampIntensity * lamp);
-            SetLampIntensity(lampGlows, lampGlowIntensity * lamp);
-            ApplyPostProcessing(altitudeDeg, night);
+            SetLampIntensity(lampLights, lampIntensity * s.Lamp);
+            SetLampIntensity(lampGlows, lampGlowIntensity * s.Lamp);
+            ApplyPostProcessing(altitudeDeg, s.Night);
             Applied?.Invoke();
         }
 
@@ -339,36 +411,29 @@ namespace GN3.World
             }
         }
 
+        // ProjectedShadow 셰이더에 넘길 그림자 벡터(실제 높이 1당 지면 이동량)와 진하기(Compute가 구한다).
+        // 북반구라 대부분 화면 위(북)쪽으로 떨어지고 아침엔 왼쪽 위(북서), 저녁엔 오른쪽 위(북동)로 돈다.
+        // 물체마다 그림 높이 중 실제 높이 비율은 ProjectedShadow.heightScale이 곱한다.
         private static readonly int ShadowDirId = Shader.PropertyToID("_GN3ShadowDir");
         private static readonly int ShadowAlphaId = Shader.PropertyToID("_GN3ShadowAlpha");
 
-        /// <summary>
-        /// ProjectedShadow 셰이더에 넘길 그림자 벡터(실제 높이 1당 지면 이동량)와 진하기.
-        /// 그림자는 해 반대쪽으로, 길이 = 높이 × cot(고도). 북반구라 대부분 화면 위(북)쪽으로 떨어지고
-        /// 아침엔 왼쪽 위(북서), 저녁엔 오른쪽 위(북동)로 돈다. 물체마다 그림 높이 중 실제 높이 비율은
-        /// ProjectedShadow.heightScale이 곱한다.
-        /// </summary>
-        private void ApplyProjectedShadows(float altitudeDeg, Vector2 sunGround, float day)
+        private void GetSunPosition(out float altitudeDeg, out float azimuthDeg)
         {
-            float altitude = Mathf.Max(altitudeDeg, 0.1f) * Mathf.Deg2Rad;
-            float length = Mathf.Min(1f / Mathf.Tan(altitude), maxShadowLengthRatio);
-            float lowSunFade = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0f, shadowFadeAltitude, altitudeDeg));
-            Shader.SetGlobalVector(ShadowDirId, -sunGround * length);
-            Shader.SetGlobalFloat(ShadowAlphaId, shadowAlpha * day * lowSunFade);
+            // Play 중에는 게임 달력 날짜(여름엔 해가 높고 길게, 겨울엔 낮고 짧게), 에디터에선 아래 설정
+            int n = Application.isPlaying ? GameCalendar.DayOfYear(GameClock.CurrentDay)
+                : useTodayDate ? System.DateTime.Now.DayOfYear : dayOfYear;
+            SunPosition(latitude, n, timeOfDay, out altitudeDeg, out azimuthDeg);
         }
 
         /// <summary>
         /// 위도·날짜·시각으로 실제 태양 고도(°)와 방위각(°, 북=0 시계방향)을 구한다(NOAA 근사식).
         /// 시각은 지방 태양시로 보아 12시에 해가 정남쪽에 온다.
         /// </summary>
-        private void GetSunPosition(out float altitudeDeg, out float azimuthDeg)
+        private static void SunPosition(float latitudeDeg, int n, float hour, out float altitudeDeg, out float azimuthDeg)
         {
-            // Play 중에는 게임 달력 날짜(여름엔 해가 높고 길게, 겨울엔 낮고 짧게), 에디터에선 아래 설정
-            int n = Application.isPlaying ? GameCalendar.DayOfYear(GameClock.CurrentDay)
-                : useTodayDate ? System.DateTime.Now.DayOfYear : dayOfYear;
             float declination = 23.44f * Mathf.Deg2Rad * Mathf.Sin(2f * Mathf.PI * (284 + n) / 365f);
-            float hourAngle = 15f * (timeOfDay - 12f) * Mathf.Deg2Rad;
-            float lat = latitude * Mathf.Deg2Rad;
+            float hourAngle = 15f * (hour - 12f) * Mathf.Deg2Rad;
+            float lat = latitudeDeg * Mathf.Deg2Rad;
 
             float sinAlt = Mathf.Sin(lat) * Mathf.Sin(declination) + Mathf.Cos(lat) * Mathf.Cos(declination) * Mathf.Cos(hourAngle);
             float altitude = Mathf.Asin(Mathf.Clamp(sinAlt, -1f, 1f));

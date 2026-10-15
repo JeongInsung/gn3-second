@@ -66,11 +66,10 @@ Shader "GN3/ProjectedShadow"
                 // 기준선 아래 픽셀은 반대쪽으로 뻗어 본체와 어긋나서, 제자리(본체 밑)에 둔다.
                 float above = max(world.y - _BaseY, 0.0);
                 float height = above * _HeightScale + _Lift;
-                world.x += height * _GN3ShadowDir.x;
-                // 선 물체(_HeightScale > 0): 발밑 선에 눕혀 높을수록 멀리 뻗는다.
-                // 납작한 물체(_HeightScale = 0, 위에서 본 벤치·분수): 그림 세로는 바닥 위 길이라 그대로 두고 _Lift만큼 평행 이동.
-                float flat = step(_HeightScale, 0.0001);
-                world.y = lerp(_BaseY + height * _GN3ShadowDir.y, world.y + height * _GN3ShadowDir.y, flat);
+                // 제자리에서 높이만큼 해 반대쪽으로 민다. 발밑 줄(높이 0)은 본체와 같은 자리라 그림자가 본체 테두리에서 이어져 나온다.
+                // (예전엔 선 물체를 발밑 선 위로 눕혀서 집 그림자가 옆면이 아니라 집 앞 잔디에 띠로 깔려 떨어져 보였다)
+                // 납작한 물체(_HeightScale = 0, 위에서 본 벤치·울타리)는 _Lift만큼 통째로 밀리고, 빈틈은 ProjectedShadow의 사본이 메운다.
+                world.xy += height * _GN3ShadowDir.xy;
 
                 Varyings output;
                 output.positionCS = TransformWorldToHClip(world);

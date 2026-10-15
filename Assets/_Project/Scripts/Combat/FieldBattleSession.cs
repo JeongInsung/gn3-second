@@ -99,6 +99,10 @@ namespace GN3.Combat
         public const float EnemyHealthMultiplier = 1.3f;
         public const float EnemyAttackMultiplier = 1.15f;
         public const float EnemyDefenseMultiplier = 1.0f;
+        // 2026-10-16 전투 긴박감: 적은 공격 간격을 이만큼 짧게(더 자주 때린다). 이동 속도 능력치(회피·이동)는 그대로.
+        // 자동 전투는 라운드제라 공격 속도가 없어 영향 없다.
+        // 직접 전투 500판(전원 자동 조작): 중간 59→47% · 어려움 32→22%, 한 판 평균 71→58초.
+        public const float EnemyAttackSpeedMultiplier = 1.3f;
 
         public List<FieldUnit> Units { get; } = new List<FieldUnit>();
         public List<Combatant> PlayerTeam { get; }
@@ -174,14 +178,23 @@ namespace GN3.Combat
         {
             CurrentWave = waveIndex;
             EnemyTeam = _waves[waveIndex];
+            // 짐승(늑대 등)은 활을 쏘지 않는다: 궁수 자리여도 근접 그대로.
+            // 독버섯은 늘 원거리(포자를 쏜다)로 뒷줄에 선다 — 이름에 "궁수"는 붙이지 않는다.
+            var archers = new bool[EnemyTeam.Count];
+            var ranged = new bool[EnemyTeam.Count];
             for (int i = 0; i < EnemyTeam.Count; i++)
-                if (IsArcherSlot(i, EnemyTeam.Count))
+            {
+                archers[i] = IsArcherSlot(i, EnemyTeam.Count) && !IsBeast(EnemyTeam[i].Name);
+                ranged[i] = archers[i] || IsSporeShooter(EnemyTeam[i].Name);
+            }
+            for (int i = 0; i < EnemyTeam.Count; i++)
+                if (archers[i])
                     EnemyTeam[i] = Renamed(EnemyTeam[i], EnemyTeam[i].Name + " 궁수");
             AllEnemies.AddRange(EnemyTeam);
             var added = new List<FieldUnit>();
             for (int i = 0; i < EnemyTeam.Count; i++)
             {
-                bool archer = IsArcherSlot(i, EnemyTeam.Count);
+                bool archer = ranged[i];
                 float x = archer ? FieldWidth - ArcherColumnInset : FieldWidth - 260f - (i % 2) * 120f;
                 float y = Spread(i, EnemyTeam.Count);
                 added.Add(CreateUnit(EnemyTeam[i], false, false, !archer, null, new Vector2(x, y)));
@@ -192,6 +205,16 @@ namespace GN3.Combat
         private const float ArcherColumnInset = 140f; // 궁수 줄: 필드 오른쪽 끝에서 이만큼 안쪽(근접 두 줄보다 뒤)
 
         private static bool IsArcherSlot(int index, int count) => count >= 2 && index % 3 == 2;
+
+        /// <summary>활을 쓰지 않는 짐승·괴물 적(이름에 늑대·울프·버섯). 전투 그림도 그 종류로 나온다(BattleMonsterSprite.KindFor).</summary>
+        private static bool IsBeast(string name) => name != null && (name.Contains("늑대") || name.Contains("울프") || name.Contains("버섯"));
+
+        /// <summary>멀리서 포자를 쏘는 적(독버섯).</summary>
+        private static bool IsSporeShooter(string name) => name != null && name.Contains("버섯");
+
+        /// <summary>늑대를 탄 고블린(늑대기수). 필드에서 훨씬 빨리 달린다 — 이동만 빠르고 회피·공격 속도(이동 속도 능력치)는 그대로.</summary>
+        private static bool IsRider(string name) => name != null && name.Contains("늑대기수");
+        private const float RiderFieldSpeedMultiplier = 1.6f; // 이동 약 160 → 260(암살자 212보다 빠르다)
 
         private static Combatant Renamed(Combatant c, string name) => new Combatant(name, c.Stats, c.Passives);
 
@@ -250,7 +273,9 @@ namespace GN3.Combat
             float jitter = 1f - SpeedJitterRange + (float)_rng.NextDouble() * (SpeedJitterRange * 2f);
             float fill = (BaseFillPerSecond + c.Stats.MoveSpeed * FillPerSpeedPerSecond) * jitter;
             float interval = 100f / Math.Max(1f, fill) * AttackPace;
+            if (!playerSide) interval /= EnemyAttackSpeedMultiplier;
             float speed = BaseMoveSpeed + c.Stats.MoveSpeed * MoveSpeedPerStat;
+            if (!playerSide && IsRider(c.Name)) speed *= RiderFieldSpeedMultiplier;
             var unit = new FieldUnit(c, playerSide, leader, melee, skill, position, speed, interval)
             {
                 AttackTimer = interval * (float)_rng.NextDouble() * StartingTimerJitter,
@@ -358,9 +383,25 @@ namespace GN3.Combat
                 Act(u, dt, events);
             }
 
+            TickPoison(dt, events);
             Separate(dt);
             UpdateWaveBreak(dt);
             return events;
+        }
+
+        private const float PoisonTickSeconds = 1f;
+        private float _poisonTimer;
+
+        /// <summary>독은 1초(전투 시간 — 배속·일시정지를 따른다)마다 한 번 들어간다(자동 전투의 라운드 한 번과 같은 몫).</summary>
+        private void TickPoison(float dt, List<BattleEvent> events)
+        {
+            if (IsOver) return;
+            _poisonTimer += dt;
+            if (_poisonTimer < PoisonTickSeconds) return;
+            _poisonTimer -= PoisonTickSeconds;
+            var produced = CombatResolver.TickPoison(PlayerTeam, EnemyTeam, ActionCount);
+            events.AddRange(produced);
+            Log.AddRange(produced);
         }
 
         /// <summary>이번 라운드 적을 다 잡았고 다음 라운드가 남았으면 잠깐 쉬었다가 다음 적을 세운다.</summary>

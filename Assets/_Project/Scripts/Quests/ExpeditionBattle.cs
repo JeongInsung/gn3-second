@@ -159,6 +159,9 @@ namespace GN3.Quests
             MercenaryCondition.AfterBattle(survivorsList, battle.Victory, fallenMercs); // 피로·사기(친밀도 보정 포함)
             // 함께 살아 돌아온 사람끼리 친밀도가 바뀐다(승리면 오르고, 실패면 성격이 안 맞는 사이는 내려간다).
             Affinity.AfterExpedition(survivorsList, battle.Victory);
+            // 계약서의 성공 보너스(살아 돌아온 사람만). 결과 요약·편지에 한 줄.
+            string bonusLine = battle.Victory ? Contracts.PayWinBonuses(survivorsList) : null;
+            if (bonusLine != null) summary += " · " + bonusLine;
 
             string survivors = string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name));
             if (survivors.Length > 0) summary += $" · 귀환길: {survivors} ({GN3.World.GameClock.FormatDuration(expedition.ReturnHoursFor)})";

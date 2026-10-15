@@ -1,0 +1,611 @@
+fileFormatVersion: 2
+guid: d7e2e8f1e4e96f246a22c32d3b799f3a
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 2977599429960108083
+    second: mushroom_idle_0
+  - first:
+      213: -3277677415730508972
+    second: mushroom_idle_1
+  - first:
+      213: -3673648297684573268
+    second: mushroom_idle_2
+  - first:
+      213: -4970983009281058032
+    second: mushroom_idle_3
+  - first:
+      213: 7969734822011948490
+    second: mushroom_idle_4
+  - first:
+      213: 6488527856569937982
+    second: mushroom_idle_5
+  - first:
+      213: -2134877540948968227
+    second: mushroom_idle_6
+  - first:
+      213: 2605623040517341732
+    second: mushroom_idle_7
+  - first:
+      213: 6304963459153078739
+    second: mushroom_idle_8
+  - first:
+      213: -8501493153625457136
+    second: mushroom_idle_9
+  - first:
+      213: 1351273610045431972
+    second: mushroom_idle_10
+  - first:
+      213: 8013924773107047721
+    second: mushroom_idle_11
+  - first:
+      213: 761743753591478985
+    second: mushroom_idle_12
+  - first:
+      213: -4784410894989480766
+    second: mushroom_idle_13
+  - first:
+      213: -1909833113070679894
+    second: mushroom_idle_14
+  - first:
+      213: 1591690367869059867
+    second: mushroom_idle_15
+  - first:
+      213: -2615167334434625733
+    second: mushroom_idle_16
+  - first:
+      213: -4570812861025633613
+    second: mushroom_idle_17
+  - first:
+      213: 4908843384093218330
+    second: mushroom_idle_18
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: mushroom_idle_0
+      rect:
+        serializedVersion: 2
+        x: 49
+        y: 591
+        width: 446
+        height: 433
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3388d22d7ee825920800000000000000
+      internalID: 2977599429960108083
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_1
+      rect:
+        serializedVersion: 2
+        x: 66
+        y: 628
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 45b001b91c95382d0800000000000000
+      internalID: -3277677415730508972
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_2
+      rect:
+        serializedVersion: 2
+        x: 592
+        y: 591
+        width: 448
+        height: 430
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ca3eaca4654940dc0800000000000000
+      internalID: -3673648297684573268
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_3
+      rect:
+        serializedVersion: 2
+        x: 609
+        y: 628
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 01bdc4b5a45830bb0800000000000000
+      internalID: -4970983009281058032
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_4
+      rect:
+        serializedVersion: 2
+        x: 1135
+        y: 591
+        width: 450
+        height: 426
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: acd451c589f2a9e60800000000000000
+      internalID: 7969734822011948490
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_5
+      rect:
+        serializedVersion: 2
+        x: 1152
+        y: 627
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e30f31635b1eb0a50800000000000000
+      internalID: 6488527856569937982
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_6
+      rect:
+        serializedVersion: 2
+        x: 1678
+        y: 591
+        width: 452
+        height: 421
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ddcf6c400346f52e0800000000000000
+      internalID: -2134877540948968227
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_7
+      rect:
+        serializedVersion: 2
+        x: 1695
+        y: 627
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4220c94a958092420800000000000000
+      internalID: 2605623040517341732
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_8
+      rect:
+        serializedVersion: 2
+        x: 46
+        y: 48
+        width: 453
+        height: 419
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3d923a86cdabf7750800000000000000
+      internalID: 6304963459153078739
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_9
+      rect:
+        serializedVersion: 2
+        x: 63
+        y: 84
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 01e3db50501a40a80800000000000000
+      internalID: -8501493153625457136
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_10
+      rect:
+        serializedVersion: 2
+        x: 590
+        y: 48
+        width: 452
+        height: 422
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4a02e116030b0c210800000000000000
+      internalID: 1351273610045431972
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_11
+      rect:
+        serializedVersion: 2
+        x: 607
+        y: 84
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 92d9fbd1f1e273f60800000000000000
+      internalID: 8013924773107047721
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_12
+      rect:
+        serializedVersion: 2
+        x: 1136
+        y: 47
+        width: 449
+        height: 427
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9ca51b278e1429a00800000000000000
+      internalID: 761743753591478985
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_13
+      rect:
+        serializedVersion: 2
+        x: 1153
+        y: 83
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2cca4a0d3ab5a9db0800000000000000
+      internalID: -4784410894989480766
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_14
+      rect:
+        serializedVersion: 2
+        x: 1681
+        y: 47
+        width: 447
+        height: 431
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: aa8c42307e8ee75e0800000000000000
+      internalID: -1909833113070679894
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_15
+      rect:
+        serializedVersion: 2
+        x: 1698
+        y: 84
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b130f39d4f1d61610800000000000000
+      internalID: 1591690367869059867
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_16
+      rect:
+        serializedVersion: 2
+        x: 270
+        y: 50
+        width: 6
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b37a1d24a2f05bbd0800000000000000
+      internalID: -2615167334434625733
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_17
+      rect:
+        serializedVersion: 2
+        x: 1358
+        y: 49
+        width: 6
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3bab7cb8be53190c0800000000000000
+      internalID: -4570812861025633613
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_idle_18
+      rect:
+        serializedVersion: 2
+        x: 1902
+        y: 49
+        width: 6
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a1617e6bc07bf1440800000000000000
+      internalID: 4908843384093218330
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      mushroom_idle_0: 2977599429960108083
+      mushroom_idle_1: -3277677415730508972
+      mushroom_idle_10: 1351273610045431972
+      mushroom_idle_11: 8013924773107047721
+      mushroom_idle_12: 761743753591478985
+      mushroom_idle_13: -4784410894989480766
+      mushroom_idle_14: -1909833113070679894
+      mushroom_idle_15: 1591690367869059867
+      mushroom_idle_16: -2615167334434625733
+      mushroom_idle_17: -4570812861025633613
+      mushroom_idle_18: 4908843384093218330
+      mushroom_idle_2: -3673648297684573268
+      mushroom_idle_3: -4970983009281058032
+      mushroom_idle_4: 7969734822011948490
+      mushroom_idle_5: 6488527856569937982
+      mushroom_idle_6: -2134877540948968227
+      mushroom_idle_7: 2605623040517341732
+      mushroom_idle_8: 6304963459153078739
+      mushroom_idle_9: -8501493153625457136
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

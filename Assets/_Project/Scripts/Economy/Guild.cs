@@ -77,8 +77,7 @@ namespace GN3.Economy
         }
 
         public static string UnlockText(RankInfo info) =>
-            $"퀘스트 {info.MaxQuestGrade}급까지 · 용병 재능 {info.MaxMercGrade}급까지 · 시장 경력 +{info.MarketMinGrowth}~{info.MarketMaxGrowth} · 파티 정원 {info.PartySize}명 · 창고 {info.StorageSlots}칸"
-            + RegionInfo.OpenedAtText(System.Array.IndexOf(Ranks, info));
+            $"퀘스트 {info.MaxQuestGrade}급까지 · 용병 재능 {info.MaxMercGrade}급까지 · 시장 경력 +{info.MarketMinGrowth}~{info.MarketMaxGrowth} · 파티 정원 {info.PartySize}명 · 창고 {info.StorageSlots}칸";
 
         /// <summary>HUD 툴팁: 지금 해금 내용과 다음 단계 조건.</summary>
         public static string Tooltip()

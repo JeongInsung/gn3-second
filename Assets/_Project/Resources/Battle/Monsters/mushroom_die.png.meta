@@ -1,0 +1,1963 @@
+fileFormatVersion: 2
+guid: 3b291fa25b1b2884194e8eed1fd7d474
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -313753889688545931
+    second: mushroom_die_0
+  - first:
+      213: 1915885017466598521
+    second: mushroom_die_1
+  - first:
+      213: -7515506554749062814
+    second: mushroom_die_2
+  - first:
+      213: -802328267178720845
+    second: mushroom_die_3
+  - first:
+      213: 6993159370857012023
+    second: mushroom_die_4
+  - first:
+      213: 7417841131165996853
+    second: mushroom_die_5
+  - first:
+      213: 3394284367432421841
+    second: mushroom_die_6
+  - first:
+      213: -1519133410964604755
+    second: mushroom_die_7
+  - first:
+      213: -6164188405262253449
+    second: mushroom_die_8
+  - first:
+      213: 593751925063181939
+    second: mushroom_die_9
+  - first:
+      213: -5188599072010396752
+    second: mushroom_die_10
+  - first:
+      213: 5102739119372508409
+    second: mushroom_die_11
+  - first:
+      213: -1176563984185999359
+    second: mushroom_die_12
+  - first:
+      213: 2214772214080404638
+    second: mushroom_die_13
+  - first:
+      213: -5341303455776069951
+    second: mushroom_die_14
+  - first:
+      213: -5909669432982962506
+    second: mushroom_die_15
+  - first:
+      213: 5316057163696297813
+    second: mushroom_die_16
+  - first:
+      213: -564621041386763143
+    second: mushroom_die_17
+  - first:
+      213: 7966663931472328696
+    second: mushroom_die_18
+  - first:
+      213: 2328085597548890672
+    second: mushroom_die_19
+  - first:
+      213: -2402497963168746264
+    second: mushroom_die_20
+  - first:
+      213: 1959276083856309192
+    second: mushroom_die_21
+  - first:
+      213: -8892457425322427934
+    second: mushroom_die_22
+  - first:
+      213: 3154385902974548128
+    second: mushroom_die_23
+  - first:
+      213: 4072615808348622856
+    second: mushroom_die_24
+  - first:
+      213: -4385110322476040768
+    second: mushroom_die_25
+  - first:
+      213: 5813508326522316470
+    second: mushroom_die_26
+  - first:
+      213: -2854427006604905291
+    second: mushroom_die_27
+  - first:
+      213: 2478282152083388384
+    second: mushroom_die_28
+  - first:
+      213: 9007613517401624295
+    second: mushroom_die_29
+  - first:
+      213: 5422977679201829817
+    second: mushroom_die_30
+  - first:
+      213: 760025197578615055
+    second: mushroom_die_31
+  - first:
+      213: -6124113599749064011
+    second: mushroom_die_32
+  - first:
+      213: 8259519076669752286
+    second: mushroom_die_33
+  - first:
+      213: 8308265732385939707
+    second: mushroom_die_34
+  - first:
+      213: 8075111999315775473
+    second: mushroom_die_35
+  - first:
+      213: -8083451790898033325
+    second: mushroom_die_36
+  - first:
+      213: 8354775760129718117
+    second: mushroom_die_37
+  - first:
+      213: 183694123099332571
+    second: mushroom_die_38
+  - first:
+      213: -1632254355082245093
+    second: mushroom_die_39
+  - first:
+      213: 1130251152082380308
+    second: mushroom_die_40
+  - first:
+      213: 711658277422876012
+    second: mushroom_die_41
+  - first:
+      213: -4489512125918692981
+    second: mushroom_die_42
+  - first:
+      213: -3510118814831503604
+    second: mushroom_die_43
+  - first:
+      213: -3582932956846771160
+    second: mushroom_die_44
+  - first:
+      213: -5650418792798976980
+    second: mushroom_die_45
+  - first:
+      213: 2247911959341665282
+    second: mushroom_die_46
+  - first:
+      213: -6536484692535139259
+    second: mushroom_die_47
+  - first:
+      213: 7868523017028879081
+    second: mushroom_die_48
+  - first:
+      213: -687378092183724408
+    second: mushroom_die_49
+  - first:
+      213: 7760097640255691490
+    second: mushroom_die_50
+  - first:
+      213: -1486292317561733612
+    second: mushroom_die_51
+  - first:
+      213: -1189517619187887154
+    second: mushroom_die_52
+  - first:
+      213: -27345824196073207
+    second: mushroom_die_53
+  - first:
+      213: -2680740456769853777
+    second: mushroom_die_54
+  - first:
+      213: 4071247927967633291
+    second: mushroom_die_55
+  - first:
+      213: 5326064490149450017
+    second: mushroom_die_56
+  - first:
+      213: -9064053743656154799
+    second: mushroom_die_57
+  - first:
+      213: 8454843390142980812
+    second: mushroom_die_58
+  - first:
+      213: 1962698497272954331
+    second: mushroom_die_59
+  - first:
+      213: 422861685306123570
+    second: mushroom_die_60
+  - first:
+      213: 3986865718549244997
+    second: mushroom_die_61
+  - first:
+      213: -865081243536064594
+    second: mushroom_die_62
+  - first:
+      213: -1846860229031995553
+    second: mushroom_die_63
+  - first:
+      213: -1963133601969381483
+    second: mushroom_die_64
+  - first:
+      213: 947392270502834169
+    second: mushroom_die_65
+  - first:
+      213: -4783611602559124604
+    second: mushroom_die_66
+  - first:
+      213: 1292114164126643715
+    second: mushroom_die_67
+  - first:
+      213: -105306666996998917
+    second: mushroom_die_68
+  - first:
+      213: 562332009160082610
+    second: mushroom_die_69
+  - first:
+      213: -1168471040941673307
+    second: mushroom_die_70
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: mushroom_die_0
+      rect:
+        serializedVersion: 2
+        x: 53
+        y: 115
+        width: 434
+        height: 971
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 575973aef7255abf0800000000000000
+      internalID: -313753889688545931
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_1
+      rect:
+        serializedVersion: 2
+        x: 442
+        y: 1081
+        width: 16
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 974f698c547969a10800000000000000
+      internalID: 1915885017466598521
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_2
+      rect:
+        serializedVersion: 2
+        x: 442
+        y: 1072
+        width: 7
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 261ff097b9e83b790800000000000000
+      internalID: -7515506554749062814
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_3
+      rect:
+        serializedVersion: 2
+        x: 602
+        y: 429
+        width: 443
+        height: 659
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3b1ce8121be8dd4f0800000000000000
+      internalID: -802328267178720845
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_4
+      rect:
+        serializedVersion: 2
+        x: 828
+        y: 1068
+        width: 13
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 73b50ad7561bc0160800000000000000
+      internalID: 6993159370857012023
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_5
+      rect:
+        serializedVersion: 2
+        x: 1156
+        y: 981
+        width: 82
+        height: 101
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5375e67153771f660800000000000000
+      internalID: 7417841131165996853
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_6
+      rect:
+        serializedVersion: 2
+        x: 1235
+        y: 1064
+        width: 15
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1d1987306abea1f20800000000000000
+      internalID: 3394284367432421841
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_7
+      rect:
+        serializedVersion: 2
+        x: 1261
+        y: 985
+        width: 170
+        height: 103
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: da8f6012634faeae0800000000000000
+      internalID: -1519133410964604755
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_8
+      rect:
+        serializedVersion: 2
+        x: 1437
+        y: 1031
+        width: 27
+        height: 53
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 77203cffd47647aa0800000000000000
+      internalID: -6164188405262253449
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_9
+      rect:
+        serializedVersion: 2
+        x: 1686
+        y: 125
+        width: 418
+        height: 963
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3766812ea3e6d3800800000000000000
+      internalID: 593751925063181939
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_10
+      rect:
+        serializedVersion: 2
+        x: 104
+        y: 1068
+        width: 6
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0bb16e662a46ef7b0800000000000000
+      internalID: -5188599072010396752
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_11
+      rect:
+        serializedVersion: 2
+        x: 1249
+        y: 1004
+        width: 32
+        height: 47
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9fc10bf813290d640800000000000000
+      internalID: 5102739119372508409
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_12
+      rect:
+        serializedVersion: 2
+        x: 1385
+        y: 1050
+        width: 7
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 10043134a410cafe0800000000000000
+      internalID: -1176563984185999359
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_13
+      rect:
+        serializedVersion: 2
+        x: 1496
+        y: 1036
+        width: 20
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e9cfaa628937cbe10800000000000000
+      internalID: 2214772214080404638
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_14
+      rect:
+        serializedVersion: 2
+        x: 1502
+        y: 1033
+        width: 9
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1c6a6e07ec0efd5b0800000000000000
+      internalID: -5341303455776069951
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_15
+      rect:
+        serializedVersion: 2
+        x: 1513
+        y: 1004
+        width: 16
+        height: 39
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6bef01326f2acfda0800000000000000
+      internalID: -5909669432982962506
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_16
+      rect:
+        serializedVersion: 2
+        x: 1688
+        y: 1002
+        width: 19
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 557d9cf13dd66c940800000000000000
+      internalID: 5316057163696297813
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_17
+      rect:
+        serializedVersion: 2
+        x: 1237
+        y: 983
+        width: 13
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 97c4e6387201a28f0800000000000000
+      internalID: -564621041386763143
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_18
+      rect:
+        serializedVersion: 2
+        x: 1542
+        y: 987
+        width: 20
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8f73350f2a64f8e60800000000000000
+      internalID: 7966663931472328696
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_19
+      rect:
+        serializedVersion: 2
+        x: 1685
+        y: 981
+        width: 32
+        height: 22
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 03aca9824850f4020800000000000000
+      internalID: 2328085597548890672
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_20
+      rect:
+        serializedVersion: 2
+        x: 1696
+        y: 997
+        width: 9
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8e43abbd4dc98aed0800000000000000
+      internalID: -2402497963168746264
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_21
+      rect:
+        serializedVersion: 2
+        x: 1142
+        y: 610
+        width: 449
+        height: 357
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8cb7c23b73fb03b10800000000000000
+      internalID: 1959276083856309192
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_22
+      rect:
+        serializedVersion: 2
+        x: 1707
+        y: 682
+        width: 6
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2e93f5ff515a79480800000000000000
+      internalID: -8892457425322427934
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_23
+      rect:
+        serializedVersion: 2
+        x: 91
+        y: 461
+        width: 13
+        height: 29
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0a83c4f1441a6cb20800000000000000
+      internalID: 3154385902974548128
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_24
+      rect:
+        serializedVersion: 2
+        x: 110
+        y: 501
+        width: 13
+        height: 24
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 80092430086d48830800000000000000
+      internalID: 4072615808348622856
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_25
+      rect:
+        serializedVersion: 2
+        x: 128
+        y: 520
+        width: 9
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0cdbaef1565f423c0800000000000000
+      internalID: -4385110322476040768
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_26
+      rect:
+        serializedVersion: 2
+        x: 427
+        y: 496
+        width: 21
+        height: 48
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6b6632d850bbda050800000000000000
+      internalID: 5813508326522316470
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_27
+      rect:
+        serializedVersion: 2
+        x: 743
+        y: 470
+        width: 12
+        height: 20
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5b4780ac2c90368d0800000000000000
+      internalID: -2854427006604905291
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_28
+      rect:
+        serializedVersion: 2
+        x: 752
+        y: 472
+        width: 7
+        height: 18
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0e7fe10ac70a46220800000000000000
+      internalID: 2478282152083388384
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_29
+      rect:
+        serializedVersion: 2
+        x: 768
+        y: 481
+        width: 7
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7ee0bba05c8710d70800000000000000
+      internalID: 9007613517401624295
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_30
+      rect:
+        serializedVersion: 2
+        x: 875
+        y: 498
+        width: 10
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9b382b19779424b40800000000000000
+      internalID: 5422977679201829817
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_31
+      rect:
+        serializedVersion: 2
+        x: 882
+        y: 501
+        width: 9
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f09f402f3e62c8a00800000000000000
+      internalID: 760025197578615055
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_32
+      rect:
+        serializedVersion: 2
+        x: 1146
+        y: 487
+        width: 48
+        height: 58
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5ba71d2c027c20ba0800000000000000
+      internalID: -6124113599749064011
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_33
+      rect:
+        serializedVersion: 2
+        x: 1183
+        y: 467
+        width: 28
+        height: 31
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ed38674e6d4bf9270800000000000000
+      internalID: 8259519076669752286
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_34
+      rect:
+        serializedVersion: 2
+        x: 1198
+        y: 446
+        width: 118
+        height: 99
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bf02a6e1aa3ec4370800000000000000
+      internalID: 8308265732385939707
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_35
+      rect:
+        serializedVersion: 2
+        x: 1311
+        y: 357
+        width: 155
+        height: 164
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1ff06b0649f801070800000000000000
+      internalID: 8075111999315775473
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_36
+      rect:
+        serializedVersion: 2
+        x: 1315
+        y: 487
+        width: 26
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 35d07849c6fc1df80800000000000000
+      internalID: -8083451790898033325
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_37
+      rect:
+        serializedVersion: 2
+        x: 1334
+        y: 463
+        width: 40
+        height: 27
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5677390d94022f370800000000000000
+      internalID: 8354775760129718117
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_38
+      rect:
+        serializedVersion: 2
+        x: 1338
+        y: 493
+        width: 11
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bdf99aae4dc9c8200800000000000000
+      internalID: 183694123099332571
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_39
+      rect:
+        serializedVersion: 2
+        x: 1546
+        y: 487
+        width: 14
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b1c0d36ef411959e0800000000000000
+      internalID: -1632254355082245093
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_40
+      rect:
+        serializedVersion: 2
+        x: 1831
+        y: 481
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 416a8da3f657faf00800000000000000
+      internalID: 1130251152082380308
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_41
+      rect:
+        serializedVersion: 2
+        x: 1144
+        y: 102
+        width: 119
+        height: 368
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c65c14bce6150e900800000000000000
+      internalID: 711658277422876012
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_42
+      rect:
+        serializedVersion: 2
+        x: 1478
+        y: 449
+        width: 25
+        height: 30
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b89bec7028c02b1c0800000000000000
+      internalID: -4489512125918692981
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_43
+      rect:
+        serializedVersion: 2
+        x: 1502
+        y: 467
+        width: 9
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c079d8a098d894fc0800000000000000
+      internalID: -3510118814831503604
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_44
+      rect:
+        serializedVersion: 2
+        x: 1502
+        y: 461
+        width: 11
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 824bb1d757dd64ec0800000000000000
+      internalID: -3582932956846771160
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_45
+      rect:
+        serializedVersion: 2
+        x: 1552
+        y: 446
+        width: 9
+        height: 26
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c24860f8b0ea591b0800000000000000
+      internalID: -5650418792798976980
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_46
+      rect:
+        serializedVersion: 2
+        x: 1744
+        y: 456
+        width: 17
+        height: 22
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 20c89ee5400323f10800000000000000
+      internalID: 2247911959341665282
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_47
+      rect:
+        serializedVersion: 2
+        x: 1874
+        y: 457
+        width: 10
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5442aadcdcdb945a0800000000000000
+      internalID: -6536484692535139259
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_48
+      rect:
+        serializedVersion: 2
+        x: 2047
+        y: 455
+        width: 6
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9e2cdf8aefb923d60800000000000000
+      internalID: 7868523017028879081
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_49
+      rect:
+        serializedVersion: 2
+        x: 627
+        y: 456
+        width: 12
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 88ed00d5441f576f0800000000000000
+      internalID: -687378092183724408
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_50
+      rect:
+        serializedVersion: 2
+        x: 635
+        y: 456
+        width: 8
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2ea99c560b761bb60800000000000000
+      internalID: 7760097640255691490
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_51
+      rect:
+        serializedVersion: 2
+        x: 1290
+        y: 453
+        width: 9
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 41e375b0301af5be0800000000000000
+      internalID: -1486292317561733612
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_52
+      rect:
+        serializedVersion: 2
+        x: 1488
+        y: 455
+        width: 8
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ec3dc36170cfd7fe0800000000000000
+      internalID: -1189517619187887154
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_53
+      rect:
+        serializedVersion: 2
+        x: 1743
+        y: 447
+        width: 7
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 909e3b62e19de9ff0800000000000000
+      internalID: -27345824196073207
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_54
+      rect:
+        serializedVersion: 2
+        x: 441
+        y: 404
+        width: 10
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: fa6e63bf1c81ccad0800000000000000
+      internalID: -2680740456769853777
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_55
+      rect:
+        serializedVersion: 2
+        x: 543
+        y: 128
+        width: 546
+        height: 281
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b8f4e0b8b6aff7830800000000000000
+      internalID: 4071247927967633291
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_56
+      rect:
+        serializedVersion: 2
+        x: 1245
+        y: 351
+        width: 38
+        height: 97
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1211e226f6bf9e940800000000000000
+      internalID: 5326064490149450017
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_57
+      rect:
+        serializedVersion: 2
+        x: 1365
+        y: 133
+        width: 186
+        height: 249
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1594350c423063280800000000000000
+      internalID: -9064053743656154799
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_58
+      rect:
+        serializedVersion: 2
+        x: 1500
+        y: 400
+        width: 56
+        height: 39
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cc228058443a55570800000000000000
+      internalID: 8454843390142980812
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_59
+      rect:
+        serializedVersion: 2
+        x: 1723
+        y: 421
+        width: 16
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bddb52b62e7ec3b10800000000000000
+      internalID: 1962698497272954331
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_60
+      rect:
+        serializedVersion: 2
+        x: 1737
+        y: 434
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2356bcd567e4ed500800000000000000
+      internalID: 422861685306123570
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_61
+      rect:
+        serializedVersion: 2
+        x: 1739
+        y: 424
+        width: 7
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 54c6f496f31345730800000000000000
+      internalID: 3986865718549244997
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_62
+      rect:
+        serializedVersion: 2
+        x: 1723
+        y: 334
+        width: 14
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: eaffd21413d9ef3f0800000000000000
+      internalID: -865081243536064594
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_63
+      rect:
+        serializedVersion: 2
+        x: 2020
+        y: 188
+        width: 55
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f5750c22862ae56e0800000000000000
+      internalID: -1846860229031995553
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_64
+      rect:
+        serializedVersion: 2
+        x: 635
+        y: 144
+        width: 12
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 59f5bffd36c81c4e0800000000000000
+      internalID: -1963133601969381483
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_65
+      rect:
+        serializedVersion: 2
+        x: 652
+        y: 144
+        width: 6
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9ffa5422040d52d00800000000000000
+      internalID: 947392270502834169
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_66
+      rect:
+        serializedVersion: 2
+        x: 654
+        y: 149
+        width: 6
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 48bb60697923d9db0800000000000000
+      internalID: -4783611602559124604
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_67
+      rect:
+        serializedVersion: 2
+        x: 1725
+        y: 145
+        width: 10
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 306f4028cf28ee110800000000000000
+      internalID: 1292114164126643715
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_68
+      rect:
+        serializedVersion: 2
+        x: 417
+        y: 136
+        width: 10
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bfcd921f420e98ef0800000000000000
+      internalID: -105306666996998917
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_69
+      rect:
+        serializedVersion: 2
+        x: 1216
+        y: 129
+        width: 11
+        height: 18
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2b481d3abfdcdc700800000000000000
+      internalID: 562332009160082610
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: mushroom_die_70
+      rect:
+        serializedVersion: 2
+        x: 1535
+        y: 141
+        width: 6
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5a4375277c1c8cfe0800000000000000
+      internalID: -1168471040941673307
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      mushroom_die_0: -313753889688545931
+      mushroom_die_1: 1915885017466598521
+      mushroom_die_10: -5188599072010396752
+      mushroom_die_11: 5102739119372508409
+      mushroom_die_12: -1176563984185999359
+      mushroom_die_13: 2214772214080404638
+      mushroom_die_14: -5341303455776069951
+      mushroom_die_15: -5909669432982962506
+      mushroom_die_16: 5316057163696297813
+      mushroom_die_17: -564621041386763143
+      mushroom_die_18: 7966663931472328696
+      mushroom_die_19: 2328085597548890672
+      mushroom_die_2: -7515506554749062814
+      mushroom_die_20: -2402497963168746264
+      mushroom_die_21: 1959276083856309192
+      mushroom_die_22: -8892457425322427934
+      mushroom_die_23: 3154385902974548128
+      mushroom_die_24: 4072615808348622856
+      mushroom_die_25: -4385110322476040768
+      mushroom_die_26: 5813508326522316470
+      mushroom_die_27: -2854427006604905291
+      mushroom_die_28: 2478282152083388384
+      mushroom_die_29: 9007613517401624295
+      mushroom_die_3: -802328267178720845
+      mushroom_die_30: 5422977679201829817
+      mushroom_die_31: 760025197578615055
+      mushroom_die_32: -6124113599749064011
+      mushroom_die_33: 8259519076669752286
+      mushroom_die_34: 8308265732385939707
+      mushroom_die_35: 8075111999315775473
+      mushroom_die_36: -8083451790898033325
+      mushroom_die_37: 8354775760129718117
+      mushroom_die_38: 183694123099332571
+      mushroom_die_39: -1632254355082245093
+      mushroom_die_4: 6993159370857012023
+      mushroom_die_40: 1130251152082380308
+      mushroom_die_41: 711658277422876012
+      mushroom_die_42: -4489512125918692981
+      mushroom_die_43: -3510118814831503604
+      mushroom_die_44: -3582932956846771160
+      mushroom_die_45: -5650418792798976980
+      mushroom_die_46: 2247911959341665282
+      mushroom_die_47: -6536484692535139259
+      mushroom_die_48: 7868523017028879081
+      mushroom_die_49: -687378092183724408
+      mushroom_die_5: 7417841131165996853
+      mushroom_die_50: 7760097640255691490
+      mushroom_die_51: -1486292317561733612
+      mushroom_die_52: -1189517619187887154
+      mushroom_die_53: -27345824196073207
+      mushroom_die_54: -2680740456769853777
+      mushroom_die_55: 4071247927967633291
+      mushroom_die_56: 5326064490149450017
+      mushroom_die_57: -9064053743656154799
+      mushroom_die_58: 8454843390142980812
+      mushroom_die_59: 1962698497272954331
+      mushroom_die_6: 3394284367432421841
+      mushroom_die_60: 422861685306123570
+      mushroom_die_61: 3986865718549244997
+      mushroom_die_62: -865081243536064594
+      mushroom_die_63: -1846860229031995553
+      mushroom_die_64: -1963133601969381483
+      mushroom_die_65: 947392270502834169
+      mushroom_die_66: -4783611602559124604
+      mushroom_die_67: 1292114164126643715
+      mushroom_die_68: -105306666996998917
+      mushroom_die_69: 562332009160082610
+      mushroom_die_7: -1519133410964604755
+      mushroom_die_70: -1168471040941673307
+      mushroom_die_8: -6164188405262253449
+      mushroom_die_9: 593751925063181939
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

@@ -77,6 +77,20 @@ namespace GN3.UI
             Source.PlayOneShot(clip, volume);
         }
 
+        /// <summary>파일이 아닌 클립(코드로 만든 소리 등)을 효과음 볼륨으로 한 번. 시험용으로 이름 "clip:이름"으로 횟수를 센다.</summary>
+        public static void PlayClip(AudioClip clip, float scale = 1f)
+        {
+            if (clip == null) return;
+            string key = "clip:" + clip.name;
+            PlayCounts[key] = PlayCounts.TryGetValue(key, out var n) ? n + 1 : 1;
+            float volume = SfxVolume * scale;
+            if (volume <= 0f) return;
+            Source.PlayOneShot(clip, volume);
+        }
+
+        /// <summary>Resources/Sfx에 그 이름의 소리 파일이 있는지(없어도 경고를 남기지 않는다).</summary>
+        public static bool HasSfx(string name) => Resources.Load<AudioClip>(SfxFolder + name) != null;
+
         private static AudioClip Clip(string name)
         {
             if (_clips.TryGetValue(name, out var cached) && cached != null) return cached;

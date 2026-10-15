@@ -77,13 +77,9 @@ namespace GN3.UI
         {
             _refreshTimer = RefreshInterval;
             var q = _quest;
-            string place = string.IsNullOrEmpty(q.LocationName)
-                ? RegionInfo.DisplayName(q.Region)
-                : $"{RegionInfo.DisplayName(q.Region)} · {q.LocationName}";
-
             _title.text = QuestDifficulty.RichTitle(q);
             _body.text =
-                $"지역: {place}\n" +
+                (string.IsNullOrEmpty(q.LocationName) ? "" : $"장소: {q.LocationName}\n") + // 지역(동서남북) 구분은 없앴다
                 (q.WaveCount > 1
                     ? $"라운드 {q.WaveCount}개 (체력은 라운드 사이에 이어짐)    난이도 {q.Difficulty}\n{QuestDifficulty.WavesText(q)}\n\n"
                     : $"적: {q.EnemyName} × {q.EnemyCount}    난이도 {q.Difficulty}\n\n") +

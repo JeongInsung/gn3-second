@@ -34,10 +34,80 @@ namespace GN3.World
         private MaterialPropertyBlock _block;
         private float _lastBaseY = float.NaN;
 
+        // 납작 그림자(Height Scale 0)는 Lift만큼 통째로 밀려서, 가는 물체(울타리 기둥)는 본체와 그림자 사이에 바닥이 보였다.
+        // 0~Lift 사이를 FillSpacing 간격의 숨은 사본으로 촘촘히 메운다(셰이더 스텐실이 한 픽셀을 한 번만 칠해 진하기는 같다).
+        // 저장되지 않는 사본이라 씬·프리팹은 그대로다.
+        private const string ShadowChildName = "Shadow";
+        private const string FillChildName = "Shadow Fill";
+        private const float FillSpacing = 0.05f;     // 월드 유닛. 울타리 기둥 굵기보다 좁게
+        private const float FillMaxLengthRatio = 0.8f; // DayNightCycle.maxShadowLengthRatio(가장 길게 밀릴 때)
+        private readonly System.Collections.Generic.List<SpriteRenderer> _fills = new System.Collections.Generic.List<SpriteRenderer>();
+        private Sprite _fillSprite;
+        private bool _fillEnabled;
+
         private void OnEnable()
         {
             _lastBaseY = float.NaN;
             Sync();
+        }
+
+        // 켜고 끄는 중에는 자식을 지울 수 없어(활성화 중 파괴 오류) 숨기기만 한다. 만들고 지우는 일은 LateUpdate에서.
+        private void OnDisable()
+        {
+            foreach (var fill in _fills)
+                if (fill != null) fill.enabled = false;
+            _fillEnabled = false;
+        }
+
+        private void ClearFills()
+        {
+            // 스크립트 리로드로 목록을 잃어도 남은 사본이 쌓이지 않게 자식 이름으로 지운다.
+            for (int i = transform.childCount - 1; i >= 0; i--)
+            {
+                var child = transform.GetChild(i).gameObject;
+                if (child.name != FillChildName) continue;
+                if (Application.isPlaying) Destroy(child);
+                else DestroyImmediate(child);
+            }
+            _fills.Clear();
+        }
+
+        /// <summary>본 그림자("Shadow")가 납작 그림자면 0~Lift 사이 사본 개수. 쓸기 사본("Shadow Sweep k")·선 물체는 0.</summary>
+        private int FillCount() =>
+            name == ShadowChildName && heightScale <= 0f && liftHeight > 0f
+                ? Mathf.CeilToInt(liftHeight * FillMaxLengthRatio / FillSpacing) - 1
+                : 0;
+
+        private void SyncFills(float baseY)
+        {
+            int count = FillCount();
+            if (_fills.Count != count)
+            {
+                ClearFills();
+                for (int i = 0; i < count; i++)
+                {
+                    var go = new GameObject(FillChildName, typeof(SpriteRenderer)) { hideFlags = HideFlags.HideAndDontSave };
+                    go.transform.SetParent(transform, false);
+                    _fills.Add(go.GetComponent<SpriteRenderer>());
+                }
+            }
+            for (int i = 0; i < _fills.Count; i++)
+            {
+                var fill = _fills[i];
+                if (fill == null) continue;
+                fill.sharedMaterial = _shadow.sharedMaterial;
+                fill.sprite = _shadow.sprite;
+                fill.flipX = _shadow.flipX;
+                fill.flipY = _shadow.flipY;
+                fill.sortingLayerID = _shadow.sortingLayerID;
+                fill.sortingOrder = _shadow.sortingOrder;
+                fill.enabled = _shadow.enabled;
+                fill.GetPropertyBlock(_block);
+                _block.SetFloat(BaseYId, baseY);
+                _block.SetFloat(HeightScaleId, 0f);
+                _block.SetFloat(LiftId, liftHeight * (i + 1) / (_fills.Count + 1));
+                fill.SetPropertyBlock(_block);
+            }
         }
 
         // 부모가 바뀌면(에디터에서 만들자마자 부모에 붙이는 경우 포함) 다시 찾는다.
@@ -48,9 +118,9 @@ namespace GN3.World
             Sync();
         }
 
-        private void LateUpdate() => Sync();
+        private void LateUpdate() => Sync(true);
 
-        private void Sync()
+        private void Sync(bool canBuildFills = false)
         {
             if (_shadow == null) _shadow = GetComponent<SpriteRenderer>();
             if (sourceOverride != null) _source = sourceOverride;
@@ -73,8 +143,15 @@ namespace GN3.World
             _shadow.sortingOrder = ShadowSortingOrder;
 
             float baseY = groundAnchor != null ? groundAnchor.position.y : VisibleBottomY(_source);
-            if (Mathf.Approximately(baseY, _lastBaseY) && Mathf.Approximately(heightScale, _lastHeightScale)
-                && Mathf.Approximately(liftHeight, _lastLift)) return;
+            bool unchanged = Mathf.Approximately(baseY, _lastBaseY) && Mathf.Approximately(heightScale, _lastHeightScale)
+                             && Mathf.Approximately(liftHeight, _lastLift);
+            if (canBuildFills && (!unchanged || _fills.Count != FillCount() || _fillSprite != _shadow.sprite || _fillEnabled != _shadow.enabled))
+            {
+                SyncFills(baseY);
+                _fillSprite = _shadow.sprite;
+                _fillEnabled = _shadow.enabled;
+            }
+            if (unchanged) return;
             _lastBaseY = baseY;
             _lastHeightScale = heightScale;
             _lastLift = liftHeight;

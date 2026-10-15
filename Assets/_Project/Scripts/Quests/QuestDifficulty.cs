@@ -31,7 +31,8 @@ namespace GN3.Quests
 
         // 퀘스트 등급(용병과 같은 F~S): 권장 전투력이 이 값 미만이면 그 등급(F, E, D, C, B, A), 그 이상은 S.
         // D급 Lv1 용병 한 명 ≈ 전투력 100 기준.
-        private static readonly int[] GradeUpperBounds = { 130, 180, 240, 310, 390, 480 };
+        // 2026-10-16 권장 전투력을 ×1.25(RecommendedScale 0.8 → 1.0) 올리며 경계도 같은 배율로 올려, 같은 퀘스트는 같은 등급 그대로.
+        private static readonly int[] GradeUpperBounds = { 163, 225, 300, 388, 488, 600 };
 
         public static MercenaryGrade Grade(Quest quest)
         {
@@ -46,10 +47,12 @@ namespace GN3.Quests
 
         // 권장 전투력 = 적 1마리 몫 × 유효 적 수 × RecommendedScale.
         // 유효 적 수 = 가장 큰 라운드 + 나머지 라운드 적 × 0.5 + 보스 1 — 라운드는 한꺼번에가 아니라 차례로 나와서
-        // 적 수 합만큼 무겁지 않다. 자동 전투 시뮬레이션(실제 직업 수치, 6000판)으로 판정 '중간' 승률 약 60%, '어려움' 약 25%가 되게 맞춤.
+        // 적 수 합만큼 무겁지 않다. 자동 전투 시뮬레이션(실제 직업 수치, 무작위 파티·퀘스트 6000판)으로 맞춤:
+        // 2026-10-16 적 체력·공격 ×1.4(EnemySquadGenerator 1.82/1.61) 기준 Scale 1.0 → 판정 '중간' 승률 약 59%, '어려움' 약 29%.
+        // (예전 Scale 0.8·적 1.3/1.15는 성장·연구·스킬이 붙으며 '중간' 82%·'어려움' 53%까지 쉬워져 있었다)
         private const float LaterWaveWeight = 0.5f;
         private const float BossWeight = 1f;
-        private const float RecommendedScale = 0.8f;
+        private const float RecommendedScale = 1.0f;
 
         public static int RecommendedPower(Quest quest)
         {

@@ -128,11 +128,13 @@ namespace GN3.UI
                 };
                 TitleScreen.Create(); // 켤 때 한 번: 메인화면(이어하기 · 게임 불러오기 · 새로 시작하기 · 설정)
             }
+
+            TutorialGuide.ResumeIfActive(); // 튜토리얼 중이었으면(전투에서 돌아옴·껐다 이어하기) 그 단계부터 다시 안내
         }
 
         /// <summary>HUD 전용 캔버스: 창(메인 Canvas 0, 상세 창 1, 우편함 2) 위, 중요 알림(4)·타이틀(5)·메뉴(6)·설정(7) 아래.</summary>
         public const int HudSortingOrder = 3;
-        private const float HudTopBand = 96f; // 화면 위쪽에서 이만큼은 HUD 줄(메뉴·날짜·진행·저장 등)
+        private const float HudTopBand = 112f; // 화면 위쪽에서 이만큼은 HUD 줄(메뉴·날짜·진행·저장, 진행 아래 시간 막대 포함)
 
         /// <summary>메인 Canvas와 같은 크기 맞춤으로 HUD 캔버스를 만든다(MainScene마다 새로, 씬과 함께 사라진다).</summary>
         private static Transform CreateHudCanvas(Canvas main)

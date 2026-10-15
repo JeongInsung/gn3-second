@@ -13,7 +13,8 @@ namespace GN3.Save
         // 5: 정보창 '이번 달 기준값'(MercenarySave.month*). 없으면 불러올 때 지금 값으로 찍는다.
         // 6: 힐러 신성력(MercenarySave.growthHoly·monthHoly). 5 이하 힐러는 다른 네 능력치 성장 평균만큼 신성력 성장을 준다.
         //    마법사 growthAttack·monthAttack은 이제 마력(값은 그대로).
-        public const int CurrentVersion = 6;
+        // 7: 용병 계약(contracts: 주급·만료일·성공 보너스). 6 이하는 불러올 때 기본 계약(예전 주급 공식, 60일)을 받는다.
+        public const int CurrentVersion = 7;
 
         public int version = CurrentVersion;
         public string savedAt;
@@ -36,6 +37,17 @@ namespace GN3.Save
         public List<string> leaving = new List<string>(); // 파견 중 길드를 떠나기로 결심한 용병 "id|이유"(예전 저장엔 없어 빈 목록)
         public List<AffinitySave> affinities = new List<AffinitySave>(); // 용병 쌍 친밀도(예전 저장엔 없어 성격 궁합 기본값으로 시작)
         public List<QuestClearSave> questClears = new List<QuestClearSave>(); // 지역·계층별 퀘스트 클리어 횟수(예전 저장엔 없어 0부터 시작)
+        public List<ContractSave> contracts = new List<ContractSave>(); // 용병 계약(예전 저장엔 없어 기본 계약을 준다)
+    }
+
+    [Serializable]
+    public class ContractSave
+    {
+        public string id;
+        public int wage;
+        public int endDay;
+        public int winBonus;
+        public int signedDay;
     }
 
     [Serializable]

@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 마을에서 열린 창 없이 ESC를 누르면 뜨는 메뉴: 계속하기 · 설정 · 타이틀로.
+    /// 마을에서 열린 창 없이 ESC를 누르면 뜨는 메뉴: 계속하기 · 설정 · 튜토리얼 다시 보기 · 타이틀로.
     /// 뒤를 살짝 어둡게 깔고, 떠 있는 동안 게임을 멈춘다(GamePause). ESC·바깥 어두운 곳·"계속하기"로 닫힌다.
     /// "타이틀로"는 자동 저장한 뒤 타이틀을 다시 띄운다(새로 시작하기는 막힌 채로).
     /// sortingOrder 6: 타이틀(5)·마을 HUD(3) 위, 설정 창(7) 아래(메뉴에서 연 설정 창이 위에 뜬다).
@@ -50,6 +50,12 @@ namespace GN3.UI
 
         private void Close() => Destroy(gameObject);
 
+        private void ReplayTutorial()
+        {
+            Close();
+            TutorialGuide.Begin();
+        }
+
         private void ToTitle()
         {
             ToastLog.Show(SaveSystem.Save(auto: true) ? "저장하고 타이틀로 돌아갑니다" : "저장에 실패했습니다", false);
@@ -73,6 +79,7 @@ namespace GN3.UI
             {
                 ("계속하기", Close),
                 ("설정", SettingsPanel.Open),
+                ("튜토리얼 다시 보기", ReplayTutorial),
                 ("타이틀로", ToTitle),
             };
             float height = -FirstButtonTop + actions.Length * (ButtonHeight + ButtonSpacing) + 22f;

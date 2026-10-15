@@ -178,9 +178,13 @@ namespace GN3.Battle
             }
         }
 
-        /// <summary>뒤(큰 y)부터 그려 앞 것이 가린다. 좌우 뒤집기·밝기 차이로 같은 그림 반복을 줄인다.</summary>
+        /// <summary>
+        /// 뒤(큰 y)부터 그려 앞 것이 가린다. 좌우 뒤집기·밝기 차이로 같은 그림 반복을 줄인다.
+        /// 꽃·돌은 바로 앞 층에 해 그림자(BattleShadow, 마을과 같은 기울인 그림자)를 둔다. 바닥에 붙은 풀 포기는 그림자 없음.
+        /// </summary>
         private static void Spawn(Transform parent, string name, List<Item> items, System.Random rng)
         {
+            var shadows = CreateLayer(parent, name + "Shadows");
             var layer = new GameObject(name, typeof(RectTransform));
             layer.transform.SetParent(parent, false);
             var layerRect = (RectTransform)layer.transform;
@@ -206,7 +210,20 @@ namespace GN3.Battle
                 image.sprite = sprite;
                 image.color = new Color(light, light, light, 1f);
                 image.raycastTarget = false;
+                if (item.Name != "grass") BattleShadow.Attach(image, shadows, ShadowHeightScale);
             }
+        }
+
+        private const float ShadowHeightScale = 0.8f; // 마을 장식(ShadowBuilder.DecorationHeightScale)과 같다
+
+        /// <summary>parent 좌표 그대로 쓰는 빈 층(그림자처럼 다른 것보다 먼저 그릴 것을 담는다).</summary>
+        internal static RectTransform CreateLayer(Transform parent, string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.zero;
+            return rect;
         }
 
         private static Sprite Load(string name)
@@ -373,8 +390,10 @@ namespace GN3.Battle
         private void Update()
         {
             float dt = Time.deltaTime, time = Time.time;
+            bool hidden = BattleLighting.HideButterflies; // 비·눈·밤엔 숨는다
             foreach (var fly in _flies)
             {
+                fly.Rect.gameObject.SetActive(!hidden);
                 var toTarget = fly.Target - fly.Position;
                 if (toTarget.magnitude < 16f) fly.Target = NextTarget();
                 var dir = toTarget.normalized;
@@ -465,7 +484,7 @@ namespace GN3.Battle
         }
     }
 
-    /// <summary>큰 구름 그림자가 화면을 왼쪽에서 오른쪽으로 아주 천천히 지나간다(유닛·숲 위에도 드리운다).</summary>
+    /// <summary>큰 구름 그림자가 화면을 왼쪽에서 오른쪽으로 아주 천천히 지나간다(유닛·숲 위에도 드리운다). 햇빛이 약하면 옅어진다.</summary>
     public class BattleCloudShadows : MonoBehaviour
     {
         private const int Count = 3;
@@ -474,6 +493,7 @@ namespace GN3.Battle
         private class Shadow
         {
             public RectTransform Rect;
+            public RawImage Image;
             public float Speed;
         }
 
@@ -497,7 +517,7 @@ namespace GN3.Battle
                 image.texture = BattleDecor.Cloud;
                 image.color = new Color(0f, 0.03f, 0.02f, Alpha);
                 image.raycastTarget = false;
-                _shadows.Add(new Shadow { Rect = rect, Speed = Random.Range(14f, 24f) });
+                _shadows.Add(new Shadow { Rect = rect, Image = image, Speed = Random.Range(14f, 24f) });
             }
         }
 
@@ -505,8 +525,10 @@ namespace GN3.Battle
         {
             if (_area == null) return;
             var size = _area.rect.size;
+            float alpha = Alpha * BattleLighting.Sunshine; // 해가 없으면(밤·흐림) 구름 그림자도 없다
             foreach (var s in _shadows)
             {
+                s.Image.color = new Color(0f, 0.03f, 0.02f, alpha);
                 var pos = s.Rect.anchoredPosition;
                 pos.x += s.Speed * Time.deltaTime;
                 float half = s.Rect.sizeDelta.x * 0.5f;

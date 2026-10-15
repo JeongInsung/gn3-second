@@ -27,6 +27,8 @@ namespace GN3.Combat
             while (round < maxRounds && teamA.Any(c => c.IsAlive) && teamB.Any(c => c.IsAlive))
             {
                 round++;
+                log.AddRange(CombatResolver.TickPoison(teamA, teamB, round)); // 독은 라운드 시작마다 한 번
+                if (!teamA.Any(c => c.IsAlive) || !teamB.Any(c => c.IsAlive)) break;
                 CombatResolver.RaiseRoundStart(order, round, _random);
 
                 foreach (var entry in order)

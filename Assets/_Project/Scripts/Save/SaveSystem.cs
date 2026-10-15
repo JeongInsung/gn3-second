@@ -230,6 +230,7 @@ namespace GN3.Save
             data.affinities = Affinity.SaveEntries();
             data.questClears = QuestClearHistory.SaveEntries();
             data.leaving = MercenaryCondition.SaveLeaving();
+            data.contracts = Contracts.SaveEntries();
             data.storageWeapons = GuildStorage.WeaponNames();
             data.storageItems = GuildStorage.ItemNames();
             return data;
@@ -351,6 +352,7 @@ namespace GN3.Save
             Affinity.Restore(data.affinities);
             QuestClearHistory.Restore(data.questClears);
             MercenaryCondition.RestoreLeaving(data.leaving);
+            Contracts.Restore(data.contracts);
             GuildStorage.Restore(data.storageWeapons, data.storageItems);
 
             OnLoaded?.Invoke();

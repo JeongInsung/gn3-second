@@ -149,6 +149,7 @@ namespace GN3.Battle
             var frames = TreeFrames();
             if (frames == null) return;
 
+            var shadows = BattleDecor.CreateLayer(parent, "ForestShadows"); // 나무 해 그림자(나무보다 먼저 그린다)
             var forest = new GameObject("Forest", typeof(RectTransform));
             forest.transform.SetParent(parent, false);
             var forestRect = (RectTransform)forest.transform;
@@ -188,6 +189,7 @@ namespace GN3.Battle
                 image.color = new Color(light, light, light, 1f);
                 image.raycastTarget = false;
                 sway.Add(image, rng.Next(TreeFrameCount));
+                BattleShadow.Attach(image, shadows, 0.8f); // 마을 나무와 같은 높이 비율
             }
             sway.Init(frames, TreeFps);
         }

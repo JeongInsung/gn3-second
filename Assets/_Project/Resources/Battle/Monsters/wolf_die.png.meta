@@ -1,0 +1,1079 @@
+fileFormatVersion: 2
+guid: c08d32fb42655524ebab3299afa42095
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: -5751038947124571580
+    second: wolf_die_0
+  - first:
+      213: -7904713223056363813
+    second: wolf_die_1
+  - first:
+      213: -3653500648530721891
+    second: wolf_die_2
+  - first:
+      213: 1553259758368864169
+    second: wolf_die_3
+  - first:
+      213: -8663798517277828
+    second: wolf_die_4
+  - first:
+      213: -2224734844320866223
+    second: wolf_die_5
+  - first:
+      213: -6493385484233494008
+    second: wolf_die_6
+  - first:
+      213: 783336468241177333
+    second: wolf_die_7
+  - first:
+      213: 7437078029364869547
+    second: wolf_die_8
+  - first:
+      213: -651858341100210327
+    second: wolf_die_9
+  - first:
+      213: 3178326746802798451
+    second: wolf_die_10
+  - first:
+      213: 7331899952819769180
+    second: wolf_die_11
+  - first:
+      213: -2221485872207574811
+    second: wolf_die_12
+  - first:
+      213: -5704914954397860772
+    second: wolf_die_13
+  - first:
+      213: 9138912110565744210
+    second: wolf_die_14
+  - first:
+      213: 7828056400336463234
+    second: wolf_die_15
+  - first:
+      213: 5318667319115877887
+    second: wolf_die_16
+  - first:
+      213: -2204419583416944995
+    second: wolf_die_17
+  - first:
+      213: -2778606312627034796
+    second: wolf_die_18
+  - first:
+      213: -7075107218047468726
+    second: wolf_die_19
+  - first:
+      213: -8310220717127441380
+    second: wolf_die_20
+  - first:
+      213: -1241048332682322147
+    second: wolf_die_21
+  - first:
+      213: -7308974530339371722
+    second: wolf_die_22
+  - first:
+      213: 7504172046172298633
+    second: wolf_die_23
+  - first:
+      213: -3497999415068466271
+    second: wolf_die_24
+  - first:
+      213: 5178430365425088483
+    second: wolf_die_25
+  - first:
+      213: 6767040478535602612
+    second: wolf_die_26
+  - first:
+      213: 8544614614449229534
+    second: wolf_die_27
+  - first:
+      213: -4544075175929158730
+    second: wolf_die_28
+  - first:
+      213: -7243546502643181249
+    second: wolf_die_29
+  - first:
+      213: 4550314355078455686
+    second: wolf_die_30
+  - first:
+      213: 2598466434988279802
+    second: wolf_die_31
+  - first:
+      213: -4572997389798897066
+    second: wolf_die_32
+  - first:
+      213: -1857274108006135176
+    second: wolf_die_33
+  - first:
+      213: 2538830052043751862
+    second: wolf_die_34
+  - first:
+      213: 3528753680673772953
+    second: wolf_die_35
+  - first:
+      213: -3834596019353603924
+    second: wolf_die_36
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: wolf_die_0
+      rect:
+        serializedVersion: 2
+        x: 157
+        y: 952
+        width: 120
+        height: 67
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 44214334c843030b0800000000000000
+      internalID: -5751038947124571580
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_1
+      rect:
+        serializedVersion: 2
+        x: 290
+        y: 995
+        width: 17
+        height: 21
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bde64606431dc4290800000000000000
+      internalID: -7904713223056363813
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_2
+      rect:
+        serializedVersion: 2
+        x: 306
+        y: 974
+        width: 132
+        height: 56
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d93caa964882c4dc0800000000000000
+      internalID: -3653500648530721891
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_3
+      rect:
+        serializedVersion: 2
+        x: 803
+        y: 930
+        width: 85
+        height: 86
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9a73c7d45894e8510800000000000000
+      internalID: 1553259758368864169
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_4
+      rect:
+        serializedVersion: 2
+        x: 1747
+        y: 858
+        width: 132
+        height: 144
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c7bd8f6325831eff0800000000000000
+      internalID: -8663798517277828
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_5
+      rect:
+        serializedVersion: 2
+        x: 112
+        y: 958
+        width: 30
+        height: 34
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 15022dc32772021e0800000000000000
+      internalID: -2224734844320866223
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_6
+      rect:
+        serializedVersion: 2
+        x: 240
+        y: 951
+        width: 17
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 802b5963e4cd2e5a0800000000000000
+      internalID: -6493385484233494008
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_7
+      rect:
+        serializedVersion: 2
+        x: 701
+        y: 942
+        width: 28
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5fadf191e58feda00800000000000000
+      internalID: 783336468241177333
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_8
+      rect:
+        serializedVersion: 2
+        x: 723
+        y: 974
+        width: 28
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ba9b72b701fc53760800000000000000
+      internalID: 7437078029364869547
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_9
+      rect:
+        serializedVersion: 2
+        x: 744
+        y: 927
+        width: 39
+        height: 35
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 967b8deda4224f6f0800000000000000
+      internalID: -651858341100210327
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_10
+      rect:
+        serializedVersion: 2
+        x: 903
+        y: 900
+        width: 168
+        height: 76
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 37fbd43365fab1c20800000000000000
+      internalID: 3178326746802798451
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_11
+      rect:
+        serializedVersion: 2
+        x: 65
+        y: 543
+        width: 480
+        height: 411
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c5f8688392420c560800000000000000
+      internalID: 7331899952819769180
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_12
+      rect:
+        serializedVersion: 2
+        x: 842
+        y: 900
+        width: 38
+        height: 29
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5e8c4818e52bb21e0800000000000000
+      internalID: -2221485872207574811
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_13
+      rect:
+        serializedVersion: 2
+        x: 959
+        y: 922
+        width: 20
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c5c3d4d231214d0b0800000000000000
+      internalID: -5704914954397860772
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_14
+      rect:
+        serializedVersion: 2
+        x: 1145
+        y: 610
+        width: 437
+        height: 343
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 25e59cff420f3de70800000000000000
+      internalID: 9138912110565744210
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_15
+      rect:
+        serializedVersion: 2
+        x: 621
+        y: 543
+        width: 458
+        height: 360
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 28527cf32d7d2ac60800000000000000
+      internalID: 7828056400336463234
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_16
+      rect:
+        serializedVersion: 2
+        x: 1563
+        y: 863
+        width: 6
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ffd816a4fb3bfc940800000000000000
+      internalID: 5318667319115877887
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_17
+      rect:
+        serializedVersion: 2
+        x: 1567
+        y: 862
+        width: 8
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d96b48281145861e0800000000000000
+      internalID: -2204419583416944995
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_18
+      rect:
+        serializedVersion: 2
+        x: 1592
+        y: 849
+        width: 39
+        height: 52
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4552535c7486079d0800000000000000
+      internalID: -2778606312627034796
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_19
+      rect:
+        serializedVersion: 2
+        x: 1807
+        y: 845
+        width: 11
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a4b7a70887b20dd90800000000000000
+      internalID: -7075107218047468726
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_20
+      rect:
+        serializedVersion: 2
+        x: 1898
+        y: 843
+        width: 125
+        height: 76
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c14e686894a2cac80800000000000000
+      internalID: -8310220717127441380
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_21
+      rect:
+        serializedVersion: 2
+        x: 1668
+        y: 607
+        width: 447
+        height: 234
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d1f1165ed19e6cee0800000000000000
+      internalID: -1241048332682322147
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_22
+      rect:
+        serializedVersion: 2
+        x: 217
+        y: 545
+        width: 11
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6358eb6a36e419a90800000000000000
+      internalID: -7308974530339371722
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_23
+      rect:
+        serializedVersion: 2
+        x: 526
+        y: 553
+        width: 7
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 98d148997bc242860800000000000000
+      internalID: 7504172046172298633
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_24
+      rect:
+        serializedVersion: 2
+        x: 675
+        y: 543
+        width: 7
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1a3e150b01c947fc0800000000000000
+      internalID: -3497999415068466271
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_25
+      rect:
+        serializedVersion: 2
+        x: 147
+        y: 543
+        width: 11
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3e732491bfa7dd740800000000000000
+      internalID: 5178430365425088483
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_26
+      rect:
+        serializedVersion: 2
+        x: 49
+        y: 71
+        width: 450
+        height: 354
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4b1ddcf367b59ed50800000000000000
+      internalID: 6767040478535602612
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_27
+      rect:
+        serializedVersion: 2
+        x: 459
+        y: 404
+        width: 12
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ede8bd478b1949670800000000000000
+      internalID: 8544614614449229534
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_28
+      rect:
+        serializedVersion: 2
+        x: 599
+        y: 49
+        width: 444
+        height: 358
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6b3621af3b330f0c0800000000000000
+      internalID: -4544075175929158730
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_29
+      rect:
+        serializedVersion: 2
+        x: 1131
+        y: 49
+        width: 458
+        height: 360
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f391ee375d0c97b90800000000000000
+      internalID: -7243546502643181249
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_30
+      rect:
+        serializedVersion: 2
+        x: 1673
+        y: 49
+        width: 454
+        height: 358
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 681efce1cc6f52f30800000000000000
+      internalID: 4550314355078455686
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_31
+      rect:
+        serializedVersion: 2
+        x: 1683
+        y: 390
+        width: 7
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: af78042947b9f0420800000000000000
+      internalID: 2598466434988279802
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_32
+      rect:
+        serializedVersion: 2
+        x: 981
+        y: 372
+        width: 6
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 65a8f3e4a137980c0800000000000000
+      internalID: -4572997389798897066
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_33
+      rect:
+        serializedVersion: 2
+        x: 1004
+        y: 355
+        width: 9
+        height: 18
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 87a83cdf903a936e0800000000000000
+      internalID: -1857274108006135176
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_34
+      rect:
+        serializedVersion: 2
+        x: 1030
+        y: 359
+        width: 17
+        height: 24
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6b187252b7cbb3320800000000000000
+      internalID: 2538830052043751862
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_35
+      rect:
+        serializedVersion: 2
+        x: 1565
+        y: 359
+        width: 10
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9959964c6c6a8f030800000000000000
+      internalID: 3528753680673772953
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: wolf_die_36
+      rect:
+        serializedVersion: 2
+        x: 1555
+        y: 49
+        width: 22
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ca03d49ac37c8cac0800000000000000
+      internalID: -3834596019353603924
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      wolf_die_0: -5751038947124571580
+      wolf_die_1: -7904713223056363813
+      wolf_die_10: 3178326746802798451
+      wolf_die_11: 7331899952819769180
+      wolf_die_12: -2221485872207574811
+      wolf_die_13: -5704914954397860772
+      wolf_die_14: 9138912110565744210
+      wolf_die_15: 7828056400336463234
+      wolf_die_16: 5318667319115877887
+      wolf_die_17: -2204419583416944995
+      wolf_die_18: -2778606312627034796
+      wolf_die_19: -7075107218047468726
+      wolf_die_2: -3653500648530721891
+      wolf_die_20: -8310220717127441380
+      wolf_die_21: -1241048332682322147
+      wolf_die_22: -7308974530339371722
+      wolf_die_23: 7504172046172298633
+      wolf_die_24: -3497999415068466271
+      wolf_die_25: 5178430365425088483
+      wolf_die_26: 6767040478535602612
+      wolf_die_27: 8544614614449229534
+      wolf_die_28: -4544075175929158730
+      wolf_die_29: -7243546502643181249
+      wolf_die_3: 1553259758368864169
+      wolf_die_30: 4550314355078455686
+      wolf_die_31: 2598466434988279802
+      wolf_die_32: -4572997389798897066
+      wolf_die_33: -1857274108006135176
+      wolf_die_34: 2538830052043751862
+      wolf_die_35: 3528753680673772953
+      wolf_die_36: -3834596019353603924
+      wolf_die_4: -8663798517277828
+      wolf_die_5: -2224734844320866223
+      wolf_die_6: -6493385484233494008
+      wolf_die_7: 783336468241177333
+      wolf_die_8: 7437078029364869547
+      wolf_die_9: -651858341100210327
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

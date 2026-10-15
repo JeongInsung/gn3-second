@@ -51,6 +51,7 @@ namespace GN3.UI
             TrainingHall.OnChanged += RefreshList;
             RestVenues.OnAnyChanged += RefreshList;
             Hospital.OnChanged += RefreshList;
+            Contracts.OnChanged += RefreshList; // 재계약·만료 표시
             ExpeditionLog.Instance.OnTravelEvent += HandleTravelEvent;
         }
 
@@ -62,6 +63,7 @@ namespace GN3.UI
             TrainingHall.OnChanged -= RefreshList;
             RestVenues.OnAnyChanged -= RefreshList;
             Hospital.OnChanged -= RefreshList;
+            Contracts.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnTravelEvent -= HandleTravelEvent;
         }
 
@@ -301,6 +303,7 @@ namespace GN3.UI
             if (merc.IsExhausted) status += $"  · 지침(피로 {merc.Fatigue})";
             else if (merc.Fatigue >= Mercenary.TiredFatigue) status += $"  · 피로 {merc.Fatigue}";
             if (merc.Morale < Mercenary.LowMorale) status += "  · 사기 낮음";
+            if (Contracts.NeedsRenewal(merc)) status += $"  · <color=#f0a54a>계약 {Contracts.RemainingDays(merc)}일 남음</color>";
             foreach (var ailment in merc.Ailments) status += $"  · {ailment.Def.displayName}"; // 부상·질병(중하면 파견 불가)
             var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}\n<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
             powerText.color = onExpedition ? new Color(UITheme.TitleText.r, UITheme.TitleText.g, UITheme.TitleText.b, 0.5f) : UITheme.TitleText;
@@ -338,11 +341,40 @@ namespace GN3.UI
             }
             else if (!onExpedition)
             {
-                CreateActionButton(row.transform, "해고", new Color(0.55f, 0.25f, 0.25f, 1f),
-                    () => PlayerParty.Instance.Remove(merc));
+                if (Contracts.NeedsRenewal(merc)) // 만료가 가까우면 재계약 협상
+                    CreateActionButton(row.transform, "재계약", new Color(0.62f, 0.5f, 0.2f, 1f),
+                        () => ContractNegotiationPanel.OpenRenewal(merc));
+                // 해고: 첫 클릭에 위약금을 보여 주고, 한 번 더 눌러야 낸다(남은 계약 주급의 절반)
+                bool armed = _fireArmedId == merc.Id;
+                int release = Contracts.ReleaseCost(merc);
+                CreateActionButton(row.transform, armed ? $"해고 -{release}G?" : "해고", new Color(0.55f, 0.25f, 0.25f, 1f),
+                    () => Fire(merc, armed, release));
             }
 
             return row;
+        }
+
+        private string _fireArmedId; // 해고 버튼을 한 번 누른 용병(다시 누르면 위약금을 내고 해고)
+
+        private void Fire(Mercenary merc, bool armed, int release)
+        {
+            if (!armed)
+            {
+                _fireArmedId = merc.Id;
+                if (release > 0) ToastLog.Show($"{merc.Name} 해고 위약금 {release}G (남은 계약 {Contracts.RemainingDays(merc)}일 주급의 절반) — 한 번 더 누르면 해고", false);
+                RefreshList();
+                return;
+            }
+            _fireArmedId = null;
+            if (!Wallet.TrySpend(release))
+            {
+                ToastLog.Show($"위약금을 낼 골드가 부족합니다 (필요 {release}G, 보유 {Wallet.Gold}G)", false);
+                RefreshList();
+                return;
+            }
+            PlayerParty.Instance.Remove(merc);
+            Contracts.Remove(merc);
+            ToastLog.Show(release > 0 ? $"{merc.Name} 해고 (위약금 -{release}G)" : $"{merc.Name} 해고", false);
         }
 
         private void ToggleSelection(Mercenary merc)

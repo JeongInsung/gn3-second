@@ -21,10 +21,10 @@ namespace GN3.Quests
 
             int count = waves[waves.Count - 1].Count;
             string title = locationName != null
-                ? $"[{RegionInfo.DisplayName(region)}] {locationName} — {enemyName} 토벌"
+                ? $"{locationName} — {enemyName} 토벌" // 지역 구분은 없앴다(제목에 [서쪽] 같은 접두어 없음)
                 : waves.Count == 1
-                    ? $"[{RegionInfo.DisplayName(region)}] {enemyName} {count}마리 처치"
-                    : $"[{RegionInfo.DisplayName(region)}] {enemyName} 토벌";
+                    ? $"{enemyName} {count}마리 처치"
+                    : $"{enemyName} 토벌";
 
             return new Quest(title, region, locationName, enemyName, count, difficulty, durationDays, waves);
         }

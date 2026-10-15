@@ -14,7 +14,7 @@ namespace GN3.Combat
         private bool _used;
 
         public override string Name => "아군 부활";
-        public override string Description => $"전투 중 1회, 매 라운드 {ProcChance:P0} 확률로 쓰러진 아군 1명을 신성력 × {ReviveHolyRatio:0.##}의 체력으로 부활(최대 체력까지)";
+        public override string Description => $"전투 중 1회, 매 라운드 {ProcChance:P0} 확률로 쓰러진 아군 1명을 신성력 × {ReviveHolyRatio * CombatFormulas.DamageScale:0.##}의 체력으로 부활(최대 체력까지)";
 
         public override void OnBattleStart(Combatant self, IReadOnlyList<Combatant> allies, IReadOnlyList<Combatant> enemies)
         {
@@ -32,7 +32,7 @@ namespace GN3.Combat
             if (rng.NextDouble() >= ProcChance) return;
 
             var target = fallen[rng.Next(fallen.Count)];
-            target.Heal(Math.Clamp((int)Math.Round(self.Stats.Holy * ReviveHolyRatio), 1, target.Stats.MaxHealth));
+            target.Heal(Math.Clamp(CombatFormulas.Scale(self.Stats.Holy * ReviveHolyRatio), 1, target.Stats.MaxHealth));
             _used = true;
         }
     }

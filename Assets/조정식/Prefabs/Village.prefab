@@ -96470,7 +96470,7 @@ MonoBehaviour:
   latitude: 37.5
   useTodayDate: 1
   dayOfYear: 80
-  maxShadowLengthRatio: 1.5
+  maxShadowLengthRatio: 0.8
   shadowFadeAltitude: 12
   shadowAlpha: 0.35
   overcastShadowFloor: 0.5

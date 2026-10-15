@@ -80,7 +80,10 @@ namespace GN3.World
             SetHover(!overUI && Pick(world) == this && VillageWanderer.Pick(world) == null);
 
             if (IsHovered && mouse.leftButton.wasPressedThisFrame)
+            {
+                GN3.UI.GameAudio.PlaySfx(GN3.UI.ButtonSounds.ClickSound); // UI 버튼과 같은 누르는 소리(마우스로 누를 때만)
                 Click();
+            }
 
             if (IsHovered)
             {

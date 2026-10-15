@@ -68,8 +68,8 @@ namespace GN3.Mercenaries
             }
         }
 
-        /// <summary>이 용병의 주급(고용비의 20%, 최소 1G).</summary>
-        public static int WeeklyWage(Mercenary merc) => Mathf.Max(1, Mathf.RoundToInt(Pricing.HireCost(merc) * WageRatio));
+        /// <summary>이 용병의 주급: 계약서 금액(계약이 없던 예전 저장은 고용비의 20%로 기본 계약을 만든다).</summary>
+        public static int WeeklyWage(Mercenary merc) => Contracts.Ensure(merc).WeeklyWage;
 
         public static int TotalWeeklyWage() => PlayerParty.Instance.Members.Where(m => m.IsAlive).Sum(WeeklyWage);
 
@@ -102,6 +102,7 @@ namespace GN3.Mercenaries
             int day = GameClock.CurrentDay;
             if (day > 1 && (day - 1) % PayIntervalDays == 0) PayWages(members);
 
+            Contracts.DailyCheck(); // 계약 만료 알림·만료(마을에 있으면 바로, 파견 중이면 돌아온 뒤 떠난다)
             Desert();
         }
 
@@ -194,11 +195,36 @@ namespace GN3.Mercenaries
             DailyLog.Add($"{Josa.IGa(merc.Name)} {reason} 돌아가면 길드를 떠나겠다고 한다.");
         }
 
+        /// <summary>
+        /// 계약이 끝났다(Contracts.DailyCheck): 마을에 있으면 바로 떠나고, 파견 중이면 돌아온 뒤 자정에 떠난다.
+        /// 이미 떠나기로 한 사람은 그 이유를 그대로 둔다.
+        /// </summary>
+        public static void EndContract(Mercenary merc)
+        {
+            if (merc == null || !merc.IsAlive) return;
+            const string reason = "계약이 끝나";
+            if (!ExpeditionLog.Instance.IsOnExpedition(merc))
+            {
+                Leave(merc, LeavingIds.TryGetValue(merc.Id, out string r) ? r : reason);
+                return;
+            }
+            if (LeavingIds.ContainsKey(merc.Id)) return;
+            LeavingIds[merc.Id] = reason;
+            DailyLog.Add($"{Josa.IGa(merc.Name)} 계약이 끝나 돌아가면 길드를 떠난다.");
+        }
+
+        /// <summary>재계약했다: 계약이 끝나 떠나려던 결심을 거둔다(다른 이유로 떠나려는 사람은 그대로).</summary>
+        public static void CancelContractLeaving(Mercenary merc)
+        {
+            if (merc != null && LeavingIds.TryGetValue(merc.Id, out string reason) && reason == "계약이 끝나") LeavingIds.Remove(merc.Id);
+        }
+
         /// <summary>길드를 떠난다: 파티에서 빼고 중요 알림(게임을 멈추고 알림창, 시간 넘기기도 여기서 멈춘다).</summary>
         private static void Leave(Mercenary merc, string reason)
         {
             LeavingIds.Remove(merc.Id);
             PlayerParty.Instance.Remove(merc);
+            Contracts.Remove(merc);
             string line = $"{Josa.IGa(merc.Name)} {reason} 길드를 떠났다.";
             ToastLog.Show(line, false);
             DailyLog.Add(line);

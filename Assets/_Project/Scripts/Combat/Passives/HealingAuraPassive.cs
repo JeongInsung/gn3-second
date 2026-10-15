@@ -11,7 +11,7 @@ namespace GN3.Combat
         private IReadOnlyList<Combatant> _allies;
 
         public override string Name => "치유의 기운";
-        public override string Description => $"매 라운드 아군 중 체력 비율이 가장 낮은 유닛을 신성력 × {HolyRatio:0.##}만큼 회복";
+        public override string Description => $"매 라운드 아군 중 체력 비율이 가장 낮은 유닛을 신성력 × {HolyRatio * CombatFormulas.DamageScale:0.##}만큼 회복";
 
         public override void OnBattleStart(Combatant self, IReadOnlyList<Combatant> allies, IReadOnlyList<Combatant> enemies)
         {
@@ -37,7 +37,7 @@ namespace GN3.Combat
             }
 
             if (lowest != null)
-                lowest.Heal(Math.Max(1, (int)Math.Round(self.Stats.Holy * HolyRatio)));
+                lowest.Heal(CombatFormulas.Scale(self.Stats.Holy * HolyRatio));
         }
     }
 }

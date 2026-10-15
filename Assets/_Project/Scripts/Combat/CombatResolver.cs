@@ -64,7 +64,7 @@ namespace GN3.Combat
             float damageMultiplier = 1f, bool ignoreDefense = false)
         {
             int baseDamage = ignoreDefense
-                ? Math.Max(CombatFormulas.MinimumDamage, attacker.Stats.Offense)
+                ? CombatFormulas.Scale(attacker.Stats.Offense)
                 : CombatFormulas.CalculateDamage(attacker, target);
             if (damageMultiplier != 1f)
                 baseDamage = Math.Max(CombatFormulas.MinimumDamage, (int)Math.Round(baseDamage * damageMultiplier));
@@ -102,6 +102,26 @@ namespace GN3.Combat
                 RaiseAllyDefeated(targetTeam, target);
 
             return evt;
+        }
+
+        /// <summary>
+        /// 독 한 번: 두 팀의 중독된 유닛마다 독 피해를 주고 이벤트(IsPoison)를 돌려준다. 쓰러지면 그 팀에 아군 사망을 알린다.
+        /// 자동 전투는 라운드 시작마다, 직접 전투는 1초마다 부른다.
+        /// </summary>
+        public static List<BattleEvent> TickPoison(List<Combatant> teamA, List<Combatant> teamB, int round)
+        {
+            var events = new List<BattleEvent>();
+            foreach (var team in new[] { teamA, teamB })
+                foreach (var unit in team)
+                {
+                    if (!unit.IsPoisoned) continue;
+                    var source = unit.PoisonSource;
+                    int damage = unit.TakePoisonTick();
+                    bool defeated = !unit.IsAlive;
+                    events.Add(new BattleEvent(round, source ?? unit, unit, damage, defeated, isPoison: true));
+                    if (defeated) RaiseAllyDefeated(team, unit);
+                }
+            return events;
         }
 
         public static void RaiseAllyDefeated(List<Combatant> allies, Combatant defeated)

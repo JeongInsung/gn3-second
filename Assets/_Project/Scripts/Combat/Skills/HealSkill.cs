@@ -10,14 +10,14 @@ namespace GN3.Combat
         private const float HolyRatio = 1.75f;
 
         public override string Name => "치유";
-        public override string Description => $"아군 하나의 체력을 신성력 × {HolyRatio:0.##}만큼 회복시킨다";
+        public override string Description => $"아군 하나의 체력을 신성력 × {HolyRatio * CombatFormulas.DamageScale:0.##}만큼 회복시킨다";
         public override float CooldownSeconds => 4f;
         public override SkillTargetType TargetType => SkillTargetType.Ally;
 
         public override List<BattleEvent> Execute(Combatant user, Combatant target, List<Combatant> allies, List<Combatant> enemies,
             int round, System.Random rng)
         {
-            int amount = Math.Max(1, (int)Math.Round(user.Stats.Holy * HolyRatio));
+            int amount = CombatFormulas.Scale(user.Stats.Holy * HolyRatio); // 피해와 같은 배율로(체력 대비 회복량 유지)
             target.Heal(amount);
             return new List<BattleEvent> { new BattleEvent(round, user, target, -amount, false, false) };
         }

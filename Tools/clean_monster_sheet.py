@@ -12,7 +12,9 @@ AI로 만든 4열×2행 시트는 칸 폭이 정수가 아니고(1774/4 = 443.5)
 
 Unity 쪽(BattleMonsterSprite)은 CELL·SOURCE_CELL 값을 같은 것으로 쓴다.
 
-사용법: python Tools/clean_monster_sheet.py 원본.png 결과.png [원본.png 결과.png ...]
+사용법: python Tools/clean_monster_sheet.py [--flip] 원본.png 결과.png [원본.png 결과.png ...]
+  --flip: 정리한 뒤 칸마다 좌우를 뒤집는다(프레임 순서는 그대로). 전투 UI는 오른쪽을 보는 그림을 기준으로
+          적 쪽을 Facing으로 뒤집으므로, 왼쪽을 보는 원본에만 쓴다(고블린·늑대 시트는 오른쪽을 봐서 필요 없다).
 필요: numpy, scipy, Pillow
 """
 import sys
@@ -27,7 +29,7 @@ ALPHA_MIN = 8       # 이보다 투명한 픽셀은 배경으로 본다
 EDGE = 3            # 검사: 새 칸 가장자리 이 폭 안에 그림이 있으면 경고
 
 
-def clean(src_path, dst_path):
+def clean(src_path, dst_path, flip=False):
     src = np.array(Image.open(src_path).convert("RGBA"))
     height, width = src.shape[:2]
     cell_w, cell_h = width / COLUMNS, height / ROWS
@@ -70,6 +72,12 @@ def clean(src_path, dst_path):
     empty = out[fdy, fdx, 3] == 0
     out[fdy[empty], fdx[empty]] = src[fy[empty], fx[empty]]
 
+    if flip:  # 칸마다 좌우 뒤집기(칸 안 위치 기준이라 발 높이·프레임 순서는 그대로)
+        for r in range(ROWS):
+            for c in range(COLUMNS):
+                block = out[r * CELL:(r + 1) * CELL, c * CELL:(c + 1) * CELL]
+                out[r * CELL:(r + 1) * CELL, c * CELL:(c + 1) * CELL] = block[:, ::-1].copy()
+
     Image.fromarray(out).save(dst_path)
 
     # 검사: 새 칸 가장자리에 그림이 닿는지
@@ -94,7 +102,9 @@ def clean(src_path, dst_path):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    flip = "--flip" in args
+    args = [a for a in args if a != "--flip"]
     if len(args) < 2 or len(args) % 2:
         sys.exit(__doc__)
     for i in range(0, len(args), 2):
-        clean(args[i], args[i + 1])
+        clean(args[i], args[i + 1], flip)

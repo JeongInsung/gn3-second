@@ -91,6 +91,7 @@ namespace GN3.UI
             _market.MaxGrade = rank.MaxMercGrade;
 
             _hireButtons.Clear();
+            ContractNegotiationPanel.ForgetMarketBreakdowns(); // 새 목록이니 깨졌던 협상은 잊는다
             foreach (var merc in _market.Refresh())
                 _cardRows.Add(CreateCard(merc));
             UpdateCapacity();
@@ -133,9 +134,16 @@ namespace GN3.UI
             var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}", 18, TextAnchor.MiddleLeft);
             powerText.color = UITheme.TitleText;
             powerText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            var powerLayout = powerText.gameObject.AddComponent<LayoutElement>();
-            powerLayout.minWidth = 140;
-            powerLayout.flexibleWidth = 1; // 남는 폭을 차지해 고용 버튼을 오른쪽 끝으로 민다
+            powerText.gameObject.AddComponent<LayoutElement>().minWidth = 140;
+
+            // 관심도(명성·등급 차이·성격): 관심 없으면 협상도 못 한다
+            var demand = ContractTerms.For(merc, renewal: false);
+            var interestText = CreateText(row.transform, ContractTerms.InterestLabel(demand.Interest), 16, TextAnchor.MiddleLeft);
+            interestText.color = ContractTerms.InterestColor(demand.Interest);
+            interestText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var interestLayout = interestText.gameObject.AddComponent<LayoutElement>();
+            interestLayout.minWidth = 90;
+            interestLayout.flexibleWidth = 1; // 남는 폭을 차지해 협상 버튼을 오른쪽 끝으로 민다
 
             RowClickHandler.Attach(row, () => MercenaryInfoPanel.ShowGlobal(merc));
 
@@ -147,17 +155,20 @@ namespace GN3.UI
             hireLayout.minHeight = 40;
             hireLayout.flexibleWidth = 0;
 
-            int cost = Pricing.HireCost(merc);
-            var hireText = CreateText(hireButtonGO.transform, $"고용 ({cost}G)", 18, TextAnchor.MiddleCenter);
+            bool notInterested = demand.Interest == Interest.NotInterested;
+            bool broken = ContractNegotiationPanel.IsBrokenOff(merc);
+            var hireText = CreateText(hireButtonGO.transform, notInterested ? "관심 없음" : broken ? "협상 결렬" : "협상", 18, TextAnchor.MiddleCenter);
             var hireTextRect = hireText.GetComponent<RectTransform>();
             hireTextRect.anchorMin = Vector2.zero;
             hireTextRect.anchorMax = Vector2.one;
             hireTextRect.offsetMin = Vector2.zero;
             hireTextRect.offsetMax = Vector2.zero;
 
-            hireButtonGO.AddComponent<TooltipTrigger>().Text = PriceReason(merc, cost);
-            _hireButtons.Add(hireButtonGO.GetComponent<Button>());
-            hireButtonGO.GetComponent<Button>().onClick.AddListener(() =>
+            hireButtonGO.AddComponent<TooltipTrigger>().Text = DemandHint(merc, demand);
+            var hireButton = hireButtonGO.GetComponent<Button>();
+            if (notInterested || broken) hireButton.interactable = false;
+            else _hireButtons.Add(hireButton); // 정원이 차면 UpdateCapacity가 막는다
+            hireButton.onClick.AddListener(() =>
             {
                 var party = PlayerParty.Instance;
                 if (party.Members.Count >= party.MaxSize)
@@ -165,36 +176,36 @@ namespace GN3.UI
                     ToastLog.Show($"파티 정원({party.MaxSize}명)이 가득 찼습니다.", false);
                     return;
                 }
-                if (!Wallet.TrySpend(cost))
+                ContractNegotiationPanel.OpenHire(merc, () =>
                 {
-                    ToastLog.Show($"골드가 부족합니다 (필요 {cost}G, 보유 {Wallet.Gold}G)", false);
-                    return;
-                }
-                if (!party.TryAdd(merc))
+                    _cardRows.Remove(row);
+                    Destroy(row);
+                }, () =>
                 {
-                    Wallet.Add(cost); // 이미 고용된 용병 등으로 실패하면 돌려준다
-                    return;
-                }
-                ToastLog.Show($"{merc.Name} 고용 (-{cost}G)");
-
-                Debug.Log($"{merc.Name} 고용됨 ({merc.Class.ClassName} {merc.Age}세)");
-                _cardRows.Remove(row);
-                Destroy(row);
+                    if (hireButton == null || !ContractNegotiationPanel.IsBrokenOff(merc)) return;
+                    hireText.text = "협상 결렬";
+                    hireButton.interactable = false;
+                    _hireButtons.Remove(hireButton);
+                });
             });
 
             return row;
         }
 
         /// <summary>
-        /// 고용 버튼 툴팁: 고용비가 왜 이 값인지(Pricing.HireCost — 전투력·나이·재능·희귀 특성). 재능은 숨은 값이라 배율은 밝히지 않고 뜻만 알려 준다.
+        /// 협상 버튼 툴팁: 에이전트 귀띔(요구의 대략적인 범위). 시세(고용비)는 전투력·나이·재능·희귀 특성으로 정해지고,
+        /// 재능은 숨은 값이라 같은 전투력에 요구가 높으면 재능이 좋다는 뜻이다.
         /// </summary>
-        private static string PriceReason(Mercenary merc, int cost)
+        private static string DemandHint(Mercenary merc, ContractDemand demand)
         {
-            float ageRate = GrowthTuning.PriceMultiplier(merc.Age);
-            string age = Mathf.Approximately(ageRate, 1f) ? $"나이 {merc.Age}세" : $"나이 {merc.Age}세(가격 ×{ageRate:0.##})";
-            string text = $"고용비 {cost}G: 전투력 {merc.GradePower} · {age} · 재능(숨겨진 값)";
-            if (merc.HasRarePassive) text += "\n+ 희귀 특성 60G";
-            return text + "\n같은 전투력에 더 비싸면 재능이 좋아 더 빨리 자란다는 뜻입니다.";
+            if (demand.Interest == Interest.NotInterested)
+                return "길드 등급·명성에 비해 눈이 높아 협상할 생각이 없습니다.\n명성을 올리면 마음이 바뀔 수 있습니다.";
+            float s = ContractTuning.AgentHintSpread;
+            int wLow = Mathf.Max(1, Mathf.FloorToInt(demand.WeeklyWage * (1f - s))), wHigh = Mathf.CeilToInt(demand.WeeklyWage * (1f + s));
+            string text = $"에이전트 귀띔: 주급 {wLow}~{wHigh}G · 계약금 약 {Mathf.RoundToInt(demand.SigningFee / 10f) * 10}G";
+            text += $"\n관심도 {ContractTerms.InterestLabel(demand.Interest)} · 인내심 {demand.Patience}";
+            if (merc.HasRarePassive) text += "\n희귀 특성이 있어 몸값이 높습니다.";
+            return text + "\n같은 전투력에 요구가 높으면 재능이 좋아 더 빨리 자란다는 뜻입니다.";
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

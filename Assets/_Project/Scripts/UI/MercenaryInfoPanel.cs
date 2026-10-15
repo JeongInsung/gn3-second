@@ -50,6 +50,7 @@ namespace GN3.UI
         private TooltipTrigger _healthStatusTip; // 떨어진 능력치·입원 정보
         private TooltipTrigger _statsTip;
         private GameObject _relationsButton;
+        private GameObject _renewButton; // 계약 재협상(고용된 용병만)
 
         private Mercenary _shown;
         private bool _shownWasHired; // 열 때 파티원이었는지(그 뒤 이탈·사망하면 창을 닫는다)
@@ -138,6 +139,8 @@ namespace GN3.UI
             _healthStatusText.supportRichText = true; // 상태이상 이름 색(에셋 이름에는 태그가 없다)
             _healthStatusTip = AddTooltip(_healthStatusText);
             _relationsButton = CreateRelationsButton();
+            _renewButton = CreateBottomButton("RenewButton", "재계약", new Vector2(122f, 8f), new Color(0.62f, 0.5f, 0.2f, 1f),
+                () => { if (_shown != null) ContractNegotiationPanel.OpenRenewal(_shown); });
 
             CreateCloseButton();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -222,6 +225,34 @@ namespace GN3.UI
             return go;
         }
 
+        /// <summary>왼쪽 아래 작은 버튼(관계 보기와 같은 모양).</summary>
+        private GameObject CreateBottomButton(string name, string label, Vector2 position, Color color, UnityEngine.Events.UnityAction onClick)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(_panel.transform, false);
+            var rect = go.GetComponent<RectTransform>();
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.zero;
+            rect.anchoredPosition = position;
+            rect.sizeDelta = new Vector2(100f, 24f);
+            go.GetComponent<Image>().color = color;
+            go.GetComponent<Button>().onClick.AddListener(onClick);
+
+            var labelGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            labelGo.transform.SetParent(go.transform, false);
+            var labelRect = labelGo.GetComponent<RectTransform>();
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+            var text = labelGo.GetComponent<Text>();
+            text.text = label;
+            text.font = UITheme.Font;
+            text.fontSize = 13;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.white;
+            text.raycastTarget = false;
+            return go;
+        }
+
         /// <summary>[테스트] 보고 있는 용병 체력 -30%. 치료 아이템 시험용(에디터·개발 빌드에서만).</summary>
         private void CreateDebugDamageButton()
         {
@@ -231,7 +262,7 @@ namespace GN3.UI
             var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0f);
             rect.anchoredPosition = new Vector2(-10f, 8f);
-            rect.sizeDelta = new Vector2(150f, 24f);
+            rect.sizeDelta = new Vector2(96f, 24f); // 왼쪽 관계 보기·재계약 버튼과 겹치지 않게
             go.GetComponent<Image>().color = new Color(0.45f, 0.45f, 0.45f, 1f);
             go.GetComponent<Button>().onClick.AddListener(() =>
             {
@@ -248,7 +279,7 @@ namespace GN3.UI
             labelRect.anchorMax = Vector2.one;
             labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
             var text = label.GetComponent<Text>();
-            text.text = "[테스트] 체력 -30%";
+            text.text = "[테스트] -30%";
             text.font = UITheme.Font;
             text.fontSize = 13;
             text.alignment = TextAnchor.MiddleCenter;
@@ -358,7 +389,7 @@ namespace GN3.UI
             bool wounded = merc.CurrentHealth < stats.MaxHealth;
             if (_debugButton != null) _debugButton.SetActive(hired); // 고용 전 용병은 테스트로 다치게 하지 않는다
             if (!hired)
-                _statusText.text = $"상태: 고용 전 · 고용비 {Pricing.HireCost(merc)}G";
+                _statusText.text = $"상태: 계약 전 · {ContractTerms.InterestLabel(ContractTerms.For(merc, renewal: false).Interest)}";
             else if (ExpeditionLog.Instance.IsOnExpedition(merc))
                 _statusText.text = $"상태: 파견 중 ({ExpeditionLog.Instance.FindQuest(merc)?.Title})";
             else if (TrainingHall.IsTraining(merc))
@@ -372,7 +403,7 @@ namespace GN3.UI
             else
                 _statusText.text = merc.IsExhausted ? "상태: 지쳐서 쉬는 중 (파견 불가)"
                     : wounded ? "상태: 다침 (마을에서 쉬는 중)" : "상태: 마을에서 쉬는 중";
-            if (hired) _statusText.text += $"\n주급 {MercenaryCondition.WeeklyWage(merc)}G"; // 좁은 칸에서 "주급 / 22G"처럼 끊기지 않게 줄을 나눈다
+            if (hired) _statusText.text += $"\n계약: {Contracts.Describe(merc)}"; // 좁은 칸에서 끊기지 않게 줄을 나눈다
             string ailmentTip = Ailments.EffectTooltip(merc); // 효과는 글에 쓰지 않고 마우스를 올리면 보여 준다(건강 줄·능력치 줄)
             SetTipLine(_statusText, _statusTip, _statusText.text, null);
 
@@ -447,6 +478,7 @@ namespace GN3.UI
             // 친한 동료(고용된 용병만): 지인 이상 상위 3명
             _friendsText.gameObject.SetActive(hired);
             _relationsButton.SetActive(hired);
+            _renewButton.SetActive(hired);
             if (hired)
             {
                 var friends = Affinity.Friends(merc, Affinity.Acquaintance.MinValue).Take(3).ToList();
