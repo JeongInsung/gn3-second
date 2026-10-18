@@ -8,13 +8,15 @@ namespace GN3.Quests
     {
         /// <summary>tierOverride를 주면(계층 0~2 고정) 난이도는 그 계층에서 역산한다(난이도 1~3이 계층 0~2에 정확히
         /// 1:1 대응). 생략하면 기존처럼 minDifficulty~maxDifficulty에서 난이도를 굴려 계층을 정한다(QuestBoard가
-        /// 이미 깬 계층 비율을 낮추려고 계층을 먼저 가중 추첨할 때 tierOverride를 쓴다).</summary>
+        /// 이미 깬 계층 비율을 낮추려고 계층을 먼저 가중 추첨할 때 tierOverride를 쓴다).
+        /// difficultyOverride를 주면 계층(적 구성)은 그대로 두고 난이도만 바꾼다 — 적 능력치·권장 전투력·보상이 그 난이도를 따른다
+        /// (게시판에 늘 올라오는 S급 엔트 토벌, QuestBoard.SignatureDifficulty).</summary>
         public static Quest Generate(Region region, int minCount, int maxCount, Random rng,
-            int? tierOverride = null, int minDifficulty = 1, int maxDifficulty = 3)
+            int? tierOverride = null, int minDifficulty = 1, int maxDifficulty = 3, int? difficultyOverride = null)
         {
             // 난이도 1=인간형 약탈 세력, 2=지형 상징 동물, 3 이상=지역 보스급
             int tier = tierOverride ?? Math.Clamp(rng.Next(minDifficulty, maxDifficulty + 1) - 1, 0, 2);
-            int difficulty = tier + 1;
+            int difficulty = difficultyOverride ?? tier + 1;
             RegionInfo.GetEncounter(region, tier, rng, out string enemyName, out string locationName);
             var waves = RollWaves(region, tier, enemyName, minCount, maxCount, rng);
             int durationDays = RollDurationDays(tier, rng);

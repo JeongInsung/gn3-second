@@ -21,6 +21,11 @@ namespace GN3.Combat
         public const float SporeHealthMultiplier = 0.67f; // 독버섯(독이 더해지는 원거리 몹). 피해 ×0.35 뒤 전투가 길어져 0.8이면 늑대보다 어려웠다(중간 24% vs 39%) → 0.67(39%)
         public const float RiderHealthMultiplier = 0.9f; // 고블린 늑대기수(늑대를 탄 고블린): 빠른 대신(회피↑) 조금 덜 단단 — 1.2면 고블린보다 크게 어려웠다(중간 28% vs 43%), 0.9면 47%
         public const int RiderMoveSpeedBonus = 2;
+        // 보스 거목 엔트(은월의 숲의 주인, 게시판 S급): 아주 단단하고 세게 친다. 제자리에 뿌리박고 3타마다 뿌리 내려찍기
+        // (직접 전투는 범위 예고 뒤 분출 — 분대장은 피할 수 있다, RootSlamPassive). 2026-10-19 사용자 요청으로 체력 1.1 → 2.5, 공격 ×1.5.
+        public const float EntHealthMultiplier = 2.5f;
+        public const float EntAttackMultiplier = 1.5f;
+        public const int EntMoveSpeedPenalty = 2;
         public const float BossHealthMultiplier = 3f;
         public const float BossAttackMultiplier = 1.3f;
 
@@ -45,16 +50,19 @@ namespace GN3.Combat
                 // 독버섯: 맞히면 독(PoisonSporePassive)이 더해지는 원거리 몹이라 체력은 조금 낮게.
                 bool spore = enemyName.Contains("버섯");
                 bool rider = enemyName.Contains("늑대기수");
-                float speciesHealth = spore ? SporeHealthMultiplier : rider ? RiderHealthMultiplier : 1f;
+                bool ent = enemyName.Contains("엔트");
+                float speciesHealth = spore ? SporeHealthMultiplier : rider ? RiderHealthMultiplier : ent ? EntHealthMultiplier : 1f;
                 if (rider) moveSpeed += RiderMoveSpeedBonus;
+                if (ent) moveSpeed -= EntMoveSpeedPenalty;
 
                 var stats = new CombatStats(
-                    attack: Math.Max(1, (int)Math.Round(attack * attackMul)),
+                    attack: Math.Max(1, (int)Math.Round(attack * attackMul * (ent ? EntAttackMultiplier : 1f))),
                     defense: Math.Max(0, defense),
                     maxHealth: Math.Max(1, (int)Math.Round(health * healthMul * speciesHealth)),
                     moveSpeed: Math.Max(0, moveSpeed));
 
-                var passives = spore ? new List<PassiveBase> { new PoisonSporePassive() } : null;
+                var passives = spore ? new List<PassiveBase> { new PoisonSporePassive() }
+                    : ent ? new List<PassiveBase> { new RootSlamPassive() } : null;
                 result.Add(new Combatant(enemyName, stats, passives));
             }
             return result;

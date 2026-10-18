@@ -21,11 +21,14 @@ namespace GN3.World
             public string[] TerrainAnimalLocations;
             public string[] Boss;
             public string[] BossLocations;
+            public string[] BossTitles; // 보스 칭호(Boss와 같은 인덱스) — 등장 배너·상단 보스 체력바
         }
 
         // 전투 그림이 있는 몬스터로만 짠다: 고블린(근접은 검 고블린, 무리의 3명 중 1명은 고블린 궁수)과
         // 늑대(이름에 "늑대"·"울프" → 늑대 그림, BattleMonsterSprite.KindFor). 보스는 혼자 크게 나온다.
-        // 이름·장소도 그림에 맞춰 통일: 고블린·고블린 늑대기수(늑대 탄 고블린) / 야생늑대·독버섯 / 보스 고블린 족장(큰 검 고블린), 장소는 모두 "은월의 숲".
+        // 이름·장소도 그림에 맞춰 통일: 고블린·고블린 늑대기수(늑대 탄 고블린) / 야생늑대·독버섯 / 보스 거목 엔트(2026-10-19 고블린 족장을 교체), 장소는 모두 "은월의 숲".
+        // 예전 저장의 "고블린 족장" 퀘스트는 이름 그대로 남아 큰 검 고블린 그림으로 나온다.
+        // 보스는 "은월의 숲의 주인"이라 보스 퀘스트만 장소가 "은월의 숲 깊은 곳"(제목도 그 장소로)이고, 전투 배경도 숲 한가운데다.
         // 새 몬스터 그림을 넣으면 여기에 그 이름을 더하고 KindFor에 연결한다.
         private static readonly Dictionary<Region, Data> Table = new Dictionary<Region, Data>
         {
@@ -36,8 +39,9 @@ namespace GN3.World
                 RaiderLocations = new[] { "은월의 숲", "은월의 숲" },
                 TerrainAnimal = new[] { "야생늑대", "독버섯" },
                 TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲" },
-                Boss = new[] { "고블린 족장" },
-                BossLocations = new[] { "은월의 숲" },
+                Boss = new[] { "거목 엔트" },
+                BossLocations = new[] { "은월의 숲 깊은 곳" },
+                BossTitles = new[] { "은월의 숲의 주인" },
             },
             [Region.North] = new Data
             {
@@ -46,8 +50,9 @@ namespace GN3.World
                 RaiderLocations = new[] { "은월의 숲", "은월의 숲" },
                 TerrainAnimal = new[] { "야생늑대", "독버섯" },
                 TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲" },
-                Boss = new[] { "고블린 족장" },
-                BossLocations = new[] { "은월의 숲" },
+                Boss = new[] { "거목 엔트" },
+                BossLocations = new[] { "은월의 숲 깊은 곳" },
+                BossTitles = new[] { "은월의 숲의 주인" },
             },
             [Region.South] = new Data
             {
@@ -56,8 +61,9 @@ namespace GN3.World
                 RaiderLocations = new[] { "은월의 숲", "은월의 숲" },
                 TerrainAnimal = new[] { "야생늑대", "독버섯" },
                 TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲" },
-                Boss = new[] { "고블린 족장" },
-                BossLocations = new[] { "은월의 숲" },
+                Boss = new[] { "거목 엔트" },
+                BossLocations = new[] { "은월의 숲 깊은 곳" },
+                BossTitles = new[] { "은월의 숲의 주인" },
             },
             [Region.East] = new Data
             {
@@ -66,8 +72,9 @@ namespace GN3.World
                 RaiderLocations = new[] { "은월의 숲", "은월의 숲" },
                 TerrainAnimal = new[] { "야생늑대", "독버섯" },
                 TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲" },
-                Boss = new[] { "고블린 족장" },
-                BossLocations = new[] { "은월의 숲" },
+                Boss = new[] { "거목 엔트" },
+                BossLocations = new[] { "은월의 숲 깊은 곳" },
+                BossTitles = new[] { "은월의 숲의 주인" },
             },
         };
 
@@ -90,6 +97,17 @@ namespace GN3.World
             int index = rng.Next(monsterPool.Length);
             monsterName = monsterPool[index];
             locationName = (locationPool != null && index < locationPool.Length) ? locationPool[index] : null;
+        }
+
+        /// <summary>보스 이름 → 칭호("거목 엔트" → "은월의 숲의 주인"). 칭호가 없는 이름(예전 저장의 고블린 족장 등)은 null.</summary>
+        public static string BossTitle(string bossName)
+        {
+            foreach (var data in Table.Values)
+            {
+                int i = Array.IndexOf(data.Boss, bossName);
+                if (i >= 0 && data.BossTitles != null && i < data.BossTitles.Length) return data.BossTitles[i];
+            }
+            return null;
         }
 
         /// <summary>퀘스트가 나오는 지역. 지역 구분이 없어 하나뿐이다.</summary>

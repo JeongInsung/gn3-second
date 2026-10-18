@@ -203,7 +203,7 @@ namespace GN3.UI
             float s = ContractTuning.AgentHintSpread;
             int wLow = Mathf.Max(1, Mathf.FloorToInt(demand.WeeklyWage * (1f - s))), wHigh = Mathf.CeilToInt(demand.WeeklyWage * (1f + s));
             string text = $"에이전트 귀띔: 주급 {wLow}~{wHigh}G · 계약금 약 {Mathf.RoundToInt(demand.SigningFee / 10f) * 10}G";
-            text += $"\n관심도 {ContractTerms.InterestLabel(demand.Interest)} · 인내심 {demand.Patience}";
+            text += $"\n관심도 {ContractTerms.InterestLabel(demand.Interest)} · 성향 {NegotiationStyles.Get(demand.Style).Label}";
             if (merc.HasRarePassive) text += "\n희귀 특성이 있어 몸값이 높습니다.";
             return text + "\n같은 전투력에 요구가 높으면 재능이 좋아 더 빨리 자란다는 뜻입니다.";
         }

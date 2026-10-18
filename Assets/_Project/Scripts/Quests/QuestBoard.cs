@@ -53,8 +53,22 @@ namespace GN3.Quests
                 result.Add(best);
             }
 
+            result.Insert(0, SignatureQuest(unlockedRegions[0])); // 맨 위: 늘 올라오는 S급 엔트 토벌(길드 등급 제한과 상관없이)
             Listings = result;
             return Listings;
+        }
+
+        // 은월의 숲의 주인(거목 엔트) 토벌: 보스 계층 3라운드를 난이도 4로 — 권장 전투력이 가장 가벼운 구성(유효 적 4.5)도
+        // 4.5 × (58 + 21×4) = 639 ≥ 600이라 늘 S급이다. 그래도 S가 아니면 난이도를 올려 다시 뽑는다(안전망).
+        public const int SignatureDifficulty = 4;
+
+        private Quest SignatureQuest(Region region)
+        {
+            for (int difficulty = SignatureDifficulty; ; difficulty++)
+            {
+                var quest = QuestGenerator.Generate(region, MinEnemyCount, MaxEnemyCount, _random, tierOverride: 2, difficultyOverride: difficulty);
+                if (QuestDifficulty.Grade(quest) == MercenaryGrade.S) return quest;
+            }
         }
 
         /// <summary>지역×계층(0~2) 전부를 후보로 두고, 이미 많이 깬 조합일수록 뽑힐 확률을 낮춘다(QuestClearHistory).</summary>

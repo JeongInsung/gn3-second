@@ -33,10 +33,26 @@ namespace GN3.Mercenaries
         public const float LowMoraleRenewalMultiplier = 1.2f; // 재계약 때 사기가 낮으면
 
         // ---------- 협상 ----------
-        public const float CounterThreshold = 0.85f;   // 만족도가 이 이상이면 역제안(인내심 −1)
-        public const float LowballBelow = 0.7f;        // 이 미만은 터무니없는 제안(인내심 −2), 사이는 "모자람"(인내심 −1)
-        public const int BasePatience = 3;
-        public const float AgentHintSpread = 0.15f;    // 에이전트 귀띔 범위(실제 요구 ±)
+        public const float AgentHintSpread = 0.15f;    // 에이전트 귀띔 범위(처음 부르는 값 ±)
+        public const float FloorJitter = 0.03f;        // 같은 성향이라도 마지노선이 사람마다 ±
+        public const int KeenMood = 70, NeutralMood = 55, ReluctantMood = 40; // 협상 시작 기분(0이 되면 결렬)
+        public const int StallMood = 10;               // 직전 제안보다 올리지 않고 버티면
+        public const int RaiseMood = 3;                // 의미 있게 올려 주면
+        public const float MeaningfulRaise = 0.02f;    // 만족도가 이만큼 오르면 "올려 줬다"
+        public const float CloseEnough = 0.01f;        // 부르는 값과 이만큼 가까워지면 그냥 받아들인다
+        public const float CalculatingRaiseScale = 4f; // 계산형 양보율 = 플레이어가 올린 만족도 × 이 값
+        public const float CalculatingMin = 0.1f, CalculatingMax = 0.6f;
+        public const int BluffCalledMood = 25;         // 최종 제안 허세를 들켰을 때(다혈질형은 결렬)
+        public const float TimidCaveMargin = 0.05f;    // 소심형은 마지노선보다 이만큼 낮은 최종 제안에도
+        public const float TimidCaveChance = 0.5f;     //   이 확률로 굴복한다
+        public const int WalkAwayMood = 10;            // 자리를 떴다 붙잡혔을 때
+        public const float RivalRealChance = 0.4f;     // 용병의 "다른 길드 제의"가 진짜일 확률
+        public const float RivalWageMin = 1.1f, RivalWageMax = 1.25f; // 주장하는 다른 길드 주급 = 역제안 주급 × 이 범위
+        public const int RivalDeadline = 2;            // 진짜 제의면 이만큼 라운드 안에 합의해야 한다
+        public const int RivalExposedMood = 5;         // 가짜를 들켰을 때(값은 크게 내려온다)
+        public const int RivalDoubtedMood = 20;        // 진짜인데 의심했을 때(기한도 1로 준다)
+        public const float TalkFloorDrop = 0.03f;      // 잘 먹힌 화법은 마지노선도 이만큼 낮춘다
+        public const int SignedHappyMood = 70, SignedGrudgeMood = 25, SignedMorale = 3; // 서명 때 기분에 따라 사기 ±
 
         // ---------- 성과 보너스 ----------
         public const int BonusPaidMorale = 3;

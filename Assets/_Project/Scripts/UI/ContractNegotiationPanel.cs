@@ -11,50 +11,57 @@ namespace GN3.UI
 {
     /// <summary>
     /// 풋볼매니저식 계약 협상 창. 주급·계약 기간·계약금·성공 보너스를 정해 제안하면 용병이
-    /// 받아들이거나(서명) · 역제안하거나(모자란 만큼 주급을 올린 조건) · 불쾌해한다. 기분 나쁜 제안이 쌓여 인내심이 바닥나면 협상이 깨진다
-    /// (시장 용병은 이번 목록에서 다시 협상할 수 없고, 재계약은 다음 날까지 못 한다).
-    /// 용병이 바라는 조건(ContractTerms.For)은 숨은 값이라 "에이전트 귀띔" 범위와 대답으로만 짐작한다.
+    /// 받아들이거나(합의) · 조금 내려온 값으로 역제안하거나 · 불쾌해한다. 밀고 당기기 규칙은 Negotiation.
+    /// 용병이 처음 부르는 값 아래에 성향별 숨은 마지노선이 있어, 기분 게이지·대사·성향 귀띔으로 읽어 내야 한다.
+    /// 심리전: [최종 제안](허세) · [자리 뜨기](밀어내기) · 설득 화법 3종 · 용병의 "다른 길드 제의"를 믿을지 말지.
+    /// 기분이 바닥나거나 허세가 들통나면 협상이 깨진다(시장 용병은 이번 목록에서 다시 협상할 수 없고, 재계약은 다음 날까지 못 한다).
+    /// 같은 날 창을 닫았다 열어도 협상 상태는 그대로다(닫기로 초기화하는 꼼수 방지).
     /// 시장 [협상](OpenHire) · 파티 창·용병 정보 [재계약](OpenRenewal)이 연다. 정렬 2: 시장(0)·상세 창(1) 위.
     /// </summary>
     public class ContractNegotiationPanel : MonoBehaviour
     {
-        private const float Width = 940f, Height = 600f;
+        private const float Width = 940f, Height = 660f;
         private const float StartRatio = 0.9f; // 첫 제안은 요구보다 조금 낮게(협상할 여지 — 대개 역제안이 온다)
 
         private static ContractNegotiationPanel _open;
         // 협상이 깨진 용병 id → 그날. 시장 용병은 시장을 새로 뽑을 때까지, 재계약은 그날만 다시 못 한다.
         private static readonly Dictionary<string, int> BrokenOff = new Dictionary<string, int>();
+        // 진행 중인 협상(용병 id → 그날·재계약 여부·상태·마지막 제안). 날이 바뀌면 새로 시작한다.
+        private static readonly Dictionary<string, (int day, bool renewal, Negotiation negotiation, ContractOffer offer)> Sessions =
+            new Dictionary<string, (int, bool, Negotiation, ContractOffer)>();
 
         private Mercenary _merc;
         private bool _renewal;
         private System.Action _onSigned;
         private System.Action _onClosed;
+        private Negotiation _neg;
         private ContractDemand _demand;
         private ContractOffer _offer;
-        private ContractOffer? _counter;
         private ContractOffer? _agreed; // 용병이 받아들인 조건 — [계약 확정하기]를 눌러야 서명된다
-        private int _patience;
         private bool _closed;
 
-        private Text _wageText, _feeText, _bonusText, _summaryText, _replyText, _patienceText;
+        private Text _wageText, _feeText, _bonusText, _summaryText, _replyText, _moodText;
+        private RectTransform _moodFill;
+        private Image _moodFillImage;
         private readonly List<(int days, Button button)> _lengthButtons = new List<(int, Button)>();
-        private Button _proposeButton, _acceptCounterButton, _confirmButton;
+        private readonly List<(TalkTopic topic, Button button)> _talkButtons = new List<(TalkTopic, Button)>();
+        private Button _proposeButton, _finalButton, _acceptCounterButton, _confirmButton, _walkAwayButton, _doubtButton, _acknowledgeButton;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForPlaySession()
         {
             _open = null;
             BrokenOff.Clear();
+            Sessions.Clear();
         }
 
-        /// <summary>시장 목록을 새로 뽑았다: 깨졌던 시장 협상은 잊는다(재계약 결렬은 그날까지 유지).</summary>
+        /// <summary>시장 목록을 새로 뽑았다: 깨졌던·하다 만 시장 협상은 잊는다(재계약 결렬은 그날까지 유지).</summary>
         public static void ForgetMarketBreakdowns()
         {
             var hired = new HashSet<string>();
             foreach (var m in PlayerParty.Instance.Members) hired.Add(m.Id);
-            var forget = new List<string>();
-            foreach (var id in BrokenOff.Keys) if (!hired.Contains(id)) forget.Add(id);
-            foreach (var id in forget) BrokenOff.Remove(id);
+            foreach (var id in BrokenOff.Keys.Where(id => !hired.Contains(id)).ToList()) BrokenOff.Remove(id);
+            foreach (var id in Sessions.Keys.Where(id => !hired.Contains(id)).ToList()) Sessions.Remove(id);
         }
 
         public static bool IsBrokenOff(Mercenary merc) =>
@@ -103,18 +110,27 @@ namespace GN3.UI
             _merc = merc;
             _renewal = renewal;
             _onSigned = onSigned;
-            _demand = demand;
-            _patience = demand.Patience;
-            var fair = ContractTerms.Fair(demand);
-            _offer = new ContractOffer
+            bool resumed = Sessions.TryGetValue(merc.Id, out var session) && session.day == GameClock.CurrentDay && session.renewal == renewal;
+            if (resumed)
             {
-                WeeklyWage = Mathf.Max(1, Mathf.RoundToInt(fair.WeeklyWage * StartRatio)),
-                LengthDays = renewal && Contracts.Get(merc) != null ? ContractTuning.DefaultLengthDays : fair.LengthDays,
-                SigningFee = Mathf.RoundToInt(fair.SigningFee * StartRatio / 5f) * 5,
-                WinBonus = 0,
-            };
+                _neg = session.negotiation;
+                _offer = session.offer;
+            }
+            else
+            {
+                _neg = new Negotiation(demand, ContractTerms.Seed(merc.Id));
+                var fair = ContractTerms.Fair(demand);
+                _offer = new ContractOffer
+                {
+                    WeeklyWage = Mathf.Max(1, Mathf.RoundToInt(fair.WeeklyWage * StartRatio)),
+                    LengthDays = renewal && Contracts.Get(merc) != null ? ContractTuning.DefaultLengthDays : fair.LengthDays,
+                    SigningFee = Mathf.RoundToInt(fair.SigningFee * StartRatio / 5f) * 5,
+                    WinBonus = 0,
+                };
+            }
+            _demand = _neg.Demand;
             Build();
-            Say(Greeting());
+            Say(resumed ? "또 오셨군요. 아까 하던 이야기를 계속하지요." : Greeting());
             Refresh();
         }
 
@@ -123,41 +139,34 @@ namespace GN3.UI
             if (_closed) return;
             _closed = true;
             if (_open == this) _open = null;
+            if (!_neg.Broken) Sessions[_merc.Id] = (GameClock.CurrentDay, _renewal, _neg, _offer);
             Destroy(gameObject);
             _onClosed?.Invoke();
         }
 
         // ---------- 협상 ----------
 
-        private void Propose()
+        private void Propose() => Handle(_neg.Propose(_offer), _offer);
+        private void FinalOffer() => Handle(_neg.FinalOffer(_offer), _offer);
+        private void WalkAway() => Handle(_neg.WalkAway(), _offer);
+        private void DoubtRival() => Handle(_neg.DoubtRival(), _offer);
+        private void AcknowledgeRival() => Handle(_neg.AcknowledgeRival(), _offer);
+        private void Talk(TalkTopic topic) => Handle(_neg.Talk(topic), _offer, topic);
+
+        private void Handle(NegotiationEvent e, ContractOffer offer, TalkTopic topic = TalkTopic.Praise)
         {
-            if (_patience <= 0) return;
-            switch (ContractTerms.Evaluate(_demand, _offer))
+            if (e == NegotiationEvent.Accepted || e == NegotiationEvent.ClosedGap || e == NegotiationEvent.FinalAccepted)
             {
-                case OfferResult.Accepted:
-                    Agree(_offer, "좋습니다. 이 조건이면 서명하겠습니다.");
-                    return;
-                case OfferResult.Counter:
-                    _patience -= 1;
-                    _counter = ContractTerms.Counter(_demand, _offer);
-                    Say(_patience > 0
-                        ? $"나쁘지 않군요. 주급을 {_counter.Value.WeeklyWage}G로 맞춰 주면 서명하겠습니다."
-                        : "이 정도로는 어렵겠군요. 다른 길드를 알아보겠습니다.");
-                    break;
-                default:
-                    // 조금 모자라면 인내심 1, 터무니없이 낮으면(LowballBelow 미만) 2를 잃는다
-                    bool lowball = ContractTerms.Satisfaction(_demand, _offer) < ContractTuning.LowballBelow;
-                    _patience -= lowball ? 2 : 1;
-                    _counter = null;
-                    Say(_patience <= 0 ? "장난하십니까? 더 이야기할 것 없습니다."
-                        : lowball ? Insulted() : "그 조건으로는 어렵습니다. 조금 더 생각해 주십시오.");
-                    break;
+                Agree(offer, Line(e, topic));
+                return;
             }
-            if (_patience <= 0)
+            string line = Line(e, topic);
+            if (e == NegotiationEvent.Countered && _neg.RivalPending) line += " " + RivalClaim();
+            Say(line);
+            if (_neg.Broken)
             {
-                _patience = 0;
-                _counter = null;
                 BrokenOff[_merc.Id] = GameClock.CurrentDay;
+                Sessions.Remove(_merc.Id);
                 ToastLog.Show($"{Josa.WaGwa(_merc.Name)}의 협상이 깨졌습니다.", false);
             }
             Refresh();
@@ -165,8 +174,8 @@ namespace GN3.UI
 
         private void AcceptCounter()
         {
-            if (_counter == null) return;
-            _offer = _counter.Value;
+            if (_neg.Counter == null) return;
+            _offer = _neg.Counter.Value;
             Agree(_offer, "그럼 그 조건으로 하지요. 서명만 남았습니다.");
         }
 
@@ -174,7 +183,6 @@ namespace GN3.UI
         private void Agree(ContractOffer offer, string reply)
         {
             _agreed = offer;
-            _counter = null;
             Say(reply);
             Refresh();
         }
@@ -208,6 +216,10 @@ namespace GN3.UI
                 MercenaryCondition.CancelContractLeaving(_merc);
                 _merc.AddMorale(5); // 다시 믿어 준 길드
             }
+            // 협상 끝 기분이 남는다: 기분 좋게 서명하면 사기 +, 앙금이 남으면 사기 −
+            if (_neg.Mood >= ContractTuning.SignedHappyMood) _merc.AddMorale(ContractTuning.SignedMorale);
+            else if (_neg.Mood <= ContractTuning.SignedGrudgeMood) _merc.AddMorale(-ContractTuning.SignedMorale);
+            Sessions.Remove(_merc.Id);
             string line = $"{_merc.Name} {(_renewal ? "재계약" : "계약")}: 주급 {offer.WeeklyWage}G · {offer.LengthDays}일" +
                           (offer.SigningFee > 0 ? $" · 계약금 -{offer.SigningFee}G" : "") + (offer.WinBonus > 0 ? $" · 성공 보너스 {offer.WinBonus}G" : "");
             GN3.Quests.DailyLog.Add(line);
@@ -223,6 +235,8 @@ namespace GN3.UI
             RecruitCelebration.Show(merc, offer, renewal);
         }
 
+        // ---------- 대사 ----------
+
         private string Greeting()
         {
             if (_renewal)
@@ -237,13 +251,101 @@ namespace GN3.UI
             };
         }
 
-        private string Insulted() => _merc.Personality switch
+        /// <summary>결과 × 성향 → 대사. 같은 결과도 성향마다 말투가 달라 속마음을 짐작하는 단서가 된다.</summary>
+        private string Line(NegotiationEvent e, TalkTopic topic)
         {
-            Personality.Hotblooded or Personality.Reckless => "그 돈으로 날 부리겠다고? 다시 생각해 오시오!",
-            Personality.Confident => "제 가치를 모르시는군요. 그 금액은 받아들일 수 없습니다.",
-            Personality.Coward or Personality.Nervous => "그, 그건 좀... 너무 적은 것 같아요.",
-            _ => "그 조건으로는 어렵습니다. 한참 모자랍니다.",
-        };
+            var style = _demand.Style;
+            int w = _neg.Counter?.WeeklyWage ?? 0;
+            switch (e)
+            {
+                case NegotiationEvent.Accepted: return "좋습니다. 이 조건이면 서명하겠습니다.";
+                case NegotiationEvent.ClosedGap: return "...좋습니다. 그쯤에서 하지요.";
+                case NegotiationEvent.Countered:
+                    return style switch
+                    {
+                        NegotiationStyle.Stubborn => $"그 정도로는 부족합니다. 주급 {w}G. 그 이하는 생각 없습니다.",
+                        NegotiationStyle.Volatile => $"흥, 좀 낫군. 주급 {w}G면 생각해 보지!",
+                        NegotiationStyle.Timid => $"저, 저기... 주급 {w}G 정도면 안 될까요?",
+                        NegotiationStyle.Calculating => $"계산해 보면 주급 {w}G가 맞습니다.",
+                        NegotiationStyle.Straight => $"솔직히 말하면 주급 {w}G는 받아야 합니다.",
+                        _ => $"음~ 주급 {w}G 정도면 좋겠는데요.",
+                    };
+                case NegotiationEvent.Insulted:
+                    return style switch
+                    {
+                        NegotiationStyle.Stubborn => "제 가치를 모르시는군요. 그 금액은 받아들일 수 없습니다.",
+                        NegotiationStyle.Volatile => "그 돈으로 날 부리겠다고? 다시 생각해 오시오!",
+                        NegotiationStyle.Timid => "그, 그건 좀... 너무 적은 것 같아요.",
+                        NegotiationStyle.Calculating => "시세를 모르시는군요. 숫자를 다시 보시죠.",
+                        NegotiationStyle.Straight => "그 조건으로는 어렵습니다. 한참 모자랍니다.",
+                        _ => "에이, 그건 너무하잖아요.",
+                    };
+                case NegotiationEvent.FinalAccepted:
+                    return style switch
+                    {
+                        NegotiationStyle.Stubborn => "...좋습니다. 이번만 양보하지요.",
+                        NegotiationStyle.Volatile => "하! 배짱 한번 좋군. 좋소!",
+                        NegotiationStyle.Timid => "아, 알겠어요... 그걸로 할게요.",
+                        NegotiationStyle.Calculating => "그 숫자면 받아들일 수 있습니다.",
+                        _ => "알겠습니다. 그 조건으로 하지요.",
+                    };
+                case NegotiationEvent.FinalCalled:
+                    return style == NegotiationStyle.Stubborn ? "허세는 통하지 않습니다. 진짜 마지막이 아니잖습니까?"
+                        : "마지막이라고요? 글쎄요, 아직 이야기할 여지는 있어 보입니다.";
+                case NegotiationEvent.FinalWalkout:
+                    return style == NegotiationStyle.Volatile ? "마지막? 좋소, 그럼 여기서 끝이오!" : "그게 마지막이라면 여기까지군요.";
+                case NegotiationEvent.CalledBack:
+                    return style switch
+                    {
+                        NegotiationStyle.Timid => $"자, 잠깐만요! 조금만 더 이야기해요... 주급 {w}G면 어때요?",
+                        NegotiationStyle.Stubborn => $"...앉으시죠. 주급 {w}G. 이게 제 양보입니다.",
+                        NegotiationStyle.Volatile => $"어이, 잠깐! 주급 {w}G. 이걸로 합시다!",
+                        _ => $"잠깐, 그렇게 가실 것까진 없지요. 주급 {w}G로 하죠.",
+                    };
+                case NegotiationEvent.LetGo:
+                    return style switch
+                    {
+                        NegotiationStyle.Stubborn => "가실 거면 가십시오. 저를 원하는 길드는 많습니다.",
+                        NegotiationStyle.Volatile => "가든 말든 마음대로 하시오!",
+                        _ => "그렇다면 어쩔 수 없군요.",
+                    };
+                case NegotiationEvent.RivalExposed:
+                    return style == NegotiationStyle.Stubborn ? $"...좋습니다, 허세였습니다. 주급 {w}G."
+                        : $"...사실 그런 제의는 없었습니다. 주급 {w}G로 하죠.";
+                case NegotiationEvent.RivalDoubted: return "절 거짓말쟁이로 보시는 겁니까? 다음 제안이 마지막 기회입니다. 그쪽에 답을 줘야 하니까요.";
+                case NegotiationEvent.RivalNoted: return "그 점은 염두에 두십시오.";
+                case NegotiationEvent.RivalLeft: return "기다릴 만큼 기다렸습니다. 다른 길드로 가겠습니다.";
+                case NegotiationEvent.MoodGone:
+                    return style == NegotiationStyle.Volatile ? "더는 못 참겠군! 이 얘긴 끝이오." : "장난하십니까? 더 이야기할 것 없습니다.";
+                case NegotiationEvent.TalkLiked:
+                    return topic switch
+                    {
+                        TalkTopic.Praise => style switch
+                        {
+                            NegotiationStyle.Stubborn => "...뭐, 보는 눈은 있으시군요.",
+                            NegotiationStyle.Volatile => "하하! 그렇지, 내가 좀 하지!",
+                            NegotiationStyle.Timid => "제, 제가요? 감사합니다...",
+                            NegotiationStyle.Easygoing => "헤헤, 칭찬은 언제 들어도 좋네요.",
+                            _ => "인정해 주시니 고맙습니다.",
+                        },
+                        TalkTopic.Vision => ContractTerms.ReputationProgress() >= 0.5f ? "이 길드라면 이름을 날릴 수 있겠군요." : "꿈은 크시군요. 나쁘지 않습니다.",
+                        _ => style == NegotiationStyle.Timid ? "오래 함께할 수 있다면... 그게 제일 좋아요." : "안정적인 건 좋지요.",
+                    };
+                case NegotiationEvent.TalkDisliked:
+                    return topic == TalkTopic.Stability ? "지루하군. 난 모험을 하러 왔소." : "명성도 없는 길드가 비전을 말하긴 이르군요.";
+                default: // TalkFlat
+                    return topic == TalkTopic.Praise ? "말보다는 숫자로 보여 주시죠." : "그건 제게 중요하지 않습니다.";
+            }
+        }
+
+        /// <summary>"다른 길드 제의" 허세. 거짓말이 서툰 성향은 가짜일 때 티가 난다.</summary>
+        private string RivalClaim()
+        {
+            string claim = _demand.Style == NegotiationStyle.Stubborn
+                ? $"참고로 다른 길드는 주급 {_neg.RivalWage}G를 불렀습니다."
+                : $"그런데... 사실 다른 길드에서 주급 {_neg.RivalWage}G를 제안받았습니다.";
+            return !_neg.RivalReal && _neg.Profile.BluffTell ? claim + " (눈을 피한다)" : claim;
+        }
 
         private void Say(string text)
         {
@@ -259,7 +361,7 @@ namespace GN3.UI
 
         private void OfferChanged()
         {
-            // 합의한 뒤 조건을 바꾸면 합의가 풀린다(인내심은 그대로)
+            // 합의한 뒤 조건을 바꾸면 합의가 풀린다
             if (_agreed != null && !_agreed.Value.Equals(_offer))
             {
                 _agreed = null;
@@ -282,21 +384,45 @@ namespace GN3.UI
                 label.fontStyle = chosen ? FontStyle.Bold : FontStyle.Normal;
             }
             int weeks = Mathf.CeilToInt(_offer.LengthDays / 7f);
-            _summaryText.text = (_agreed != null ? "<color=#f0c050>[합의 완료]</color>  " : "") + $"지금 낼 돈: 계약금 {_offer.SigningFee}G (보유 {Wallet.Gold}G)\n" +
+            string deadline = _neg.RivalDeadline > 0 ? $"<color=#e07050>  다른 길드 기한: 제안 {_neg.RivalDeadline}번</color>" : "";
+            _summaryText.text = (_agreed != null ? "<color=#f0c050>[합의 완료]</color>  " : "") + $"지금 낼 돈: 계약금 {_offer.SigningFee}G (보유 {Wallet.Gold}G){deadline}\n" +
                                 $"계약 기간 주급 합계 약 {_offer.WeeklyWage * weeks}G ({weeks}주) · {GameCalendar.Format(GameClock.CurrentDay + _offer.LengthDays)}까지";
-            _patienceText.text = "인내심 " + new string('●', Mathf.Max(0, _patience)) + new string('○', Mathf.Max(0, _demand.Patience - _patience));
-            bool open = _patience > 0;
+            RefreshMood();
+
+            bool open = !_neg.Broken;
             bool agreed = _agreed != null;
-            _proposeButton.interactable = open;
-            _proposeButton.gameObject.SetActive(!agreed);
+            bool rival = open && !agreed && _neg.RivalPending; // 허세에 먼저 대답해야 한다
+            bool bargaining = open && !agreed && !rival;
+            _proposeButton.gameObject.SetActive(bargaining);
+            _finalButton.gameObject.SetActive(bargaining && !_neg.FinalUsed);
+            _acceptCounterButton.gameObject.SetActive(bargaining && _neg.Counter != null);
+            if (_neg.Counter != null) _acceptCounterButton.GetComponentInChildren<Text>().text = $"역제안 받아들이기 (주급 {_neg.Counter.Value.WeeklyWage}G)";
+            _doubtButton.gameObject.SetActive(rival);
+            _acknowledgeButton.gameObject.SetActive(rival);
+            _walkAwayButton.gameObject.SetActive(open && !agreed);
+            _walkAwayButton.interactable = _neg.CanWalkAway && !rival;
+            foreach (var (topic, button) in _talkButtons) button.interactable = bargaining && !_neg.HasTalked(topic);
             _confirmButton.gameObject.SetActive(agreed);
             if (agreed)
                 _confirmButton.GetComponentInChildren<Text>().text = _agreed.Value.SigningFee > 0 ? $"계약 확정하기 (-{_agreed.Value.SigningFee}G)" : "계약 확정하기";
-            _acceptCounterButton.gameObject.SetActive(open && !agreed && _counter != null);
-            if (_counter != null) _acceptCounterButton.GetComponentInChildren<Text>().text = $"역제안 받아들이기 (주급 {_counter.Value.WeeklyWage}G)";
         }
 
-        /// <summary>귀띔: 실제 요구의 ±15% 범위(정확한 값은 숨긴다).</summary>
+        /// <summary>기분 게이지: 막대 길이와 색, 한 단어 상태.</summary>
+        private void RefreshMood()
+        {
+            int mood = _neg.Mood;
+            var (label, color) = mood >= 70 ? ("흡족", new Color(0.45f, 0.8f, 0.4f))
+                : mood >= 45 ? ("보통", new Color(0.9f, 0.8f, 0.4f))
+                : mood >= 20 ? ("언짢음", new Color(0.95f, 0.55f, 0.25f))
+                : ("폭발 직전", new Color(0.9f, 0.3f, 0.25f));
+            if (_neg.Broken) label = "결렬";
+            _moodText.text = $"기분: {label}";
+            _moodText.color = color;
+            _moodFill.anchorMax = new Vector2(Mathf.Clamp01(mood / 100f), 1f);
+            _moodFillImage.color = color;
+        }
+
+        /// <summary>귀띔: 처음 부를 값의 ±15% 범위(정확한 값은 숨긴다)와 성향.</summary>
         private string AgentHint()
         {
             float s = ContractTuning.AgentHintSpread;
@@ -304,7 +430,8 @@ namespace GN3.UI
             int fee = Mathf.RoundToInt(_demand.SigningFee / 10f) * 10;
             string length = _demand.LengthPreference > 0 ? "긴 계약을 좋아함" : _demand.LengthPreference < 0 ? "짧은 계약을 좋아함" : "기간은 상관없음";
             string bonus = _demand.BonusValue >= ContractTuning.HighBonusValue ? " · 성공 보너스를 좋아함" : "";
-            return $"에이전트 귀띔: 주급 {wLow}~{wHigh}G, 계약금 약 {fee}G 정도 · {length}{bonus}";
+            return $"에이전트 귀띔: 주급 {wLow}~{wHigh}G, 계약금 약 {fee}G 정도 · {length}{bonus}\n" +
+                   $"협상 성향: {_neg.Profile.Label} — {_neg.Profile.Hint}";
         }
 
         // ---------- 화면 ----------
@@ -343,13 +470,13 @@ namespace GN3.UI
             name.supportRichText = true;
             name.font = UITheme.BoldFont;
             Label(p, $"{_merc.Class.ClassName} · {_merc.Age}세 · 전투력 {_merc.CombatPower}", UITheme.BodySize, UITheme.MutedText, TextAnchor.UpperLeft, new Vector2(lx, -272f), new Vector2(lw, 24f));
-            Label(p, $"성격: {PersonalityTable.Get(_merc.Personality).Label}", UITheme.BodySize, UITheme.MutedText, TextAnchor.UpperLeft, new Vector2(lx, -300f), new Vector2(lw, 24f));
+            Label(p, $"성격: {PersonalityTable.Get(_merc.Personality).Label} ({_neg.Profile.Label})", UITheme.BodySize, UITheme.MutedText, TextAnchor.UpperLeft, new Vector2(lx, -300f), new Vector2(lw, 24f));
             var interest = Label(p, (_renewal ? "남을 생각: " : "관심도: ") + ContractTerms.InterestLabel(_demand.Interest), UITheme.BodySize,
                 ContractTerms.InterestColor(_demand.Interest), TextAnchor.UpperLeft, new Vector2(lx, -328f), new Vector2(lw, 24f));
             interest.name = "Interest";
             if (_renewal)
                 Label(p, $"지금 계약: {Contracts.Describe(_merc)}", UITheme.SmallSize, UITheme.MutedText, TextAnchor.UpperLeft, new Vector2(lx, -356f), new Vector2(lw, 44f));
-            _patienceText = Label(p, "", UITheme.BodySize, new Color(0.95f, 0.75f, 0.4f), TextAnchor.UpperLeft, new Vector2(lx, -404f), new Vector2(lw, 24f));
+            BuildMoodGauge(p, lx, -410f, lw);
 
             // 가운데: 제안
             float cx = 310f;
@@ -369,30 +496,76 @@ namespace GN3.UI
                 bx += 92f;
             }
 
-            Label(p, AgentHint(), UITheme.SmallSize, UITheme.MutedText, TextAnchor.UpperLeft, new Vector2(cx, -326f), new Vector2(Width - cx - 30f, 40f));
-            _summaryText = Label(p, "", UITheme.BodySize, UITheme.BodyText, TextAnchor.UpperLeft, new Vector2(cx, -372f), new Vector2(Width - cx - 30f, 50f));
+            Label(p, AgentHint(), UITheme.SmallSize, UITheme.MutedText, TextAnchor.UpperLeft, new Vector2(cx, -322f), new Vector2(Width - cx - 30f, 48f));
+
+            // 설득 화법(각 한 번)
+            Label(p, "설득", UITheme.BodySize, UITheme.BodyText, TextAnchor.MiddleLeft, new Vector2(cx, -376f), new Vector2(140f, 34f));
+            float tx = cx + 150f;
+            foreach (var (topic, label) in new[] { (TalkTopic.Praise, "실력 칭찬"), (TalkTopic.Vision, "길드 비전"), (TalkTopic.Stability, "안정성 강조") })
+            {
+                var t = topic;
+                _talkButtons.Add((topic, MakeButton(p, label, () => Talk(t), new Vector2(tx, -376f), new Vector2(140f, 34f))));
+                tx += 150f;
+            }
+
+            _summaryText = Label(p, "", UITheme.BodySize, UITheme.BodyText, TextAnchor.UpperLeft, new Vector2(cx, -424f), new Vector2(Width - cx - 30f, 50f));
+            _summaryText.supportRichText = true;
 
             // 아래: 용병의 대답
             var bubble = new GameObject("Reply", typeof(RectTransform), typeof(Image));
             bubble.transform.SetParent(p, false);
             var bubbleRect = (RectTransform)bubble.transform;
             bubbleRect.anchorMin = bubbleRect.anchorMax = bubbleRect.pivot = new Vector2(0f, 1f);
-            bubbleRect.anchoredPosition = new Vector2(30f, -440f);
-            bubbleRect.sizeDelta = new Vector2(Width - 60f, 64f);
+            bubbleRect.anchoredPosition = new Vector2(30f, -486f);
+            bubbleRect.sizeDelta = new Vector2(Width - 60f, 74f);
             var bubbleImage = bubble.GetComponent<Image>();
             bubbleImage.sprite = UITheme.Inset;
             bubbleImage.type = Image.Type.Sliced;
-            _replyText = Label(bubble.transform, "", UITheme.BodySize, UITheme.BodyText, TextAnchor.MiddleLeft, new Vector2(16f, 0f), new Vector2(Width - 92f, 64f));
+            _replyText = Label(bubble.transform, "", UITheme.BodySize, UITheme.BodyText, TextAnchor.MiddleLeft, new Vector2(16f, 0f), new Vector2(Width - 92f, 74f));
             _replyText.rectTransform.anchorMin = _replyText.rectTransform.anchorMax = _replyText.rectTransform.pivot = new Vector2(0f, 1f);
 
             // 버튼
-            _proposeButton = MakeButton(p, "제안하기", Propose, new Vector2(Width - 180f, -526f), new Vector2(150f, 44f));
-            _acceptCounterButton = MakeButton(p, "역제안 받아들이기", AcceptCounter, new Vector2(Width - 520f, -526f), new Vector2(330f, 44f));
-            _confirmButton = MakeButton(p, "계약 확정하기", Confirm, new Vector2(Width - 300f, -526f), new Vector2(270f, 44f));
-            MakeButton(p, "그만두기", Close, new Vector2(30f, -526f), new Vector2(130f, 44f));
+            float by = -582f;
+            MakeButton(p, "그만두기", Close, new Vector2(30f, by), new Vector2(120f, 44f));
+            _walkAwayButton = MakeButton(p, "자리 뜨기", WalkAway, new Vector2(160f, by), new Vector2(120f, 44f));
+            _acceptCounterButton = MakeButton(p, "역제안 받아들이기", AcceptCounter, new Vector2(Width - 650f, by), new Vector2(310f, 44f));
+            _finalButton = MakeButton(p, "최종 제안", FinalOffer, new Vector2(Width - 330f, by), new Vector2(140f, 44f));
+            _proposeButton = MakeButton(p, "제안하기", Propose, new Vector2(Width - 180f, by), new Vector2(150f, 44f));
+            _doubtButton = MakeButton(p, "증거를 대 보시죠", DoubtRival, new Vector2(Width - 530f, by), new Vector2(240f, 44f));
+            _acknowledgeButton = MakeButton(p, "그렇군요", AcknowledgeRival, new Vector2(Width - 280f, by), new Vector2(250f, 44f));
+            _confirmButton = MakeButton(p, "계약 확정하기", Confirm, new Vector2(Width - 300f, by), new Vector2(270f, 44f));
 
             UIThemeApplier.ApplyNow(transform);
             _confirmButton.GetComponent<Image>().color = new Color(1f, 0.8f, 0.4f); // 확정 버튼은 금빛으로 눈에 띄게(테마를 입힌 뒤)
+            // 기분 막대는 단색이어야 색이 보인다(테마가 입힌 어두운 inset 스프라이트를 벗긴다)
+            var moodBack = _moodFill.parent.GetComponent<Image>();
+            moodBack.sprite = null;
+            moodBack.color = new Color(0f, 0f, 0f, 0.45f);
+            _moodFillImage.sprite = null;
+        }
+
+        /// <summary>"기분: 보통" + 그 아래 가로 막대.</summary>
+        private void BuildMoodGauge(Transform parent, float x, float y, float width)
+        {
+            _moodText = Label(parent, "", UITheme.BodySize, UITheme.BodyText, TextAnchor.UpperLeft, new Vector2(x, y), new Vector2(width, 24f));
+            _moodText.font = UITheme.BoldFont;
+
+            var back = new GameObject("MoodBar", typeof(RectTransform), typeof(Image));
+            back.transform.SetParent(parent, false);
+            var backRect = (RectTransform)back.transform;
+            backRect.anchorMin = backRect.anchorMax = backRect.pivot = new Vector2(0f, 1f);
+            backRect.anchoredPosition = new Vector2(x, y - 30f);
+            backRect.sizeDelta = new Vector2(width - 20f, 14f);
+            back.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.35f);
+
+            var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fill.transform.SetParent(back.transform, false);
+            _moodFill = (RectTransform)fill.transform;
+            _moodFill.anchorMin = Vector2.zero;
+            _moodFill.anchorMax = Vector2.one;
+            _moodFill.offsetMin = _moodFill.offsetMax = Vector2.zero;
+            _moodFillImage = fill.GetComponent<Image>();
+            _moodFillImage.raycastTarget = false;
         }
 
         /// <summary>"주급   [-5][-1]  22G  [+1][+5]" 한 줄. 값 글자를 돌려준다.</summary>
