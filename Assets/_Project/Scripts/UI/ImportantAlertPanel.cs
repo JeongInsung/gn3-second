@@ -27,6 +27,7 @@ namespace GN3.UI
         private const float ChromeHeight = 170f; // 판 높이 - 본문 칸 높이(제목 줄 + 버튼 줄 + 여백)
         private GameObject _arrivalRow;
         private GameObject _noticeRow;
+        private GameObject _choiceRow; // 사건 선택지(편지마다 다시 만든다)
         private Font _font;
 
         private Mailbox.Mail _current;
@@ -55,6 +56,8 @@ namespace GN3.UI
                 Mailbox.Acknowledge(_current);
                 Close();
             }
+            // 띄운 사건을 우편함에서 골랐으면 결과를 보여 준다
+            if (_current != null && _current.Choices != null && _current.ChoiceResolved && _choiceRow.activeSelf) ShowResult();
             if (_current != null) return;
 
             var next = Mailbox.NextUnacknowledgedImportant();
@@ -78,8 +81,11 @@ namespace GN3.UI
             _when.text = Mailbox.FormatWhen(mail);
             _body.text = mail.Body;
             bool arrival = mail.Kind == MailKind.Arrival;
+            bool choosing = mail.IsPendingEvent;
             _arrivalRow.SetActive(arrival);
-            _noticeRow.SetActive(!arrival);
+            _noticeRow.SetActive(!arrival && !choosing);
+            _choiceRow.SetActive(choosing);
+            if (choosing) BuildChoices(mail);
 
             _root.SetActive(true);
             LayoutRebuilder.ForceRebuildLayoutImmediate(_body.rectTransform);
@@ -120,6 +126,39 @@ namespace GN3.UI
 
         private void Later() => Confirm(); // 확인만 하고 선택은 우편함에 남긴다
 
+        // ---------- 사건 선택 ----------
+
+        private void BuildChoices(Mailbox.Mail mail)
+        {
+            for (int i = _choiceRow.transform.childCount - 1; i >= 0; i--) Destroy(_choiceRow.transform.GetChild(i).gameObject);
+            for (int i = 0; i < mail.Choices.Count; i++)
+            {
+                var choice = mail.Choices[i];
+                int index = i;
+                var button = CreateButton(_choiceRow.transform, choice.Label, () => Choose(index), i == 0 ? new Color(0.25f, 0.55f, 0.35f, 1f) : (Color?)null);
+                button.interactable = choice.CanChoose;
+                if (!string.IsNullOrEmpty(choice.Tooltip)) button.gameObject.AddComponent<TooltipTrigger>().Text = choice.Tooltip;
+            }
+            CreateButton(_choiceRow.transform, "나중에", Later, new Color(0.3f, 0.3f, 0.35f, 1f));
+        }
+
+        private void Choose(int index)
+        {
+            if (Mailbox.Choose(_current, index)) ShowResult();
+        }
+
+        /// <summary>고른 뒤: 본문(결과가 붙었다)을 다시 그리고 [확인]만 남긴다.</summary>
+        private void ShowResult()
+        {
+            _body.text = _current.Body;
+            _choiceRow.SetActive(false);
+            _noticeRow.SetActive(true);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_body.rectTransform);
+            FitToBody();
+            _scroll.verticalNormalizedPosition = 0f; // 결과가 보이게 맨 아래로
+            UIThemeApplier.ApplyNow(_root.transform);
+        }
+
         private void Auto()
         {
             var mail = _current;
@@ -138,7 +177,7 @@ namespace GN3.UI
         private bool TryEscape()
         {
             if (_current == null) return false;
-            if (_current.Kind == MailKind.Arrival) Later();
+            if (_current.Kind == MailKind.Arrival || _current.IsPendingEvent) Later();
             else Confirm();
             return true;
         }
@@ -210,6 +249,9 @@ namespace GN3.UI
             CreateButton(_noticeRow.transform, "확인", Confirm, new Color(0.25f, 0.55f, 0.35f, 1f));
             CreateButton(_noticeRow.transform, "우편함 열기", OpenMailbox, new Color(0.3f, 0.3f, 0.35f, 1f));
 
+            _choiceRow = CreateButtonRow(panel.transform);
+            _choiceRow.SetActive(false);
+
             _root.SetActive(false);
             EscapeCloser.Register(_root, TryEscape, WindowRole.Popup);
         }
@@ -230,7 +272,7 @@ namespace GN3.UI
             return row;
         }
 
-        private void CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick, Color? color)
+        private Button CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick, Color? color)
         {
             var go = new GameObject(label + "Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
@@ -240,7 +282,9 @@ namespace GN3.UI
             text.rectTransform.anchorMin = Vector2.zero;
             text.rectTransform.anchorMax = Vector2.one;
             text.rectTransform.offsetMin = text.rectTransform.offsetMax = Vector2.zero;
-            go.GetComponent<Button>().onClick.AddListener(onClick);
+            var button = go.GetComponent<Button>();
+            button.onClick.AddListener(onClick);
+            return button;
         }
 
         private Text CreateText(Transform parent, string content, int size, TextAnchor alignment, Color color)

@@ -17,8 +17,11 @@ namespace GN3.Mercenaries
     /// </summary>
     public static class Hospital
     {
-        public const int Capacity = 3;
-        public const float ProgressPerHour = 0.05f;
+        public const int BaseCapacity = 3;
+        public const float BaseProgressPerHour = 0.05f;
+        /// <summary>정원·시간당 치료(길드 시설 병원 단계마다 정원 +1, 속도 +25% — GuildFacilities).</summary>
+        public static int Capacity => BaseCapacity + GN3.Economy.GuildFacilities.HospitalCapacityBonus;
+        public static float ProgressPerHour => BaseProgressPerHour * GN3.Economy.GuildFacilities.HospitalSpeedMultiplier;
         public const int FeePerHour = 5;
 
         /// <summary>마을에 병원 건물이 있으면 MainMenuBootstrapper가 켠다. 꺼져 있으면 아무도 입원하지 않는다.</summary>

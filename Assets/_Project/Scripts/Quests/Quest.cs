@@ -17,15 +17,24 @@ namespace GN3.Quests
         public int EnemyCount => Waves.Sum(w => w.Count);
         public int Difficulty { get; }
 
+        /// <summary>부탁한 마을 사람과 부탁 글(QuestRequests). 예전 저장에서 불러온 퀘스트는 null.</summary>
+        public string Requester { get; }
+        public string RequestText { get; }
+        /// <summary>게시판 맨 위 도전 퀘스트(열린 최고 레벨). 근처 길드가 가져가지 않는다.</summary>
+        public bool IsChallenge { get; set; }
+        /// <summary>연합 의뢰: 함께하는 근처 길드 id(없으면 null)와 그 길드가 보내는 용병 수. 보상은 나눈다(RivalDeals).</summary>
+        public string AllyGuildId { get; set; }
+        public int AllyCount { get; set; }
+        public bool IsJoint => !string.IsNullOrEmpty(AllyGuildId);
+
         /// <summary>라운드 구성(순서대로). 한 라운드짜리도 있다.</summary>
         public IReadOnlyList<QuestWave> Waves { get; }
         public int WaveCount => Waves.Count;
         /// <summary>한 라운드에 나오는 적의 최대 수(파견 인원·습격 규모 기준).</summary>
         public int MaxWaveSize => Waves.Max(w => w.Count);
 
-        /// <summary>몬스터 계층(0=약탈 세력/1=지형 동물/2=보스). QuestGenerator가 쓰는 공식과 같다
-        /// (난이도 1~3이 계층 0~2에 정확히 1:1 대응) - QuestClearHistory가 "어느 계층을 얼마나 깼는지" 셀 때 쓴다.</summary>
-        public int Tier => Math.Clamp(Difficulty - 1, 0, 2);
+        /// <summary>가장 높은 몬스터 계층(0=약탈 세력/1=지형 동물/2=보스). 난이도는 은월의 숲 Lv(1~5)라 계층과 1:1이 아니다.</summary>
+        public int Tier => Waves.Max(w => w.Tier);
 
         public const float HoursPerDay = 24f;
 
@@ -40,15 +49,29 @@ namespace GN3.Quests
         /// <summary>전투 로그 연출 재생 시간(초). DurationDays(게임 내 일수)와는 별개로, 전투 결과를 화면에 뿌리는 속도 조절용.</summary>
         public float EstimatedDurationSeconds => 3f + Difficulty * 1.5f + EnemyCount * 0.5f;
 
-        /// <summary>이 퀘스트에 파견 가능한 최대 인원. 적 숫자에 인원을 묶어서(특히 1마리뿐인 보스전)
-        /// 파티 전원을 몰아보내 무조건 이기는 것을 막는다.</summary>
-        public int MaxDispatchSize => MaxWaveSize + 1;
+        /// <summary>은월의 숲 레벨별 필요 인원(정확히 이만큼 보내야 출발): Lv3·4 4명, Lv5 앤트킹 6명(두 분대). 0이면 1명~MaxDispatchSize 자유.</summary>
+        public int RequiredDispatchSize => Difficulty >= 5 ? 6 : Difficulty >= 3 ? 4 : 0;
+        /// <summary>분대 수. Lv5 앤트킹은 3명씩 두 분대가 한 판에서 같이 싸운다(분대마다 분대장).</summary>
+        public int SquadCount => Difficulty >= 5 ? 2 : 1;
+        /// <summary>분대 하나의 인원(필요 인원이 없으면 최대 파견 인원).</summary>
+        public int SquadSize => RequiredDispatchSize > 0 ? RequiredDispatchSize / SquadCount : MaxDispatchSize;
+
+        /// <summary>은월의 숲 Lv1은 적이 많아도 이 인원까지만.</summary>
+        public const int Level1MaxDispatch = 3;
+
+        /// <summary>이 퀘스트에 파견 가능한 최대 인원. 필요 인원이 정해진 레벨은 그 인원, 아니면 적 숫자에 인원을 묶어서
+        /// 파티 전원을 몰아보내 무조건 이기는 것을 막는다(Lv1은 그래도 3명까지).</summary>
+        public int MaxDispatchSize => RequiredDispatchSize > 0 ? RequiredDispatchSize
+            : Difficulty <= 1 ? Math.Min(MaxWaveSize + 1, Level1MaxDispatch)
+            : MaxWaveSize + 1;
 
         /// <param name="waves">라운드 구성. 없으면(예전 저장) enemyName × enemyCount 한 라운드.</param>
         public Quest(string title, Region region, string locationName, string enemyName, int enemyCount, int difficulty, int durationDays,
-            IReadOnlyList<QuestWave> waves = null)
+            IReadOnlyList<QuestWave> waves = null, string requester = null, string requestText = null)
         {
             Id = Guid.NewGuid().ToString();
+            Requester = requester;
+            RequestText = requestText;
             Title = title;
             Region = region;
             LocationName = locationName;

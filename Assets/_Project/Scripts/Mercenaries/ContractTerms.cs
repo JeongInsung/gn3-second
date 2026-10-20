@@ -23,6 +23,7 @@ namespace GN3.Mercenaries
         public int SigningFee;
         public float Floor;          // 속마음 마지노선(만족도 비율) — 이 아래로는 절대 서명하지 않는다
         public NegotiationStyle Style;
+        public Personality Personality;
         public Interest Interest;
         public int LengthPreference; // +1 긴 계약을 좋아함, −1 짧은 계약을 좋아함, 0 상관없음
         public float BonusValue;     // 성과 보너스 1G를 주급 몇 G로 쳐주는지
@@ -64,6 +65,7 @@ namespace GN3.Mercenaries
                 SigningFee = Mathf.Max(0, Mathf.RoundToInt(cost * (renewal ? ContractTuning.RenewalFeeRatio : 1f) * greed * mood)),
                 Floor = Mathf.Min(1f, floor),
                 Style = style,
+                Personality = p,
                 Interest = interest,
                 LengthPreference = merc.Age >= 30 || p == Personality.Cautious || p == Personality.Pessimistic ? 1
                     : merc.Age <= 22 && merc.Talent >= MercenaryGrade.C ? -1 : 0,
@@ -141,7 +143,7 @@ namespace GN3.Mercenaries
         public static ContractOffer Fair(ContractDemand demand) => new ContractOffer
         {
             WeeklyWage = demand.WeeklyWage,
-            LengthDays = demand.LengthPreference > 0 ? 90 : demand.LengthPreference < 0 ? 30 : ContractTuning.DefaultLengthDays,
+            LengthDays = demand.LengthPreference > 0 ? ContractTuning.PreferredLongDays : demand.LengthPreference < 0 ? ContractTuning.ShortContractDays : ContractTuning.DefaultLengthDays,
             SigningFee = demand.SigningFee,
             WinBonus = 0,
         };

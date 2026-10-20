@@ -33,7 +33,7 @@ namespace GN3.UI
         private void ShowWeapons()
         {
             ShopListUI.BeginList(_panel);
-            foreach (var weapon in WeaponCatalog.All)
+            foreach (var weapon in WeaponCatalog.All.Where(w => !w.CraftOnly))
             {
                 var row = ShopListUI.CreateRow(_panel, "Weapon_" + weapon.Name);
                 ShopListUI.CreateIcon(row.transform, weapon.Icon);
@@ -43,7 +43,90 @@ namespace GN3.UI
                 ShopListUI.CreateButton(row.transform, "구매", () => ShowTargets(picked));
                 ShopListUI.CreateButton(row.transform, "창고로", () => BuyToStorage(picked));
             }
+            ShowCrafting();
+            ShowManaWeapons();
             ShopListUI.EndList(_panel);
+        }
+
+        // ---------- 제작(전리품 → 무기, 창고로) ----------
+
+        private void ShowCrafting()
+        {
+            var header = ShopListUI.CreateRow(_panel, "CraftHeader");
+            var title = ShopListUI.CreateText(header.transform, "제작 — 전리품으로 만들어 창고로", 16, TextAnchor.MiddleLeft, UITheme.BodyText);
+            title.fontStyle = FontStyle.Bold;
+            title.gameObject.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
+
+            foreach (var recipe in Crafting.Recipes)
+            {
+                var weapon = recipe.Result;
+                var row = ShopListUI.CreateRow(_panel, "Craft_" + weapon.Name);
+                ShopListUI.CreateIcon(row.transform, weapon.Icon);
+                // 줄에는 이름·재료만(길면 두 줄로 겹친다), 무기 능력치는 버튼 툴팁에
+                string kind = weapon.CraftOnly ? " (제작 전용)" : "";
+                ShopListUI.CreateTwoLineLabel(row.transform, $"{weapon.Name}{kind}", recipe.MaterialText);
+                var picked = recipe;
+                string block = Crafting.Block(recipe);
+                var button = ShopListUI.CreateButton(row.transform, "제작", () => Craft(picked));
+                button.interactable = block == null;
+                button.gameObject.AddComponent<TooltipTrigger>().Text = $"{weapon.Name}: {weapon.Summary}\n" +
+                    (block ?? $"재료와 {recipe.Gold}G를 써서 만들어 창고에 넣습니다.");
+            }
+        }
+
+        // ---------- 마정 무기(마정석 색 = 등급) ----------
+
+        private static int _manaColor; // 고른 색(0 푸른 ~ 4 붉은)
+
+        /// <summary>색 버튼 5개(보유 수) + 고른 색의 직업별 무기 6개.</summary>
+        private void ShowManaWeapons()
+        {
+            var header = ShopListUI.CreateRow(_panel, "ManaHeader");
+            var title = ShopListUI.CreateText(header.transform, "마정 무기", 16, TextAnchor.MiddleLeft, UITheme.BodyText);
+            title.fontStyle = FontStyle.Bold;
+            title.gameObject.AddComponent<UnityEngine.UI.LayoutElement>().minWidth = 70f;
+            for (int c = 0; c < LootCatalog.ManaColorNames.Length; c++)
+            {
+                int color = c;
+                string mark = c == _manaColor ? "▶" : "";
+                var tab = ShopListUI.CreateButton(header.transform, $"{mark}{LootCatalog.ManaColorNames[c]} {LootBag.CountManaColor(c)}", () =>
+                {
+                    _manaColor = color;
+                    ShowWeapons();
+                    ScrollToBottom();
+                }, 78f);
+                tab.gameObject.AddComponent<TooltipTrigger>().Text = $"{LootCatalog.ManaColorNames[c]} 마정석으로 만드는 무기(보유 {LootBag.CountManaColor(c)}개)";
+            }
+
+            foreach (var recipe in Crafting.ManaRecipesFor(_manaColor))
+            {
+                var weapon = recipe.Result;
+                var row = ShopListUI.CreateRow(_panel, "Mana_" + weapon.Name);
+                ShopListUI.CreateIcon(row.transform, weapon.Icon);
+                ShopListUI.CreateTwoLineLabel(row.transform, $"{weapon.Name} ({WeaponItem.ClassLabel(weapon.Affinity.Value)})", recipe.MaterialText);
+                var picked = recipe;
+                string block = Crafting.Block(recipe);
+                var button = ShopListUI.CreateButton(row.transform, "제작", () => { Craft(picked); ScrollToBottom(); });
+                button.interactable = block == null;
+                button.gameObject.AddComponent<TooltipTrigger>().Text = $"{weapon.Name}: {weapon.Summary}\n" +
+                    (block ?? $"마정석과 {recipe.Gold}G를 써서 만들어 창고에 넣습니다.");
+            }
+        }
+
+        /// <summary>마정 무기는 목록 맨 아래라, 색을 바꾸거나 만든 뒤 그 자리를 보이게 한다.</summary>
+        private void ScrollToBottom()
+        {
+            var scroll = _panel.GetComponentInChildren<UnityEngine.UI.ScrollRect>();
+            if (scroll == null) return;
+            Canvas.ForceUpdateCanvases();
+            scroll.verticalNormalizedPosition = 0f;
+        }
+
+        private void Craft(CraftRecipe recipe)
+        {
+            if (Crafting.Craft(recipe)) ToastLog.Show($"{Josa.EulReul(recipe.Result.Name)} 만들어 창고에 넣었습니다 (-{recipe.Gold}G).", false);
+            else ToastLog.Show(Crafting.Block(recipe) ?? "만들 수 없습니다.", false);
+            ShowWeapons();
         }
 
         // ---------- 누구에게 쥐여 줄지 ----------

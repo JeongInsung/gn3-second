@@ -249,6 +249,11 @@ namespace GN3.UI
             body.supportRichText = true;
 
             if (!mail.IsPendingChoice) return;
+            if (mail.IsPendingEvent)
+            {
+                CreateChoiceButtons(box.transform, mail);
+                return;
+            }
             var actions = new GameObject("Actions", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
             actions.transform.SetParent(box.transform, false);
             actions.GetComponent<LayoutElement>().preferredHeight = 34f;
@@ -259,6 +264,24 @@ namespace GN3.UI
             h.childForceExpandWidth = h.childForceExpandHeight = true;
             CreateButton(actions.transform, "자동 진행", Auto, null, null, new Color(0.25f, 0.55f, 0.35f, 1f));
             CreateButton(actions.transform, "직접 진행", Direct, null, null);
+        }
+
+        /// <summary>사건 선택지(나중에 고르기). 고르면 결과가 본문에 붙고 목록을 다시 그린다(Mailbox.Changed).</summary>
+        private void CreateChoiceButtons(Transform parent, Mailbox.Mail mail)
+        {
+            var actions = new GameObject("Choices", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            actions.transform.SetParent(parent, false);
+            actions.GetComponent<LayoutElement>().preferredHeight = 34f;
+            var h = actions.GetComponent<HorizontalLayoutGroup>();
+            h.spacing = 12f;
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = h.childForceExpandHeight = true;
+            for (int i = 0; i < mail.Choices.Count; i++)
+            {
+                int index = i;
+                CreateButton(actions.transform, mail.Choices[i].Label, () => Mailbox.Choose(mail, index), null, null,
+                    i == 0 ? new Color(0.25f, 0.55f, 0.35f, 1f) : (Color?)null);
+            }
         }
 
         private void CreateEmptyRow()

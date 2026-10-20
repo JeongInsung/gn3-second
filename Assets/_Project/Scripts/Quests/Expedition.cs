@@ -11,17 +11,28 @@ namespace GN3.Quests
         public Quest Quest { get; }
         public IReadOnlyList<Mercenary> Members { get; }
 
-        /// <summary>분대장: 직접 진행 전투에서 플레이어가 조종하는 용병(나머지는 자동). 파견 편성 때 정한다.
+        /// <summary>파견원마다 분대(0=1분대, 1=2분대). Members와 같은 순서. 한 분대 퀘스트·예전 저장은 전원 0.</summary>
+        public IReadOnlyList<int> Squads { get; }
+
+        /// <summary>1분대 분대장: 직접 진행 전투에서 플레이어가 조종하는 용병(나머지는 자동). 파견 편성 때 정한다.
         /// 예전 저장처럼 없거나 쓰러졌으면 살아 있는 첫 파견원이 맡는다.</summary>
-        public Mercenary Leader
+        public Mercenary Leader => LeaderOf(0);
+        private readonly Mercenary[] _leaders;
+
+        public int SquadOf(Mercenary merc)
         {
-            get
-            {
-                if (_leader != null && _leader.IsAlive && Members.Contains(_leader)) return _leader;
-                return Members.FirstOrDefault(m => m.IsAlive);
-            }
+            for (int i = 0; i < Members.Count; i++)
+                if (Members[i] == merc) return Squads[i];
+            return 0;
         }
-        private readonly Mercenary _leader;
+
+        /// <summary>그 분대의 분대장. 없거나 쓰러졌으면 그 분대에서 살아 있는 첫 사람(없으면 null).</summary>
+        public Mercenary LeaderOf(int squad)
+        {
+            var leader = squad < _leaders.Length ? _leaders[squad] : null;
+            if (leader != null && leader.IsAlive && Members.Contains(leader) && SquadOf(leader) == squad) return leader;
+            return Members.FirstOrDefault(m => m.IsAlive && SquadOf(m) == squad);
+        }
 
         /// <summary>목적지까지 실제로 걸린 게임 시간. 귀환 시간의 기준.</summary>
         public float OutboundHours { get; private set; }
@@ -36,14 +47,30 @@ namespace GN3.Quests
         /// <summary>마지막 습격 판정 뒤로 이동한 시간(ExpeditionLog가 24시간마다 한 번 굴린다).</summary>
         public float HoursSinceAmbushRoll { get; set; }
 
+        /// <summary>이동 중 사건(ChoiceEvents)의 선택을 기다리는 중 — 고를 때까지 멈춰 있다(저장하지 않는다).</summary>
+        public bool AwaitingEvent { get; set; }
+        /// <summary>사건에서 지름길을 골랐다: 이번 길(가는 길)의 습격 확률이 두 배.</summary>
+        public bool RiskyRoute { get; set; }
+
+        /// <summary>사건으로 이동 시간을 늘리거나(+) 줄인다(−, 남은 시간은 최소 1시간). 가는 길·돌아오는 길 모두.</summary>
+        public void Delay(float hours)
+        {
+            if (IsReturning) ReturnHoursLeft = System.Math.Max(1f, ReturnHoursLeft + hours);
+            else Quest.SetRemainingHours(System.Math.Max(1f, Quest.RemainingHours + hours));
+        }
+
         /// <summary>목적지에 도착해 전투를 기다리는 상태. 귀환 중에는 false.</summary>
         public bool IsReady => !IsReturning && Quest.RemainingDays <= 0;
 
-        public Expedition(Quest quest, IReadOnlyList<Mercenary> members, Mercenary leader = null)
+        /// <param name="squads">파견원마다 분대(Members와 같은 순서). 없거나 길이가 맞지 않으면 전원 1분대.</param>
+        /// <param name="leader2">2분대 분대장(두 분대 퀘스트만).</param>
+        public Expedition(Quest quest, IReadOnlyList<Mercenary> members, Mercenary leader = null,
+            IReadOnlyList<int> squads = null, Mercenary leader2 = null)
         {
             Quest = quest;
             Members = members;
-            _leader = leader;
+            Squads = squads != null && squads.Count == members.Count ? squads : members.Select(_ => 0).ToList();
+            _leaders = new[] { leader, leader2 };
         }
 
         /// <summary>저장 파일에서 불러올 때 이동·귀환 상태를 되돌린다.</summary>

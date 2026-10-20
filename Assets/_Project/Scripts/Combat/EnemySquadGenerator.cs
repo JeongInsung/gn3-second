@@ -21,12 +21,15 @@ namespace GN3.Combat
         public const float SporeHealthMultiplier = 0.67f; // 독버섯(독이 더해지는 원거리 몹). 피해 ×0.35 뒤 전투가 길어져 0.8이면 늑대보다 어려웠다(중간 24% vs 39%) → 0.67(39%)
         public const float RiderHealthMultiplier = 0.9f; // 고블린 늑대기수(늑대를 탄 고블린): 빠른 대신(회피↑) 조금 덜 단단 — 1.2면 고블린보다 크게 어려웠다(중간 28% vs 43%), 0.9면 47%
         public const int RiderMoveSpeedBonus = 2;
-        // 보스 거목 엔트(은월의 숲의 주인, 게시판 S급): 아주 단단하고 세게 친다. 제자리에 뿌리박고 3타마다 뿌리 내려찍기
+        // 보스 앤트킹(예전 이름 거목 엔트, 은월의 숲의 주인, 은월의 숲 Lv5): 아주 단단하고 세게 친다. 제자리에 뿌리박고 3타마다 뿌리 내려찍기
         // (직접 전투는 범위 예고 뒤 분출 — 분대장은 피할 수 있다, RootSlamPassive). 2026-10-19 사용자 요청으로 체력 1.1 → 2.5, 공격 ×1.5.
         public const float EntHealthMultiplier = 2.5f;
         public const float EntAttackMultiplier = 1.5f;
         public const int EntMoveSpeedPenalty = 2;
         public const float BossHealthMultiplier = 3f;
+        // 은월의 숲 Lv5 앤트킹은 6명(두 분대)이 같이 잡는다 → 체력을 더 두껍게.
+        public const float TwoSquadBossHealthMultiplier = 1.6f;
+        public const int TwoSquadBossDifficulty = 5;
         public const float BossAttackMultiplier = 1.3f;
 
         /// <summary>tierOverride를 주면 이름 계층(약탈 세력/지형 동물/보스)은 그 값으로 고정하고
@@ -35,7 +38,8 @@ namespace GN3.Combat
         public static List<Combatant> Generate(Region region, int count, int difficulty, Random rng, int? tierOverride = null, string name = null)
         {
             int tier = tierOverride ?? Math.Clamp(difficulty - 1, 0, 2);
-            float healthMul = HealthMultiplier * (tier >= 2 ? BossHealthMultiplier : 1f);
+            float healthMul = HealthMultiplier * (tier >= 2 ? BossHealthMultiplier : 1f)
+                * (tier >= 2 && difficulty >= TwoSquadBossDifficulty ? TwoSquadBossHealthMultiplier : 1f);
             float attackMul = AttackMultiplier * (tier >= 2 ? BossAttackMultiplier : 1f);
 
             var result = new List<Combatant>(count);
@@ -50,20 +54,26 @@ namespace GN3.Combat
                 // 독버섯: 맞히면 독(PoisonSporePassive)이 더해지는 원거리 몹이라 체력은 조금 낮게.
                 bool spore = enemyName.Contains("버섯");
                 bool rider = enemyName.Contains("늑대기수");
-                bool ent = enemyName.Contains("엔트");
+                bool ent = RegionInfo.IsEnt(enemyName);
                 float speciesHealth = spore ? SporeHealthMultiplier : rider ? RiderHealthMultiplier : ent ? EntHealthMultiplier : 1f;
                 if (rider) moveSpeed += RiderMoveSpeedBonus;
                 if (ent) moveSpeed -= EntMoveSpeedPenalty;
 
+                // 개체값: 같은 몬스터라도 개체마다 0.85~1.15배(속도 −2~+2), 합으로 등급(약한·보통·강한·우두머리)
+                var iv = MonsterIV.Roll(rng);
+                moveSpeed += MonsterIV.SpeedBonus(iv.Speed);
+
                 var stats = new CombatStats(
-                    attack: Math.Max(1, (int)Math.Round(attack * attackMul * (ent ? EntAttackMultiplier : 1f))),
-                    defense: Math.Max(0, defense),
-                    maxHealth: Math.Max(1, (int)Math.Round(health * healthMul * speciesHealth)),
+                    attack: Math.Max(1, (int)Math.Round(attack * attackMul * (ent ? EntAttackMultiplier : 1f) * MonsterIV.Multiplier(iv.Attack))),
+                    defense: Math.Max(0, (int)Math.Round(defense * MonsterIV.Multiplier(iv.Defense))),
+                    maxHealth: Math.Max(1, (int)Math.Round(health * healthMul * speciesHealth * MonsterIV.Multiplier(iv.Health))),
                     moveSpeed: Math.Max(0, moveSpeed));
 
                 var passives = spore ? new List<PassiveBase> { new PoisonSporePassive() }
                     : ent ? new List<PassiveBase> { new RootSlamPassive() } : null;
-                result.Add(new Combatant(enemyName, stats, passives));
+                // 등급 앞말("강한 고블린"). 보스는 칭호·배너가 정확한 이름을 쓰므로 앞말 없이 개체값만.
+                string shownName = tier >= 2 ? enemyName : MonsterIV.Name(iv.Rank, enemyName);
+                result.Add(new Combatant(shownName, stats, passives));
             }
             return result;
         }

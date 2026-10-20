@@ -53,6 +53,7 @@ namespace GN3.UI
             _open = null;
             BrokenOff.Clear();
             Sessions.Clear();
+            Suitors.Clear();
         }
 
         /// <summary>시장 목록을 새로 뽑았다: 깨졌던·하다 만 시장 협상은 잊는다(재계약 결렬은 그날까지 유지).</summary>
@@ -63,6 +64,13 @@ namespace GN3.UI
             foreach (var id in BrokenOff.Keys.Where(id => !hired.Contains(id)).ToList()) BrokenOff.Remove(id);
             foreach (var id in Sessions.Keys.Where(id => !hired.Contains(id)).ToList()) Sessions.Remove(id);
         }
+
+        /// <summary>지금 이 용병과 협상 창이 열려 있거나 오늘 하다 만 협상이 있다(근처 길드가 가로채지 않는다).</summary>
+        /// <summary>협상 중 "다른 길드 제의"에 나온 근처 길드(용병 id → 길드 id). 진짜 제의면 결렬될 때 그 길드로 간다.</summary>
+        private static readonly Dictionary<string, string> Suitors = new Dictionary<string, string>();
+
+        public static bool IsNegotiating(Mercenary merc) =>
+            merc != null && ((_open != null && _open._merc == merc) || Sessions.ContainsKey(merc.Id));
 
         public static bool IsBrokenOff(Mercenary merc) =>
             merc != null && BrokenOff.TryGetValue(merc.Id, out int day)
@@ -165,6 +173,8 @@ namespace GN3.UI
             Say(line);
             if (_neg.Broken)
             {
+                if (e == NegotiationEvent.RivalLeft && Suitors.TryGetValue(_merc.Id, out var suitor))
+                    RivalGuilds.SignAway(_merc, suitor, _renewal); // 시장 용병은 바로 그 길드로, 우리 용병은 계약이 끝나면
                 BrokenOff[_merc.Id] = GameClock.CurrentDay;
                 Sessions.Remove(_merc.Id);
                 ToastLog.Show($"{Josa.WaGwa(_merc.Name)}의 협상이 깨졌습니다.", false);
@@ -220,13 +230,13 @@ namespace GN3.UI
             if (_neg.Mood >= ContractTuning.SignedHappyMood) _merc.AddMorale(ContractTuning.SignedMorale);
             else if (_neg.Mood <= ContractTuning.SignedGrudgeMood) _merc.AddMorale(-ContractTuning.SignedMorale);
             Sessions.Remove(_merc.Id);
-            string line = $"{_merc.Name} {(_renewal ? "재계약" : "계약")}: 주급 {offer.WeeklyWage}G · {offer.LengthDays}일" +
+            string line = $"{_merc.Name} {(_renewal ? "재계약" : "계약")}: 주급 {offer.WeeklyWage}G · {ContractTuning.LengthLabel(offer.LengthDays)}" +
                           (offer.SigningFee > 0 ? $" · 계약금 -{offer.SigningFee}G" : "") + (offer.WinBonus > 0 ? $" · 성공 보너스 {offer.WinBonus}G" : "");
             GN3.Quests.DailyLog.Add(line);
             // 우편함에 기록(게임을 멈추지 않는 편지). 화면에는 토스트 대신 축하 카드.
             Mailbox.Post(MailKind.Notice, _renewal ? $"{_merc.Name} 재계약" : $"{_merc.Name} 영입",
                 $"{_merc.Class.ClassName} · {_merc.Age}세 · 전투력 {_merc.CombatPower}\n" +
-                $"주급 {offer.WeeklyWage}G · {offer.LengthDays}일({GameCalendar.Format(GameClock.CurrentDay + offer.LengthDays)}까지)" +
+                $"주급 {offer.WeeklyWage}G · {ContractTuning.LengthLabel(offer.LengthDays)}({GameCalendar.Format(GameClock.CurrentDay + offer.LengthDays)}까지)" +
                 (offer.SigningFee > 0 ? $"\n계약금 {offer.SigningFee}G" : "") + (offer.WinBonus > 0 ? $"\n성공 보너스 {offer.WinBonus}G" : ""));
             _onSigned?.Invoke(); // 용병 정보 창은 스스로 매 프레임 새로 그린다
             var merc = _merc;
@@ -314,7 +324,7 @@ namespace GN3.UI
                         : $"...사실 그런 제의는 없었습니다. 주급 {w}G로 하죠.";
                 case NegotiationEvent.RivalDoubted: return "절 거짓말쟁이로 보시는 겁니까? 다음 제안이 마지막 기회입니다. 그쪽에 답을 줘야 하니까요.";
                 case NegotiationEvent.RivalNoted: return "그 점은 염두에 두십시오.";
-                case NegotiationEvent.RivalLeft: return "기다릴 만큼 기다렸습니다. 다른 길드로 가겠습니다.";
+                case NegotiationEvent.RivalLeft: return $"기다릴 만큼 기다렸습니다. {SuitorName()} 쪽으로 가겠습니다.";
                 case NegotiationEvent.MoodGone:
                     return style == NegotiationStyle.Volatile ? "더는 못 참겠군! 이 얘긴 끝이오." : "장난하십니까? 더 이야기할 것 없습니다.";
                 case NegotiationEvent.TalkLiked:
@@ -331,6 +341,15 @@ namespace GN3.UI
                         TalkTopic.Vision => ContractTerms.ReputationProgress() >= 0.5f ? "이 길드라면 이름을 날릴 수 있겠군요." : "꿈은 크시군요. 나쁘지 않습니다.",
                         _ => style == NegotiationStyle.Timid ? "오래 함께할 수 있다면... 그게 제일 좋아요." : "안정적인 건 좋지요.",
                     };
+                case NegotiationEvent.PraiseBackfired:
+                    return style switch
+                    {
+                        NegotiationStyle.Calculating => "입에 발린 말은 계약서에 안 적힙니다.",
+                        NegotiationStyle.Volatile => "아부 떨지 마쇼. 속 보이니까.",
+                        NegotiationStyle.Stubborn => "...그런 말로 넘어갈 줄 알았습니까?",
+                        NegotiationStyle.Timid => "저, 저를 놀리시는 거죠...?",
+                        _ => "그런 아첨은 별로 듣고 싶지 않군요.",
+                    };
                 case NegotiationEvent.TalkDisliked:
                     return topic == TalkTopic.Stability ? "지루하군. 난 모험을 하러 왔소." : "명성도 없는 길드가 비전을 말하긴 이르군요.";
                 default: // TalkFlat
@@ -338,12 +357,24 @@ namespace GN3.UI
             }
         }
 
+        private string SuitorName() =>
+            Suitors.TryGetValue(_merc.Id, out var id) && RivalGuilds.Get(id) is RivalGuild g ? g.Name : "다른 길드";
+
         /// <summary>"다른 길드 제의" 허세. 거짓말이 서툰 성향은 가짜일 때 티가 난다.</summary>
         private string RivalClaim()
         {
+            // 진짜면 이 용병을 데려갈 만한 근처 길드, 가짜면 아무 길드 이름이나 댄다.
+            if (!Suitors.TryGetValue(_merc.Id, out var id) || RivalGuilds.Get(id) == null)
+            {
+                var rng = new System.Random(_merc.Id.GetHashCode() ^ GameClock.CurrentDay);
+                var all = RivalGuilds.All;
+                id = (_neg.RivalReal ? RivalGuilds.PickSuitor(_merc, rng) : all[rng.Next(all.Count)]).Id;
+                Suitors[_merc.Id] = id;
+            }
+            string rival = RivalGuilds.Get(id).Name;
             string claim = _demand.Style == NegotiationStyle.Stubborn
-                ? $"참고로 다른 길드는 주급 {_neg.RivalWage}G를 불렀습니다."
-                : $"그런데... 사실 다른 길드에서 주급 {_neg.RivalWage}G를 제안받았습니다.";
+                ? $"참고로 {rival}에서는 주급 {_neg.RivalWage}G를 불렀습니다."
+                : $"그런데... 사실 {rival}에서 주급 {_neg.RivalWage}G를 제안받았습니다.";
             return !_neg.RivalReal && _neg.Profile.BluffTell ? claim + " (눈을 피한다)" : claim;
         }
 
@@ -491,7 +522,7 @@ namespace GN3.UI
             foreach (int days in ContractTuning.LengthOptions)
             {
                 int d = days;
-                var b = MakeButton(p, $"{days}일", () => SetLength(d), new Vector2(bx, -164f), new Vector2(84f, 34f));
+                var b = MakeButton(p, ContractTuning.LengthLabel(days), () => SetLength(d), new Vector2(bx, -164f), new Vector2(84f, 34f));
                 _lengthButtons.Add((days, b));
                 bx += 92f;
             }

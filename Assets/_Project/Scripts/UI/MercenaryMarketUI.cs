@@ -10,7 +10,7 @@ namespace GN3.UI
     public class MercenaryMarketUI : MonoBehaviour
     {
         [SerializeField] private Transform listContainer;
-        [SerializeField] private Button refreshButton;
+        [SerializeField] private Button refreshButton; // 씬에 남아 있는 새로고침 버튼 — 숨긴다(목록은 7일마다 바뀐다)
         [SerializeField] private int marketSize = 5;
         [SerializeField] private int minLevel = 1;
         [SerializeField] private int maxLevel = 3;
@@ -19,6 +19,7 @@ namespace GN3.UI
         private readonly List<GameObject> _cardRows = new List<GameObject>();
         private readonly List<Button> _hireButtons = new List<Button>();
         private Text _capacityText; // 왼쪽 위 "파티 정원 2/3"
+        private Text _nextText;     // 오른쪽 위 "새 용병까지 ○일"(예전 새로고침 버튼 자리)
         private Font _font;
 
         private static readonly Color FullColor = new Color(0.94f, 0.45f, 0.38f, 1f);
@@ -43,19 +44,28 @@ namespace GN3.UI
             var classPool = new List<MercenaryClassSO>(Resources.LoadAll<MercenaryClassSO>("MercenaryClasses"));
             _market = new MercenaryMarket(classPool, marketSize, minLevel, maxLevel);
 
-            if (refreshButton != null)
-                refreshButton.onClick.AddListener(RefreshMarket);
+            // 새로고침 버튼은 없다: 7일마다 새 용병이 온다(MarketListings — 저장돼 불러와도 같은 사람)
+            _nextText = ListingTimer.ReplaceRefreshButton(refreshButton, panel, _font, -22f);
             PlayerParty.Instance.OnChanged += UpdateCapacity; // 해고·전사·불러오기로 정원이 바뀔 때
+            GN3.Economy.RivalGuilds.OnChanged += RedrawIfListed; // 근처 길드가 고용해 가거나 이적 매물을 내놓을 때
+        }
+
+        private void RedrawIfListed()
+        {
+            if (MarketListings.Current != null && _nextText != null && !MarketListings.IsStale) RefreshMarket();
         }
 
         private void OnDestroy()
         {
             PlayerParty.Instance.OnChanged -= UpdateCapacity;
+            GN3.Economy.RivalGuilds.OnChanged -= RedrawIfListed;
+            GN3.World.GameClock.OnDayAdvanced -= RefreshMarket;
         }
 
         private void Start()
         {
             RefreshMarket();
+            GN3.World.GameClock.OnDayAdvanced += RefreshMarket; // 날이 바뀌어 기한이 되면 새 용병
         }
 
         /// <summary>"파티 정원 n/m"을 갱신하고, 꽉 찼으면 고용 버튼을 막는다.</summary>
@@ -72,28 +82,34 @@ namespace GN3.UI
             foreach (var button in _hireButtons) button.interactable = !full;
         }
 
-        /// <summary>불러오기 직후처럼 밖에서 시장을 새로 뽑을 때.</summary>
+        /// <summary>불러오기 직후: 저장된 목록으로 다시 그린다(낡았으면 새로 뽑는다).</summary>
         public void RefreshFromOutside()
         {
-            if (_market != null) RefreshMarket(); // 아직 한 번도 안 열려 Awake 전이면 열 때 Start에서 뽑는다
+            if (_market != null) RefreshMarket(); // 아직 한 번도 안 열려 Awake 전이면 열 때 Start에서 그린다
         }
 
+        /// <summary>기한(7일)이 됐거나 아직 없으면 새로 뽑고, 아니면 나와 있는 용병 그대로 그린다.</summary>
         private void RefreshMarket()
         {
             foreach (var row in _cardRows)
                 Destroy(row);
             _cardRows.Clear();
 
-            // 길드 단계에 따라 시장 경력(성장 횟수) 범위·최고 등급이 바뀐다.
-            var rank = Guild.Current;
-            _market.MinGrowth = rank.MarketMinGrowth;
-            _market.MaxGrowth = rank.MarketMaxGrowth;
-            _market.MaxGrade = rank.MaxMercGrade;
+            if (MarketListings.IsStale)
+            {
+                // 길드 단계에 따라 시장 경력(성장 횟수) 범위·최고 등급이 바뀐다(새 목록 때 반영).
+                var rank = Guild.Current;
+                _market.MinGrowth = rank.MarketMinGrowth;
+                _market.MaxGrowth = rank.MarketMaxGrowth;
+                _market.MaxGrade = rank.MaxMercGrade;
+                ContractNegotiationPanel.ForgetMarketBreakdowns(); // 새 목록이니 깨졌던 협상은 잊는다
+                MarketListings.Set(new List<Mercenary>(_market.Refresh()));
+            }
 
             _hireButtons.Clear();
-            ContractNegotiationPanel.ForgetMarketBreakdowns(); // 새 목록이니 깨졌던 협상은 잊는다
-            foreach (var merc in _market.Refresh())
+            foreach (var merc in MarketListings.Current)
                 _cardRows.Add(CreateCard(merc));
+            _nextText.text = ListingTimer.Label("용병", MarketListings.DaysUntilRefresh);
             UpdateCapacity();
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
@@ -122,7 +138,9 @@ namespace GN3.UI
             CharacterPortraitUI.Create(row.transform, merc.Appearance, 48);
 
             // 줄에는 등급·이름·직업·레벨·전투력만. 성격·패시브·능력치는 줄을 클릭하면 열리는 캐릭터 창에서 본다.
-            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}", UITheme.HeadingSize, TextAnchor.MiddleLeft); // 큰 주황 글씨는 창 제목만
+            var origin = GN3.Economy.RivalGuilds.Get(MarketListings.OriginOf(merc) ?? ""); // 근처 길드에서 나온 이적 매물
+            string from = origin != null ? $"  <size=15><color=#a3937c>({origin.Name} 출신)</color></size>" : "";
+            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}{from}", UITheme.HeadingSize, TextAnchor.MiddleLeft); // 큰 주황 글씨는 창 제목만
             nameText.fontStyle = FontStyle.Bold;
             nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
             nameText.gameObject.AddComponent<LayoutElement>().minWidth = 220;
@@ -178,8 +196,8 @@ namespace GN3.UI
                 }
                 ContractNegotiationPanel.OpenHire(merc, () =>
                 {
-                    _cardRows.Remove(row);
-                    Destroy(row);
+                    MarketListings.Remove(merc); // 저장에서도 빠진다
+                    RefreshMarket(); // 협상 중 날이 바뀌어 줄을 다시 그렸어도 고용한 사람이 남지 않게 다시 그린다
                 }, () =>
                 {
                     if (hireButton == null || !ContractNegotiationPanel.IsBrokenOff(merc)) return;

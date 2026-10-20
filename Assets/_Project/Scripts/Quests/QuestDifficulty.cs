@@ -34,7 +34,17 @@ namespace GN3.Quests
         // 2026-10-16 권장 전투력을 ×1.25(RecommendedScale 0.8 → 1.0) 올리며 경계도 같은 배율로 올려, 같은 퀘스트는 같은 등급 그대로.
         private static readonly int[] GradeUpperBounds = { 163, 225, 300, 388, 488, 600 };
 
+        /// <summary>표시·게시판용 등급. 은월의 숲 퀘스트는 첫 지역이라 F급, 숲의 주인 앤트킹 토벌만 E급.
+        /// 그 밖(예전 저장의 장소 없는 퀘스트 등)은 전투력 등급. 명성·성장 보상은 PowerGrade를 쓴다.</summary>
         public static MercenaryGrade Grade(Quest quest)
+        {
+            if (quest.LocationName != null && quest.LocationName.StartsWith("은월의 숲"))
+                return quest.Waves.Any(w => w.IsBoss) ? MercenaryGrade.E : MercenaryGrade.F;
+            return PowerGrade(quest);
+        }
+
+        /// <summary>권장 전투력으로 정한 등급(F~S). 승리 명성(Guild.VictoryReputation)·성장(GrowthTuning.BattleGrowth)이 이것을 따른다.</summary>
+        public static MercenaryGrade PowerGrade(Quest quest)
         {
             int power = RecommendedPower(quest);
             for (int i = 0; i < GradeUpperBounds.Length; i++)
@@ -43,7 +53,10 @@ namespace GN3.Quests
         }
 
         /// <summary>rich text용 "[S] 퀘스트 이름"(등급 색).</summary>
-        public static string RichTitle(Quest quest) => $"{GradeTable.RichLabel(Grade(quest))} {quest.Title}";
+        public static string RichTitle(Quest quest) => $"{GradeTable.RichLabel(Grade(quest))} Lv{quest.Difficulty} {quest.Title}";
+
+        /// <summary>좁은 퀘스트 정보창 제목용 핵심만: "[F] 고블린 토벌"(레벨·의뢰인은 본문에 나온다).</summary>
+        public static string ShortRichTitle(Quest quest) => $"{GradeTable.RichLabel(Grade(quest))} {quest.EnemyName} 토벌";
 
         // 권장 전투력 = 적 1마리 몫 × 유효 적 수 × RecommendedScale.
         // 유효 적 수 = 가장 큰 라운드 + 나머지 라운드 적 × 0.5 + 보스 1 — 라운드는 한꺼번에가 아니라 차례로 나와서
@@ -58,7 +71,10 @@ namespace GN3.Quests
         {
             float effective = quest.MaxWaveSize + LaterWaveWeight * (quest.EnemyCount - quest.MaxWaveSize)
                 + (quest.Waves.Any(w => w.IsBoss) ? BossWeight : 0f);
-            return (int)System.Math.Round(effective * PowerPerEnemy(quest.Difficulty) * RecommendedScale);
+            // 필요 인원이 정해진 레벨(Lv3·4 4명, Lv5 6명)은 보통 파견 인원(가장 큰 라운드 + 1)보다 많이 가니 그만큼 권장도 올린다
+            // — 정해진 인원을 다 채워도 '매우 쉬움'이 뜨지 않게.
+            float crew = quest.RequiredDispatchSize > 0 ? System.Math.Max(1f, quest.RequiredDispatchSize / (quest.MaxWaveSize + 1f)) : 1f;
+            return (int)System.Math.Round(effective * PowerPerEnemy(quest.Difficulty) * RecommendedScale * crew);
         }
 
         /// <summary>라운드 구성 한 줄: "1R 산적 ×2 → 2R 늑대 ×3 → 3R 보스 고목왕 ×1"(한 라운드면 "산적 ×3").</summary>

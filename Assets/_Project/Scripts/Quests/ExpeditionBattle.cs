@@ -4,6 +4,7 @@ using GN3.Combat;
 using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.UI;
+using GN3.World;
 
 namespace GN3.Quests
 {
@@ -21,6 +22,8 @@ namespace GN3.Quests
             /// <summary>다 잡은 라운드 수(승리면 WaveCount).</summary>
             public int WavesCleared;
             public int WaveCount = 1;
+            /// <summary>직접 전투: 고블린 궁수가 이름("고블린 궁수")으로 구분돼 온다. 자동 전투는 false라 전리품·도감이 셋 중 하나를 궁수로 친다.</summary>
+            public bool NamedArchers;
             public bool Victory => Result.Outcome == BattleOutcome.TeamAVictory;
         }
 
@@ -81,7 +84,11 @@ namespace GN3.Quests
             public float ReturnHours; // 귀환까지(생존자가 없으면 0)
             public string Summary;
             public List<MemberReport> Members = new List<MemberReport>();
+            /// <summary>쓰러뜨린 적에게서 챙긴 전리품(승리했을 때만, LootBag에 들어갔다).</summary>
+            public List<(LootItem item, int count)> Loot = new List<(LootItem, int)>();
         }
+
+        private static readonly System.Random LootRng = new System.Random();
 
         public class MemberReport
         {
@@ -123,18 +130,37 @@ namespace GN3.Quests
                 }
             }
 
-            var questGrade = QuestDifficulty.Grade(quest);
+            var questGrade = QuestDifficulty.PowerGrade(quest); // 보상은 표시 등급(은월의 숲 F/E)이 아니라 실제 세기로
+            var killed = battle.Result.TeamB.Where(c => !c.IsAlive).Select(c => c.Name).ToList();
+            Bestiary.RecordKills(killed, archerSplit: !battle.NamedArchers); // 도감: 지더라도 쓰러뜨린 적은 센다
             string summary;
             if (battle.Victory)
             {
                 int reward = Pricing.QuestReward(quest);
-                Wallet.Add(reward);
                 int rep = Guild.VictoryReputation(questGrade);
-                summary = $"{quest.Title} — 임무 완료! 보상 +{reward}G · 명성 +{rep}";
+                string joint = "";
+                if (quest.IsJoint) // 연합 의뢰: 보상 40%는 함께한 길드 몫
+                {
+                    int ours = RivalDeals.ShareReward(quest, reward, rep);
+                    joint = $" (연합 몫 {reward - ours}G 제외)";
+                    reward = ours;
+                }
+                Wallet.Add(reward);
+                summary = $"{quest.Title} — 임무 완료! 보상 +{reward}G{joint} · 명성 +{rep}";
                 Guild.Add(rep);
                 report.Gold = reward;
                 report.Reputation = rep;
-                QuestClearHistory.RecordClear(quest.Region, quest.Tier); // 이 지역·계층은 다음 게시판에서 덜 나오고, 안 깬 계층이 더 자주 나온다
+                // 전리품: 쓰러뜨린 적마다 굴려 전리품 가방에(퇴각·전멸하면 못 챙긴다)
+                report.Loot = LootCatalog.Roll(killed, LootRng, archerSplit: !battle.NamedArchers);
+                LootBag.Add(report.Loot);
+                if (report.Loot.Count > 0) summary += $" · 전리품: {LootCatalog.Describe(report.Loot)}";
+                QuestClearHistory.RecordClear(quest.Region, quest.Difficulty); // 이 레벨은 다음 게시판에서 덜 나오고, 덜 깬 레벨이 더 자주 나온다
+                if (ForestProgress.TryUnlockNext(quest.Difficulty))
+                {
+                    summary += $" · 은월의 숲 Lv{ForestProgress.UnlockedLevel} 개방!";
+                    ToastLog.Show($"은월의 숲 Lv{ForestProgress.UnlockedLevel}이 열렸습니다!" +
+                                  (ForestProgress.UnlockedLevel == ForestProgress.MaxLevel ? " 숲의 주인 앤트킹이 기다립니다." : ""), true);
+                }
             }
             else
             {

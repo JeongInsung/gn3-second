@@ -1,12 +1,21 @@
+using GN3.Traits;
+
 namespace GN3.Mercenaries
 {
     /// <summary>계약·협상 수치를 한곳에 모은다(Contracts·ContractTerms·협상 창이 쓴다).</summary>
     public static class ContractTuning
     {
         // ---------- 계약 ----------
-        public static readonly int[] LengthOptions = { 30, 60, 90, 180 }; // 협상 창에서 고르는 계약 기간(일)
-        public const int DefaultLengthDays = 60;       // 예전 저장을 불러왔을 때 주는 기본 계약
-        public const int LongContractDays = 90;        // 이 이상이면 "긴 계약"
+        public static readonly int[] LengthOptions = { 180, 360, 720, 1080 }; // 협상 창에서 고르는 계약 기간: 반년·1년·2년·3년(1년 = 360일)
+        public const int DefaultLengthDays = 360;      // 기본 계약(예전 저장·재계약 시작값·기간 선호 없음). LengthOptions 안의 값이어야 한다
+        public const int LongContractDays = 720;       // 이 이상이면 "긴 계약"
+        public const int ShortContractDays = 180, PreferredLongDays = 720; // 짧은/긴 계약을 좋아하는 용병의 첫 제안 기간
+
+        /// <summary>계약 기간 표시: 180 → "반년", 360의 배수 → "N년", 그 밖(예전 저장)은 "N일".</summary>
+        public static string LengthLabel(int days) =>
+            days == GN3.World.GameCalendar.DaysPerYear / 2 ? "반년"
+            : days % GN3.World.GameCalendar.DaysPerYear == 0 ? $"{days / GN3.World.GameCalendar.DaysPerYear}년"
+            : $"{days}일";
         public const float ReleaseRatio = 0.5f;        // 해고 위약금 = 남은 주급 × 이 비율
         public const int NoticeDays = 14;              // 만료 이만큼 전에 우편함 알림
         public const int UrgentNoticeDays = 3;         // 만료 이만큼 전엔 중요 알림
@@ -52,6 +61,26 @@ namespace GN3.Mercenaries
         public const int RivalExposedMood = 5;         // 가짜를 들켰을 때(값은 크게 내려온다)
         public const int RivalDoubtedMood = 20;        // 진짜인데 의심했을 때(기한도 1로 준다)
         public const float TalkFloorDrop = 0.03f;      // 잘 먹힌 화법은 마지노선도 이만큼 낮춘다
+        public const float PraiseFailMin = 0.05f, PraiseFailMax = 0.6f; // 기분 보정 뒤 아부가 들통날 확률 범위
+
+        /// <summary>실력 칭찬이 아부로 들통날 기본 확률(기분 보정 전)과 들통났을 때 잃는 기분 범위(최소~최대, 랜덤).</summary>
+        public static (float chance, int moodMin, int moodMax) PraiseFail(Personality p) => p switch
+        {
+            Personality.Calm => (0.40f, 8, 14),         // 침착: 속을 잘 꿰뚫어 본다
+            Personality.Composed => (0.35f, 6, 12),
+            Personality.Cautious => (0.35f, 8, 14),     // 신중: 의심이 많다
+            Personality.Pessimistic => (0.30f, 10, 18), // 비관: 놀림으로 받아들인다
+            Personality.Confident => (0.10f, 5, 10),    // 자신만만: 칭찬은 당연하다
+            Personality.Hotblooded => (0.25f, 12, 25),  // 열혈: 들통나면 크게 화낸다
+            Personality.Reckless => (0.20f, 10, 22),
+            Personality.Brave => (0.20f, 6, 12),
+            Personality.Steady => (0.25f, 5, 10),
+            Personality.Cheerful => (0.10f, 3, 8),      // 쾌활: 잘 넘어가고 금방 잊는다
+            Personality.Lethargic => (0.15f, 2, 6),     // 무기력: 별 반응이 없다
+            Personality.Coward => (0.15f, 8, 15),
+            Personality.Nervous => (0.20f, 10, 16),     // 예민: 쉽게 상처받는다
+            _ => (0.20f, 5, 12),
+        };
         public const int SignedHappyMood = 70, SignedGrudgeMood = 25, SignedMorale = 3; // 서명 때 기분에 따라 사기 ±
 
         // ---------- 성과 보너스 ----------

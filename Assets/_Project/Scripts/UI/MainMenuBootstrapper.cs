@@ -82,6 +82,8 @@ namespace GN3.UI
             GuildPanel.Create();                                  // 길드 건물·길드 글자 클릭 → 티어·수용 인원 창
             RelationsPanel.Create();                              // 오른쪽 아래 "관계" 버튼 → 용병 친밀도 창
             HealthPanel.Create();                                 // 오른쪽 아래 "건강" 버튼 → 전원 체력·부상·질병·입원 표
+            BestiaryPanel.Create();                               // 왼쪽 위 "도감" 버튼 → 몬스터 도감 창
+            RivalGuildsPanel.Create();                            // 왼쪽 위 "근처 길드" 버튼 → 순위·관계·거래 창
             ImportantAlertPanel.Create();                         // 중요 소식(도착 선택·퀘스트 결과 등) → 게임을 멈추고 알림창
             var mainCamera = Camera.main;
             if (mainCamera != null && mainCamera.GetComponent<CameraZoom>() == null)
@@ -443,7 +445,7 @@ namespace GN3.UI
         private const float MenuButtonWidth = 120f;
         private const float MenuButtonHeight = 40f;
         private const float MenuSpacing = 8f;
-        private const int MenuButtonCount = 3;
+        private const int MenuButtonCount = 5;
 
         private static void CreateMenuBar(Transform canvasTransform, GameObject marketPanel, GameObject partyPanel, GameObject questPanel)
         {
@@ -466,6 +468,8 @@ namespace GN3.UI
             CreateMenuButton(barGO.transform, "용병시장", () => OpenPanel(marketPanel));
             CreateMenuButton(barGO.transform, "파티 구성", () => OpenPanel(partyPanel));
             CreateMenuButton(barGO.transform, "퀘스트", () => OpenPanel(questPanel));
+            CreateMenuButton(barGO.transform, "도감", BestiaryPanel.ShowGlobal); // 몬스터 도감 창
+            CreateMenuButton(barGO.transform, "근처 길드", RivalGuildsPanel.ShowGlobal); // 근처 길드 순위·관계·거래 창
         }
 
         private static void OpenPanel(GameObject panel) => PanelActivator.Open(panel);

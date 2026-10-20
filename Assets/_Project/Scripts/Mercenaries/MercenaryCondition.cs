@@ -222,9 +222,11 @@ namespace GN3.Mercenaries
         /// <summary>길드를 떠난다: 파티에서 빼고 중요 알림(게임을 멈추고 알림창, 시간 넘기기도 여기서 멈춘다).</summary>
         private static void Leave(Mercenary merc, string reason)
         {
+            if (Loans.TryReturnLeaving(merc)) { LeavingIds.Remove(merc.Id); return; } // 빌려 온 손님은 원래 길드로 돌아간다
             LeavingIds.Remove(merc.Id);
             PlayerParty.Instance.Remove(merc);
             Contracts.Remove(merc);
+            GN3.Economy.RivalGuilds.OnPlayerReleased(merc); // 근처 길드가 데려갈 수 있다
             string line = $"{Josa.IGa(merc.Name)} {reason} 길드를 떠났다.";
             ToastLog.Show(line, false);
             DailyLog.Add(line);

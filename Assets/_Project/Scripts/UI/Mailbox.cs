@@ -7,7 +7,17 @@ using UnityEngine;
 
 namespace GN3.UI
 {
-    public enum MailKind { Notice, QuestResult, Arrival, Report, Alert }
+    public enum MailKind { Notice, QuestResult, Arrival, Report, Alert, Event }
+
+    /// <summary>사건 편지의 선택지 하나(ChoiceEvents). Resolve는 결과를 처리하고 결과 문장을 돌려준다.</summary>
+    public class MailChoice
+    {
+        public string Label;
+        public string Tooltip;
+        public System.Func<bool> Available; // null이면 늘 고를 수 있다
+        public System.Func<string> Resolve;
+        public bool CanChoose => Available == null || Available();
+    }
 
     /// <summary>
     /// 우편함(받은편지함). 일반 알림·퀘스트 결과·파견대 도착(자동/직접 선택)·하루 보고서·중요 소식을 모두 편지로 모은다.
@@ -37,10 +47,17 @@ namespace GN3.UI
             public bool Acknowledged;
             public Expedition Expedition;
             public bool Resolved;
+            /// <summary>사건 편지의 선택지(없으면 null). 고르면 ChoiceResolved가 되고 결과가 본문에 붙는다(Mailbox.Choose).</summary>
+            public List<MailChoice> Choices;
+            public bool ChoiceResolved;
+            /// <summary>고르기 전에 사라졌을 때(파견대가 전멸 등) 할 일 — 기다리던 원정 풀기.</summary>
+            public System.Action OnAbandoned;
 
-            /// <summary>자동/직접을 아직 고르지 않았고 그 파견대가 도착지에서 기다리는 중.</summary>
-            public bool IsPendingChoice => Kind == MailKind.Arrival && !Resolved && Expedition != null
-                                           && Expedition.IsReady && ExpeditionLog.Instance.Active.Contains(Expedition);
+            public bool IsPendingEvent => Choices != null && !ChoiceResolved;
+
+            /// <summary>자동/직접을 아직 고르지 않았고 그 파견대가 도착지에서 기다리는 중, 또는 사건 선택지를 아직 고르지 않았다.</summary>
+            public bool IsPendingChoice => IsPendingEvent || (Kind == MailKind.Arrival && !Resolved && Expedition != null
+                                           && Expedition.IsReady && ExpeditionLog.Instance.Active.Contains(Expedition));
         }
 
         private static readonly List<Mail> _mails = new List<Mail>();
@@ -95,6 +112,32 @@ namespace GN3.UI
             if (important) ImportantPosted?.Invoke(mail);
             return mail;
         }
+
+        /// <summary>사건 편지(중요): 날짜 넘기기를 멈추고 알림창이 선택지를 띄운다. 우편함에서 나중에 골라도 된다.</summary>
+        public static Mail PostChoice(string title, string body, List<MailChoice> choices, Expedition expedition = null)
+        {
+            var mail = Post(MailKind.Event, title, body, important: true, shortTitle: title);
+            mail.Choices = choices;
+            mail.Expedition = expedition;
+            return mail;
+        }
+
+        /// <summary>사건 선택: 결과를 처리하고 본문 끝에 "▶ 고른 것 — 결과"를 붙인다. 이미 골랐거나 고를 수 없으면 false.</summary>
+        public static bool Choose(Mail mail, int index)
+        {
+            if (mail == null || !mail.IsPendingEvent || index < 0 || index >= mail.Choices.Count) return false;
+            var choice = mail.Choices[index];
+            if (!choice.CanChoose) return false;
+            mail.ChoiceResolved = true;
+            string result = choice.Resolve?.Invoke() ?? "";
+            mail.Body += $"\n\n<color=#f0a54a>▶ {choice.Label}</color>\n{result}";
+            mail.Read = true;
+            DailyLog.Add($"{mail.Title}: {choice.Label} — {StripTags(result)}");
+            Changed?.Invoke();
+            return true;
+        }
+
+        private static string StripTags(string text) => System.Text.RegularExpressions.Regex.Replace(text ?? "", "<.*?>", "");
 
         /// <summary>파견대 도착: 자동/직접 선택이 필요한 중요 편지. 같은 파견에 처리 안 된 편지가 있으면 다시 만들지 않는다.</summary>
         public static void PostArrival(Expedition expedition)
@@ -260,6 +303,7 @@ namespace GN3.UI
             MailKind.Arrival => "도착",
             MailKind.Report => "보고",
             MailKind.Alert => "중요",
+            MailKind.Event => "사건",
             _ => "알림",
         };
 
@@ -269,6 +313,7 @@ namespace GN3.UI
             MailKind.Arrival => new Color(1f, 0.6f, 0.2f),
             MailKind.Report => new Color(0.55f, 0.75f, 0.95f),
             MailKind.Alert => AlertColor,
+            MailKind.Event => new Color(0.75f, 0.6f, 1f),
             _ => new Color(0.75f, 0.75f, 0.75f),
         };
 

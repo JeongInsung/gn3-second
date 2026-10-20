@@ -20,10 +20,10 @@ namespace GN3.Mercenaries
         public string Name { get; }               // 건물 패널 이름 겸 표시 이름("온천", "도박장")
         public string SpritePrefix { get; }       // 마을 그림 이름
         public float DoorU { get; }               // 그림에서 문 가운데(가로 비율)
-        public int Capacity { get; }
+        public int Capacity => _baseCapacity + (_capacityBonus?.Invoke() ?? 0);
         public float MinSessionHours { get; }
         public float MaxSessionHours { get; }
-        public float FatigueReliefPerHour { get; }
+        public float FatigueReliefPerHour => _baseRelief * (_reliefMultiplier?.Invoke() ?? 1f);
         public float MoralePerHour { get; }
         public bool OpenAtNight { get; }
         /// <summary>사기가 이 값 이상이면 머물러도 사기는 오르지 않는다(도박장, ConditionTuning.GamblingMoraleCap).</summary>
@@ -31,6 +31,10 @@ namespace GN3.Mercenaries
         public string Description { get; }
         public string Summary { get; }            // 패널 머리줄용 짧은 효과 문구("피로 -15 · 사기 +1")
 
+        private readonly int _baseCapacity;
+        private readonly float _baseRelief;
+        private readonly Func<int> _capacityBonus;      // 길드 시설 단계(온천 — GuildFacilities)
+        private readonly Func<float> _reliefMultiplier;
         private readonly Func<Mercenary, float> _visitChance;
         private readonly Func<Mercenary, bool> _eligible;
         private readonly Action<Mercenary, float> _onStayed;
@@ -45,15 +49,18 @@ namespace GN3.Mercenaries
 
         public RestVenue(string name, string spritePrefix, float doorU, int capacity, float minHours, float maxHours,
             float fatigueReliefPerHour, float moralePerHour, bool openAtNight, Func<Mercenary, float> visitChance, string description,
-            string summary, Func<Mercenary, bool> eligible = null, Action<Mercenary, float> onStayed = null, int moraleCap = ConditionTuning.MaxCondition)
+            string summary, Func<Mercenary, bool> eligible = null, Action<Mercenary, float> onStayed = null, int moraleCap = ConditionTuning.MaxCondition,
+            Func<int> capacityBonus = null, Func<float> reliefMultiplier = null)
         {
+            _capacityBonus = capacityBonus;
+            _reliefMultiplier = reliefMultiplier;
             Name = name;
             SpritePrefix = spritePrefix;
             DoorU = doorU;
-            Capacity = capacity;
+            _baseCapacity = capacity;
             MinSessionHours = minHours;
             MaxSessionHours = maxHours;
-            FatigueReliefPerHour = fatigueReliefPerHour;
+            _baseRelief = fatigueReliefPerHour;
             MoralePerHour = moralePerHour;
             OpenAtNight = openAtNight;
             _visitChance = visitChance;
@@ -271,7 +278,9 @@ namespace GN3.Mercenaries
             ConditionTuning.HotSpringFatigueReliefPerHour, ConditionTuning.HotSpringMoralePerHour, false,
             merc => ConditionTuning.HotSpringVisitChance(merc.Fatigue),
             $"지친 용병이 쉬며 피로를 푸는 곳. 직접 보내거나 스스로 찾아옵니다. (최대 {ConditionTuning.HotSpringCapacity}명)",
-            $"피로 -{ConditionTuning.HotSpringFatigueReliefPerHour:0} · 사기 +{ConditionTuning.HotSpringMoralePerHour:0}");
+            $"피로 -{ConditionTuning.HotSpringFatigueReliefPerHour:0} · 사기 +{ConditionTuning.HotSpringMoralePerHour:0}",
+            capacityBonus: () => GN3.Economy.GuildFacilities.HotSpringCapacityBonus,
+            reliefMultiplier: () => GN3.Economy.GuildFacilities.HotSpringReliefMultiplier);
 
         public static readonly RestVenue GamblingDen = new RestVenue(
             "도박장", "주사위 간판의 뒷골목 도박장", 0.57f, ConditionTuning.GamblingCapacity,

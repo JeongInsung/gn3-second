@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using GN3.CharacterAnim;
 using GN3.Combat;
+using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.UI;
@@ -63,7 +64,7 @@ namespace GN3.Battle
         private Font _font;
         private Expedition _expedition;
         private List<Mercenary> _fighters;
-        private Mercenary _leaderMerc; // 결과 화면 ★ 표시(전투 중 쓰러져도 그대로)
+        private readonly List<Mercenary> _leaderMercs = new List<Mercenary>(); // 결과 화면 ★ 표시(분대장들, 전투 중 쓰러져도 그대로)
         private FieldBattleSession _session;
         private readonly Dictionary<FieldUnit, UnitView> _views = new Dictionary<FieldUnit, UnitView>();
         private readonly List<UnitView> _drawOrder = new List<UnitView>();
@@ -72,6 +73,7 @@ namespace GN3.Battle
         private float _overSince = -1f;
         private AudioSource _music;     // 전투 브금(설정 창의 음악 볼륨을 따른다) // 전투가 끝난(한쪽이 다 쓰러진) 시각 — ResultDelaySeconds 뒤 결과창
         private bool _leaderDownNoticed;
+        private FieldUnit _lastControlled; // 두 분대 전투: 지난 갱신 때 조종하던 분대장(쓰러져 넘어간 것을 알리려고)
         private bool _paused;       // Space: 전투 멈춤(멈춘 동안에도 분대장 명령은 내릴 수 있다)
         private bool _deploying;    // 배치 단계(전투 시작 전)
         private bool _cutIn;        // 보스 등장 컷인 중(전투 시간이 멈춘다)
@@ -137,12 +139,17 @@ namespace GN3.Battle
             var melee = _fighters.Select(m => IsMeleeClass(m.Class.Kind)).ToList();
             var skills = _fighters.Select(m => ClassSkillFactory.Create(m.Class.Kind)).ToList();
             int leaderIndex = Math.Max(0, _fighters.IndexOf(expedition.Leader));
-            _leaderMerc = expedition.Leader;
+            // 두 분대 퀘스트(Lv5 앤트킹): 분대마다 분대장, Tab으로 조종할 분대장을 바꾼다
+            bool twoSquads = quest.SquadCount > 1 && expedition.LeaderOf(1) != null;
+            var squads = twoSquads ? _fighters.Select(m => expedition.SquadOf(m)).ToList() : null;
+            int leaderIndex2 = twoSquads ? _fighters.IndexOf(expedition.LeaderOf(1)) : -1;
+            _leaderMercs.Add(expedition.Leader);
+            if (twoSquads) _leaderMercs.Add(expedition.LeaderOf(1));
 
             var rng = new System.Random();
             var waves = Enumerable.Range(0, quest.WaveCount).Select(w => ExpeditionBattle.SpawnWave(quest, w, rng)).ToList();
 
-            _session = new FieldBattleSession(combatants, melee, skills, leaderIndex, waves, rng);
+            _session = new FieldBattleSession(combatants, melee, skills, leaderIndex, waves, rng, squads, leaderIndex2);
             _session.OnWaveCleared += OnWaveCleared;
             _session.OnWaveStarted += OnWaveStarted;
             _session.OnSlamTelegraph += cast => StartCoroutine(SlamTelegraph(cast));
@@ -487,6 +494,17 @@ namespace GN3.Battle
             if (kb.qKey.wasPressedThisFrame) PressSkill();
             if (kb.escapeKey.wasPressedThisFrame) _picking = false;
             if (kb.spaceKey.wasPressedThisFrame) SetPaused(!_paused);
+            if (kb.tabKey.wasPressedThisFrame) SwitchSquad();
+        }
+
+        /// <summary>두 분대 전투: Tab으로 조종할 분대장을 바꾼다(넘겨준 분대장은 알아서 싸운다).</summary>
+        private void SwitchSquad()
+        {
+            if (_deploying || !_session.HasTwoSquads || !_session.SwitchLeader()) return;
+            _picking = false;
+            var leader = _session.Leader;
+            AppendLog($"<color=#ffd34a>{leader.Squad + 1}분대장 {leader.Combatant.Name} 조종</color>");
+            RefreshPanel();
         }
 
         // ---------- 입력 ----------
@@ -584,7 +602,13 @@ namespace GN3.Battle
             }
 
             var c = leader.Combatant;
-            _leaderLabel.text = $"★ 분대장 {c.Name}   체력 {c.CurrentHealth}/{c.Stats.MaxHealth}";
+            bool canSwitch = _session.HasTwoSquads && _session.Leaders.Any(l => l != leader && l.IsAlive);
+            _leaderLabel.text = _session.HasTwoSquads
+                ? $"★ {leader.Squad + 1}분대장 {c.Name}   체력 {c.CurrentHealth}/{c.Stats.MaxHealth}" + (canSwitch ? "   (Tab: 분대 전환)" : "")
+                : $"★ 분대장 {c.Name}   체력 {c.CurrentHealth}/{c.Stats.MaxHealth}";
+            if (_session.HasTwoSquads && leader != _lastControlled && _lastControlled != null && !_lastControlled.IsAlive)
+                AppendLog($"<color=#ff8a7a>{_lastControlled.Squad + 1}분대장 {_lastControlled.Combatant.Name}이(가) 쓰러졌다! {leader.Squad + 1}분대장 {c.Name}이(가) 지휘를 이어받는다</color>");
+            _lastControlled = leader;
 
             var skill = leader.Skill;
             if (skill == null)
@@ -607,7 +631,7 @@ namespace GN3.Battle
                 ? (skill != null && skill.TargetType == SkillTargetType.Ally
                     ? "치료할 아군을 클릭 (Q: 자신 · Esc: 취소)"
                     : "스킬을 쓸 적을 클릭 (Esc: 취소)")
-                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지";
+                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지" + (_session.HasTwoSquads ? " · Tab: 분대 전환" : "");
         }
 
         private void UpdateUnitView(UnitView v)
@@ -955,6 +979,7 @@ namespace GN3.Battle
             {
                 Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam,
                 WavesCleared = _session.WavesCleared, WaveCount = _session.WaveCount,
+                NamedArchers = true, // 궁수는 "고블린 궁수"로 이름이 붙어 있다
             };
             var report = ExpeditionBattle.ConcludeReport(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
 
@@ -1396,7 +1421,7 @@ namespace GN3.Battle
             {
                 string label = unit.IsLeader ? $"★{unit.Combatant.Name}" : unit.Combatant.Name;
                 var name = CreateText(root, label, UITheme.SmallSize, TextAnchor.MiddleCenter,
-                    unit.IsLeader ? LeaderColor : unit.IsPlayerSide ? UITheme.BodyText : new Color(0.92f, 0.66f, 0.6f));
+                    unit.IsLeader ? LeaderColor : unit.IsPlayerSide ? UITheme.BodyText : EnemyNameColor(unit.Combatant.Name));
                 name.font = UITheme.Font;
                 name.supportRichText = true;
                 name.raycastTarget = false;
@@ -1711,7 +1736,11 @@ namespace GN3.Battle
             overlay.transform.SetAsLastSibling();
 
             int rows = report.Members.Count;
-            float membersTop = -196f;
+            // 전리품 줄(승리 때만): 한 줄에 LootPerLine칸씩, 줄 수만큼 구분선·대원 목록을 아래로 민다
+            var loot = victory ? report.Loot : new List<(LootItem item, int count)>();
+            int lootLines = (loot.Count + LootPerLine - 1) / LootPerLine;
+            float lootExtra = lootLines > 0 ? lootLines * LootLineHeight + 4f : 0f;
+            float membersTop = -196f - lootExtra;
             float height = -membersTop + ResultRowHeight * rows + 124f;
             var panel = CreateImage(overlay.transform, "ResultPanel", Color.white);
             panel.AddComponent<CanvasGroup>();
@@ -1766,9 +1795,24 @@ namespace GN3.Battle
                 (report.Reputation >= 0 ? $"+{report.Reputation}" : report.Reputation.ToString()) + " 명성",
                 report.Reputation >= 0 ? RepColor : DefeatColor);
 
+            // 전리품: 아이콘 ×개수(마우스를 올리면 이름·팔 때 값). 길드 창고에서 판다.
+            for (int line = 0; line < lootLines; line++)
+            {
+                var lootRow = new GameObject("Loot", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+                lootRow.transform.SetParent(panel.transform, false);
+                PlaceTop((RectTransform)lootRow.transform, -172f - line * LootLineHeight, LootLineHeight, ResultPad);
+                var lootLayout = lootRow.GetComponent<HorizontalLayoutGroup>();
+                lootLayout.childAlignment = TextAnchor.MiddleCenter;
+                lootLayout.spacing = 6f;
+                lootLayout.childControlWidth = lootLayout.childControlHeight = true;
+                lootLayout.childForceExpandWidth = lootLayout.childForceExpandHeight = false;
+                foreach (var (item, count) in loot.Skip(line * LootPerLine).Take(LootPerLine))
+                    AddLootChip(lootRow.transform, item, count);
+            }
+
             // 구분선
             var divider = CreateImage(panel.transform, "Divider", DividerColor);
-            PlaceTop((RectTransform)divider.transform, -180f, 1f, ResultPad);
+            PlaceTop((RectTransform)divider.transform, -180f - lootExtra, 1f, ResultPad);
             divider.GetComponent<Image>().raycastTarget = false;
 
             // 대원
@@ -1840,6 +1884,50 @@ namespace GN3.Battle
             return text;
         }
 
+        /// <summary>적 이름표 색: 개체 등급(이름 앞말)이 강한·우두머리면 눈에 띄게, 약한은 흐리게.</summary>
+        private static Color EnemyNameColor(string name) => MonsterIV.RankOf(name) switch
+        {
+            MonsterRank.Weak => new Color(0.7f, 0.66f, 0.64f),
+            MonsterRank.Strong => new Color(1f, 0.65f, 0.29f),
+            MonsterRank.Alpha => new Color(1f, 0.42f, 0.35f),
+            _ => new Color(0.92f, 0.66f, 0.6f),
+        };
+
+        private const int LootPerLine = 6;
+        private const float LootLineHeight = 44f;
+        private const float LootIconSize = 38f;
+        private static readonly Color LootRareColor = new Color(0.78f, 0.62f, 1f);
+
+        /// <summary>전리품 한 칸: 아이콘 + "×n"(드문 것은 보랏빛). 마우스를 올리면 이름·팔 때 값.</summary>
+        private void AddLootChip(Transform parent, LootItem item, int count)
+        {
+            var chip = new GameObject("LootChip", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup));
+            chip.transform.SetParent(parent, false);
+            chip.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.001f); // 툴팁용 레이캐스트(보이지 않음)
+            var chipLayout = chip.GetComponent<HorizontalLayoutGroup>();
+            chipLayout.childAlignment = TextAnchor.MiddleLeft;
+            chipLayout.spacing = 2f;
+            chipLayout.padding = new RectOffset(4, 8, 0, 0);
+            chipLayout.childControlWidth = chipLayout.childControlHeight = true;
+            chipLayout.childForceExpandWidth = chipLayout.childForceExpandHeight = false;
+
+            var iconGO = CreateImage(chip.transform, "Icon", Color.white);
+            var iconImage = iconGO.GetComponent<Image>();
+            iconImage.sprite = item.Icon;
+            iconImage.preserveAspect = true;
+            iconImage.raycastTarget = false;
+            var iconLayout = iconGO.AddComponent<LayoutElement>();
+            iconLayout.preferredWidth = iconLayout.preferredHeight = LootIconSize;
+
+            var text = CreateText(chip.transform, $"×{count}", 18, TextAnchor.MiddleLeft, item.Rare ? LootRareColor : UITheme.BodyText);
+            text.fontStyle = FontStyle.Bold;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.raycastTarget = false;
+            text.gameObject.AddComponent<LayoutElement>().minWidth = 30f;
+
+            chip.AddComponent<TooltipTrigger>().Text = $"<b>{item.Name}</b>" + (item.Rare ? " (드묾)" : "") + $"\n팔면 개당 {item.Price}G · 길드 창고에서 판다";
+        }
+
         private static void AddRewardGap(Transform parent, float width)
         {
             var gap = new GameObject("Gap", typeof(RectTransform), typeof(LayoutElement));
@@ -1863,7 +1951,7 @@ namespace GN3.Battle
             pr.anchoredPosition = Vector2.zero;
             pr.sizeDelta = new Vector2(36f, 36f);
 
-            bool leader = m.Merc == _leaderMerc;
+            bool leader = _leaderMercs.Contains(m.Merc);
             var name = CreateText(row.transform, leader ? $"★ {m.Merc.Name}" : m.Merc.Name, 17, TextAnchor.MiddleLeft,
                 leader ? LeaderColor : UITheme.BodyText);
             name.fontStyle = FontStyle.Bold;

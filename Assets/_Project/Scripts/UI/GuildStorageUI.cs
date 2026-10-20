@@ -20,11 +20,54 @@ namespace GN3.UI
         private void Awake() => BuildingPanel.Opened += HandleOpened;
         private void OnDestroy() => BuildingPanel.Opened -= HandleOpened;
 
+        private static bool _facilitiesNext; // 길드 창 [시설]로 열 때 — 창고 대신 시설 목록
+
+        /// <summary>다음에 길드 건물 패널이 열리면 시설 목록을 보인다(GuildPanel [시설]).</summary>
+        public static void RequestFacilities() => _facilitiesNext = true;
+
         private void HandleOpened(BuildingPanel panel, SelectableBuilding building)
         {
             if (building == null || !building.DisplayName.Contains(PanelKeyword)) return;
             _panel = panel;
-            ShowStorage();
+            if (_facilitiesNext)
+            {
+                _facilitiesNext = false;
+                ShowFacilities();
+            }
+            else ShowStorage();
+        }
+
+        // ---------- 길드 시설 ----------
+
+        /// <summary>시설 다섯: 단계(●●○), 지금 효과 → 다음 효과, 비용(보유/필요), [증축].</summary>
+        private void ShowFacilities()
+        {
+            _panel.Title.text = "길드 시설";
+            if (_panel.Description != null) _panel.Description.text = "금화와 마정석으로 시설을 증축하면 바로 효과가 납니다. 시설마다 3단계까지.";
+            ShopListUI.BeginList(_panel);
+            foreach (var f in GuildFacilities.All)
+            {
+                int level = GuildFacilities.Level(f);
+                var row = ShopListUI.CreateRow(_panel, "Facility_" + f);
+                string dots = new string('●', level) + new string('○', GuildFacilities.MaxLevel - level);
+                string title = $"{GuildFacilities.Name(f)}  {dots}  {GuildFacilities.Effect(f, level)}";
+                string sub = level >= GuildFacilities.MaxLevel ? "최고 단계"
+                    : $"다음: {GuildFacilities.Effect(f, level + 1)} · {GuildFacilities.CostText(level + 1)}";
+                ShopListUI.CreateTwoLineLabel(row.transform, title, sub);
+                var facility = f;
+                string block = GuildFacilities.Block(f);
+                var button = ShopListUI.CreateButton(row.transform, level >= GuildFacilities.MaxLevel ? "완료" : "증축", () => Upgrade(facility), 80f);
+                button.interactable = block == null;
+                button.gameObject.AddComponent<TooltipTrigger>().Text = block ?? $"{GuildFacilities.Name(f)} {level + 1}단계로 증축합니다.";
+            }
+            ShopListUI.EndList(_panel);
+        }
+
+        private void Upgrade(Facility f)
+        {
+            if (GuildFacilities.TryUpgrade(f))
+                ToastLog.Show($"{Josa.EulReul(GuildFacilities.Name(f))} {GuildFacilities.Level(f)}단계로 증축했습니다 — {GuildFacilities.Effect(f, GuildFacilities.Level(f))}", false);
+            ShowFacilities();
         }
 
         // ---------- 창고 목록 ----------
@@ -63,7 +106,52 @@ namespace GN3.UI
                 });
             }
 
+            ShowLoot();
             ShopListUI.EndList(_panel);
+        }
+
+        // ---------- 전리품 팔기 ----------
+
+        /// <summary>전리품 가방(창고 칸을 쓰지 않음): 머리줄에 모두 팔기, 종류마다 1개 팔기·모두.</summary>
+        private void ShowLoot()
+        {
+            var header = ShopListUI.CreateRow(_panel, "LootHeader");
+            var title = ShopListUI.CreateText(header.transform,
+                LootBag.KindCount > 0 ? $"전리품 ({LootBag.KindCount}종 · 모두 팔면 {LootBag.TotalValue}G)" : "전리품",
+                16, TextAnchor.MiddleLeft, UITheme.BodyText);
+            title.fontStyle = FontStyle.Bold;
+            title.gameObject.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
+            var sellAll = ShopListUI.CreateButton(header.transform, "모두 팔기", () =>
+            {
+                int gold = LootBag.SellAll();
+                if (gold > 0) ToastLog.Show($"전리품을 모두 팔았습니다 (+{gold}G)");
+                ShowStorage();
+            }, 120f);
+            sellAll.interactable = LootBag.KindCount > 0;
+
+            if (LootBag.KindCount == 0)
+            {
+                ShopListUI.CreateEmptyRow(_panel, "몬스터를 쓰러뜨리면 전리품이 쌓입니다.");
+                return;
+            }
+
+            foreach (var (loot, count) in LootBag.Entries.ToList())
+            {
+                var row = ShopListUI.CreateRow(_panel, "Loot_" + loot.Name);
+                ShopListUI.CreateIcon(row.transform, loot.Icon);
+                ShopListUI.CreateTwoLineLabel(row.transform, $"{loot.Name} ×{count}" + (loot.Rare ? "  (드묾)" : ""), // 이 글자는 색 태그를 그리지 않는다
+                    $"개당 {loot.Price}G · 모두 {loot.Price * count}G");
+                ShopListUI.CreateButton(row.transform, "1개 팔기", () => Sell(loot, 1), 90f);
+                ShopListUI.CreateButton(row.transform, "모두", () => Sell(loot, LootBag.Count(loot)), 70f);
+            }
+        }
+
+        private void Sell(LootItem loot, int n)
+        {
+            int sold = System.Math.Min(n, LootBag.Count(loot));
+            int gold = LootBag.Sell(loot, n);
+            if (gold > 0) ToastLog.Show($"{loot.Name} {sold}개를 팔았습니다 (+{gold}G)");
+            ShowStorage();
         }
 
         // ---------- 무기 장착 ----------

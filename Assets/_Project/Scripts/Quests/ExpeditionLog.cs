@@ -73,9 +73,12 @@ namespace GN3.Quests
         /// <summary>전투를 마치고 마을로 돌아오는 중인지.</summary>
         public bool IsReturning(Mercenary mercenary) => FindExpedition(mercenary)?.IsReturning == true;
 
-        public Expedition Dispatch(Quest quest, IReadOnlyList<Mercenary> members, Mercenary leader = null)
+        /// <param name="squads">파견원마다 분대(두 분대 퀘스트만, members와 같은 순서).</param>
+        /// <param name="leader2">2분대 분대장.</param>
+        public Expedition Dispatch(Quest quest, IReadOnlyList<Mercenary> members, Mercenary leader = null,
+            IReadOnlyList<int> squads = null, Mercenary leader2 = null)
         {
-            var expedition = new Expedition(quest, members, leader);
+            var expedition = new Expedition(quest, members, leader, squads, leader2);
             _active.Add(expedition);
 
             // 전투력이 넉넉한 편성(쉬움·매우 쉬움)은 더 빨리 도착한다(QuestDifficulty.DaysSaved).
@@ -158,6 +161,9 @@ namespace GN3.Quests
             return _active.FirstOrDefault(e => e.Members.Any(m => m.Id == mercenary.Id));
         }
 
+        /// <summary>하루치 이동마다(습격 판정 뒤) 부르는 사건 굴림. true면 그 파견대가 선택을 기다리며 멈춘다(ChoiceEvents가 건다).</summary>
+        public static System.Func<Expedition, bool> TravelEventHook;
+
         private void HandleHoursPassed(float hours)
         {
             if (_active.Count == 0 || hours <= 0f) return;
@@ -166,7 +172,7 @@ namespace GN3.Quests
             bool changed = false, progressed = false;
             foreach (var expedition in _active.ToList())
             {
-                if (expedition.IsReady) continue; // 도착해 전투를 기다리는 중
+                if (expedition.IsReady || expedition.AwaitingEvent) continue; // 도착해 전투를 기다리거나 사건 선택을 기다리는 중
                 float before = expedition.IsReturning ? expedition.ReturnHoursLeft : expedition.Quest.RemainingHours;
                 float moved = Math.Min(hours, before);
 
@@ -183,6 +189,11 @@ namespace GN3.Quests
                 {
                     expedition.HoursSinceAmbushRoll -= Quest.HoursPerDay;
                     if (TryTriggerAmbush(expedition)) changed = true;
+                    if (_active.Contains(expedition) && TravelEventHook != null && TravelEventHook(expedition))
+                    {
+                        changed = true;
+                        break; // 고를 때까지 멈춘다(남은 이동은 다음 시간부터)
+                    }
                 }
                 if (!_active.Contains(expedition))
                 {
@@ -206,15 +217,16 @@ namespace GN3.Quests
         }
 
         /// <summary>습격을 굴린다. 습격이 실제로 일어났으면(피했어도 길잡이 문구가 나가면) true.</summary>
-        private bool TryTriggerAmbush(Expedition expedition)
+        private bool TryTriggerAmbush(Expedition expedition, bool forced = false)
         {
             var aliveMembers = expedition.Members.Where(m => m.IsAlive).ToList();
             if (aliveMembers.Count == 0) return false;
 
-            if (_eventRng.NextDouble() >= AmbushChance) return false;
+            double chance = expedition.RiskyRoute && !expedition.IsReturning ? AmbushChance * 2 : AmbushChance; // 사건의 지름길
+            if (!forced && _eventRng.NextDouble() >= chance) return false;
 
             bool hasGuide = aliveMembers.Any(m => m.Class.Kind == MercenaryClassKind.Guide);
-            if (hasGuide && _eventRng.NextDouble() < GuideAvoidChance)
+            if (!forced && hasGuide && _eventRng.NextDouble() < GuideAvoidChance)
             {
                 OnTravelEvent?.Invoke($"{expedition.Quest.Title} — 길잡이 덕분에 습격을 피했다.");
                 return false;
@@ -230,6 +242,7 @@ namespace GN3.Quests
 
             var simulator = new AutoBattleSimulator();
             simulator.Simulate(combatants, enemies, maxRounds: 20, skills: ClassSkillFactory.ForTeam(aliveMembers, combatants));
+            GN3.World.Bestiary.RecordKills(enemies.Where(e => !e.IsAlive).Select(e => e.Name), archerSplit: true); // 도감: 습격에서 쓰러뜨린 적
 
             string raiderNames = string.Join("·", enemies.Select(e => e.Name).Distinct());
             var sb = new StringBuilder();
@@ -268,6 +281,17 @@ namespace GN3.Quests
             OnTravelEvent?.Invoke(sb.ToString());
             return true;
         }
+
+        /// <summary>사건(정면 돌파)으로 바로 습격 전투를 치른다(확률·길잡이 회피 없이). 결과는 OnTravelEvent로 알린다.</summary>
+        public void ForceAmbush(Expedition expedition)
+        {
+            if (expedition == null || !_active.Contains(expedition)) return;
+            TryTriggerAmbush(expedition, forced: true);
+            OnChanged?.Invoke();
+        }
+
+        /// <summary>사건으로 대기·이동 시간이 바뀌었을 때 파티 창 등을 다시 그리게.</summary>
+        public void NotifyChanged() => OnChanged?.Invoke();
 
         // GameClock과 마찬가지로 Domain Reload가 꺼져 있어도 Play 진입마다 상태를 초기화하기 위한 지점.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

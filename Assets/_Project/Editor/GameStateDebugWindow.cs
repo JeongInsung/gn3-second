@@ -56,6 +56,12 @@ namespace GN3.EditorTools
             EditorGUILayout.Space(8);
             DrawMercenaries();
             EditorGUILayout.Space(8);
+            DrawQuests();
+            EditorGUILayout.Space(8);
+            DrawQuickBattle();
+            EditorGUILayout.Space(8);
+            DrawRivals();
+            EditorGUILayout.Space(8);
             DrawExpeditions();
             EditorGUILayout.EndScrollView();
         }
@@ -339,6 +345,212 @@ namespace GN3.EditorTools
             }
             var merc = MercenaryMarketGenerator.Generate(pool, 1, 1, 3, _rng)[0];
             if (party.TryAdd(merc)) ToastLog.Show($"[테스트] {merc.Name} 무료 고용 ({merc.Class.ClassName} {merc.Age}세)");
+        }
+
+        // ---------- 퀘스트 ----------
+
+        private int _questLevel = 1;
+
+        private void DrawQuests()
+        {
+            EditorGUILayout.LabelField("퀘스트 게시판", EditorStyles.boldLabel);
+            var board = QuestBoardListings.Current;
+            string boardInfo = board == null ? "아직 안 뽑음" : $"{board.Count}개 · 새 의뢰까지 {QuestBoardListings.DaysUntilRefresh}일";
+            EditorGUILayout.LabelField("현재", $"은월의 숲 열린 레벨 Lv{ForestProgress.UnlockedLevel} · 게시판 {boardInfo}");
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("열린 레벨", GUILayout.Width(80));
+                using (new EditorGUI.DisabledScope(ForestProgress.UnlockedLevel <= 1))
+                    if (GUILayout.Button("Lv −")) SetForestLevel(ForestProgress.UnlockedLevel - 1);
+                using (new EditorGUI.DisabledScope(ForestProgress.UnlockedLevel >= ForestProgress.MaxLevel))
+                    if (GUILayout.Button("Lv +")) SetForestLevel(ForestProgress.UnlockedLevel + 1);
+            }
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                _questLevel = EditorGUILayout.IntSlider("추가할 레벨", _questLevel, 1, ForestProgress.MaxLevel);
+                if (GUILayout.Button("이 레벨 퀘스트 추가", GUILayout.Width(140))) AddQuest(_questLevel);
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("Lv1~5 하나씩 추가"))
+                    for (int lv = ForestProgress.MaxLevel; lv >= 1; lv--) AddQuest(lv); // 맨 위에 붙으니 거꾸로 넣어 Lv1이 맨 위
+                if (GUILayout.Button("앤트킹(Lv5) 추가")) AddQuest(ForestProgress.MaxLevel);
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("게시판 새로 뽑기"))
+                {
+                    QuestBoardListings.DebugExpire();
+                    RedrawQuestBoard();
+                    ToastLog.Show("[테스트] 퀘스트 게시판 새로 뽑음");
+                }
+                if (GUILayout.Button("용병시장 새로 뽑기"))
+                {
+                    MarketListings.DebugExpire();
+                    Object.FindFirstObjectByType<MercenaryMarketUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
+                    ToastLog.Show("[테스트] 용병시장 새로 뽑음");
+                }
+            }
+
+            if (board != null)
+                foreach (var quest in board)
+                {
+                    string need = quest.RequiredDispatchSize > 0
+                        ? $"정확히 {quest.RequiredDispatchSize}명" + (quest.SquadCount > 1 ? " (두 분대)" : "")
+                        : $"최대 {quest.MaxDispatchSize}명";
+                    EditorGUILayout.LabelField($"  Lv{quest.Difficulty} [{GradeTable.Label(QuestDifficulty.Grade(quest))}] {quest.Title}  ·  {quest.WaveCount}라운드 · {need}");
+                }
+        }
+
+        private void AddQuest(int level)
+        {
+            var quest = QuestGenerator.Generate(RegionInfo.QuestRegion, level, 2, 5, _rng);
+            QuestBoardListings.DebugAdd(quest);
+            RedrawQuestBoard();
+            ToastLog.Show($"[테스트] Lv{level} {quest.Title} 퀘스트 추가");
+        }
+
+        /// <summary>열린 레벨을 바로 바꾼다(그 레벨 도전 퀘스트를 게시판이 맨 위에 더한다 — QuestBoardUI.OnLevelUnlocked).</summary>
+        private static void SetForestLevel(int level)
+        {
+            ForestProgress.Restore(level);
+            ToastLog.Show($"[테스트] 은월의 숲 Lv{ForestProgress.UnlockedLevel}까지 열림");
+        }
+
+        /// <summary>게시판이 비활성이어도 다시 그린다(아직 한 번도 안 열려 Awake 전이면 열 때 그린다).</summary>
+        private static void RedrawQuestBoard() =>
+            Object.FindFirstObjectByType<QuestBoardUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
+
+        // ---------- 근처 길드 ----------
+
+        private void DrawRivals()
+        {
+            EditorGUILayout.LabelField("근처 길드", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("순위", $"우리 길드 {RivalGuilds.OurPlace}위 · 자유 계약 {RivalGuilds.FreeAgents.Count}명 · 대여 {Loans.All.Count}건");
+            foreach (var g in RivalGuilds.All)
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField($"{g.Name} ({g.Info.Label})", GUILayout.Width(150));
+                    EditorGUILayout.LabelField($"명성 {g.Reputation} · 관계 {g.Relation} {RivalGuilds.RelationLabel(g.Relation)} · 용병 {g.Roster.Count} · {g.Gold}G", GUILayout.MinWidth(200));
+                    if (GUILayout.Button("관계−20", GUILayout.Width(64))) RivalGuilds.DebugAddRelation(g, -20);
+                    if (GUILayout.Button("관계+20", GUILayout.Width(64))) RivalGuilds.DebugAddRelation(g, 20);
+                    if (GUILayout.Button("명성+50", GUILayout.Width(64))) RivalGuilds.DebugAddReputation(g, 50);
+                    if (GUILayout.Button("시장 고용", GUILayout.Width(70))) RivalGuilds.DebugHire(g);
+                }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("1일 시뮬레이션")) RivalGuilds.DebugSimulate(1);
+                if (GUILayout.Button("7일 시뮬레이션")) RivalGuilds.DebugSimulate(7);
+                if (GUILayout.Button("30일 시뮬레이션")) RivalGuilds.DebugSimulate(30);
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                var board = QuestBoardListings.Current;
+                var takeable = board?.FirstOrDefault(q => !q.IsChallenge);
+                using (new EditorGUI.DisabledScope(takeable == null))
+                    if (GUILayout.Button("의뢰 하나 가로채기"))
+                    {
+                        var g = RivalGuilds.All[Random.Range(0, RivalGuilds.All.Count)];
+                        RivalGuilds.TakeQuest(g, takeable, GameClock.CurrentDay);
+                    }
+                using (new EditorGUI.DisabledScope(board == null))
+                {
+                    if (GUILayout.Button("내일 노릴 의뢰 정하기")) { RivalGuilds.PickTarget(); RedrawQuestBoard(); }
+                    if (GUILayout.Button("연합 의뢰 만들기"))
+                    {
+                        RivalDeals.MakeJointQuests(board, force: true);
+                        if (!board.Any(q => q.IsJoint)) Debug.Log("[Debug] 연합 의뢰를 못 만듦: Lv3 이상 의뢰와 우호(관계 15+) 길드가 필요");
+                        QuestBoardListings.NotifyChanged();
+                        RedrawQuestBoard();
+                    }
+                }
+            }
+            if (GUILayout.Button("근처 길드 창 열기")) RivalGuildsPanel.ShowGlobal();
+
+            EditorGUILayout.Space(6);
+            EditorGUILayout.LabelField("선택 사건", EditorStyles.boldLabel);
+            var moving = ExpeditionLog.Instance.Active.FirstOrDefault(x => !x.IsReady && !x.AwaitingEvent);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                using (new EditorGUI.DisabledScope(moving == null))
+                    if (GUILayout.Button(moving != null ? $"원정 사건 ({moving.Quest.Title})" : "원정 사건 (이동 중인 파견대 없음)")) ChoiceEvents.TriggerTravel(moving);
+                if (GUILayout.Button("마을 사건")) ChoiceEvents.TriggerVillage();
+            }
+            EditorGUILayout.HelpBox("시뮬레이션은 날짜를 넘기지 않고 근처 길드의 하루만 돌린다(의뢰 정산·고용·가로채기 포함 — 우리 시장·게시판도 바뀐다).", MessageType.None);
+        }
+
+        // ---------- 몬스터 바로 전투 ----------
+
+        // (몬스터 이름, 계층: 0 약탈 세력 · 1 지형 동물 · 2 보스)
+        private static readonly (string Name, int Tier)[] QuickMonsters =
+        {
+            ("고블린", 0), ("고블린 늑대기수", 0), ("야생늑대", 1), ("독버섯", 1), ("앤트킹", 2),
+        };
+
+        private int _quickMonster;
+        private int _quickCount = 3;
+        private int _quickLevel = 1;
+        private int _quickMembers = 3;
+
+        /// <summary>
+        /// 퀘스트 수락·이동 없이 고른 몬스터와 바로 싸운다: 테스트 퀘스트(라운드 1개)를 만들어 마을 용병을 보내고 즉시 도착시킨 뒤
+        /// 직접 전투(BattleScene) 또는 자동 전투. 실제 전투 경로 그대로라 보상·전리품·도감·사망이 모두 반영된다.
+        /// </summary>
+        private void DrawQuickBattle()
+        {
+            EditorGUILayout.LabelField("몬스터 바로 전투", EditorStyles.boldLabel);
+            _quickMonster = GUILayout.Toolbar(_quickMonster, QuickMonsters.Select(m => m.Name).ToArray());
+            var (monster, tier) = QuickMonsters[_quickMonster];
+            bool boss = tier >= 2;
+
+            using (new EditorGUI.DisabledScope(boss))
+                _quickCount = EditorGUILayout.IntSlider("마릿수", boss ? 1 : _quickCount, 1, 6);
+            _quickLevel = EditorGUILayout.IntSlider("레벨(적 능력치)", _quickLevel, 1, ForestProgress.MaxLevel);
+            _quickMembers = EditorGUILayout.IntSlider("보낼 용병 수", _quickMembers, 1, 6);
+
+            var ready = AvailableMercs().Take(_quickMembers).ToList();
+            EditorGUILayout.LabelField("보낼 용병", ready.Count > 0 ? string.Join(", ", ready.Select(m => m.Name)) : "(마을에 출전할 수 있는 용병이 없습니다 — 위에서 무료 고용)");
+            if (monster == "고블린") EditorGUILayout.LabelField("", "직접 전투에선 고블린 3마리 이상이면 셋째마다 궁수로 나온다", EditorStyles.miniLabel);
+
+            using (new EditorGUI.DisabledScope(ready.Count == 0))
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Button("직접 전투")) StartQuickBattle(monster, tier, boss ? 1 : _quickCount, ready, direct: true);
+                if (GUILayout.Button("자동 전투")) StartQuickBattle(monster, tier, boss ? 1 : _quickCount, ready, direct: false);
+            }
+            EditorGUILayout.HelpBox("실제 전투라 보상·전리품·도감·명성·사망이 그대로 반영됩니다(필요하면 먼저 저장 백업). " +
+                                    "열린 최고 레벨로 이기면 다음 레벨이 열립니다.", MessageType.None);
+        }
+
+        /// <summary>파티 화면과 같은 기준으로 지금 마을에서 출전할 수 있는 용병(파견·훈련·입원·쉼터 아님, 지치거나 크게 앓지 않음).</summary>
+        private static IEnumerable<Mercenary> AvailableMercs() =>
+            PlayerParty.Instance.Members.Where(m => m.IsAlive
+                && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m) && !Hospital.IsAdmitted(m) && RestVenues.Find(m) == null
+                && !m.IsExhausted && !m.IsSeverelyAiling);
+
+        private void StartQuickBattle(string monster, int tier, int count, List<Mercenary> members, bool direct)
+        {
+            if (members.Count == 0) return;
+            string location = tier >= 2 ? "은월의 숲 깊은 곳" : "은월의 숲";
+            var waves = new List<QuestWave> { new QuestWave(monster, count, tier) };
+            var quest = new Quest($"[테스트] {monster} ×{count}", RegionInfo.QuestRegion, location, monster, count, _quickLevel, 1, waves);
+
+            // 두 분대 퀘스트(Lv5)면 번갈아 1·2분대, 분대마다 첫 사람이 분대장
+            List<int> squads = null;
+            Mercenary leader2 = null;
+            if (quest.SquadCount > 1 && members.Count > 1)
+            {
+                squads = members.Select((m, i) => i % 2).ToList();
+                leader2 = members[1];
+            }
+
+            var expedition = ExpeditionLog.Instance.Dispatch(quest, members, members[0], squads, leader2);
+            ExpeditionLog.Instance.DebugArriveNow(expedition);
+            ToastLog.Show($"[테스트] {monster} ×{count} (Lv{_quickLevel}) — {(direct ? "직접" : "자동")} 전투");
+            if (direct) MailActions.DirectFight(expedition);
+            else MailActions.AutoFight(expedition);
         }
 
         // ---------- 파견 ----------

@@ -845,7 +845,7 @@ namespace GN3.Battle
             name != null && name.Contains("늑대기수") ? MonsterKind.GoblinRider // 이름에 "늑대"도 있어 늑대보다 먼저
             : IsWolf(name) ? MonsterKind.Wolf
             : name != null && name.Contains("버섯") ? MonsterKind.Mushroom
-            : name != null && name.Contains("엔트") ? MonsterKind.Ent
+            : GN3.World.RegionInfo.IsEnt(name) ? MonsterKind.Ent // 앤트킹(예전 저장은 거목 엔트)
             : melee ? MonsterKind.Sword : MonsterKind.Archer;
 
         private const float GoblinSizeScale = 0.8f; // 고블린(검·궁수)은 용병보다 조금 작게 — 예전 크기는 커 보였다

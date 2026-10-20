@@ -17,7 +17,7 @@ namespace GN3.Economy
         public static IReadOnlyList<WeaponItem> Weapons => _weapons;
         public static IReadOnlyList<HealingItem> Items => _items;
         public static int Count => _weapons.Count + _items.Count;
-        public static int Capacity => Guild.Current.StorageSlots;
+        public static int Capacity => Guild.Current.StorageSlots + GuildFacilities.StorageBonus; // 시설 창고 단계마다 +5
         public static bool IsFull => Count >= Capacity;
 
         public static event Action OnChanged;

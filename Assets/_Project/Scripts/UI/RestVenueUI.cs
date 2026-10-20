@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.World;
@@ -74,7 +75,9 @@ namespace GN3.UI
             ShopListUI.BeginList(_panel);
 
             var guests = _venue.Guests;
-            CreateHeaderRow($"{_venue.Name} {guests.Count}/{_venue.Capacity} · {_venue.Summary}");
+            int facility = _venue == RestVenues.HotSpring ? GuildFacilities.Level(Facility.HotSpring) : 0; // 길드 시설(온천만)
+            CreateHeaderRow($"{_venue.Name} {guests.Count}/{_venue.Capacity} · {_venue.Summary}" +
+                            (facility > 0 ? $" · 시설 {facility}단계(피로 회복 ×{GuildFacilities.HotSpringReliefMultiplier:0.0#})" : ""));
             if (guests.Count == 0) ShopListUI.CreateEmptyRow(_panel, $"{_venue.Name}에 있는 용병이 없습니다.");
             var venue = _venue;
             foreach (var merc in guests)

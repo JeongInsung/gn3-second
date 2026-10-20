@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.World;
 using UnityEngine;
@@ -66,7 +67,9 @@ namespace GN3.UI
             ShopListUI.BeginList(_panel);
 
             var patients = Hospital.Patients;
-            CreateHeaderRow($"입원 중 {patients.Count}/{Hospital.Capacity} · 시간당 {Hospital.ProgressPerHour * 100f:0}% 회복 · 치료비 {Hospital.FeePerHour}G/시간");
+            int facility = GuildFacilities.Level(Facility.Hospital);
+            CreateHeaderRow($"입원 중 {patients.Count}/{Hospital.Capacity} · 시간당 {Hospital.ProgressPerHour * 100f:0.#}% 회복 · 치료비 {Hospital.FeePerHour}G/시간" +
+                            (facility > 0 ? $" · 시설 {facility}단계" : ""));
             if (patients.Count == 0) ShopListUI.CreateEmptyRow(_panel, "입원한 용병이 없습니다.");
             foreach (var merc in patients) CreateMercRow(merc, true);
 

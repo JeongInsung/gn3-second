@@ -10,7 +10,10 @@ namespace GN3.Combat
     {
         public Combatant Combatant { get; }
         public bool IsPlayerSide { get; }
+        /// <summary>자기 분대의 분대장(두 분대 전투면 둘). 지금 조종 중인 분대장은 FieldBattleSession.Leader.</summary>
         public bool IsLeader { get; }
+        /// <summary>분대(0=1분대, 1=2분대). 적과 한 분대 전투는 0.</summary>
+        public int Squad { get; internal set; }
         /// <summary>근접(전사·암살자·몬스터)은 붙어서, 원거리(궁수·마법사·힐러 등)는 떨어져서 때린다.</summary>
         public bool IsMelee { get; }
         public SkillBase Skill { get; }
@@ -121,7 +124,11 @@ namespace GN3.Combat
         public List<Combatant> EnemyTeam { get; private set; }
         /// <summary>지금까지 나온 모든 라운드의 적(결과용).</summary>
         public List<Combatant> AllEnemies { get; } = new List<Combatant>();
-        public FieldUnit Leader { get; }
+        /// <summary>지금 플레이어가 조종 중인 분대장. 두 분대 전투면 SwitchLeader(Tab)로 바꾸고, 쓰러지면 다른 분대장에게 넘어간다.</summary>
+        public FieldUnit Leader { get; private set; }
+        /// <summary>분대장들(분대 순서). 한 분대 전투면 하나.</summary>
+        public List<FieldUnit> Leaders { get; } = new List<FieldUnit>();
+        public bool HasTwoSquads => Leaders.Count > 1;
         public List<BattleEvent> Log { get; } = new List<BattleEvent>();
         public int ActionCount { get; private set; }
         public float Elapsed { get; private set; }
@@ -157,24 +164,37 @@ namespace GN3.Combat
         /// <param name="playerMelee">아군 각자가 근접인지(playerTeam과 같은 순서).</param>
         /// <param name="playerSkills">아군 각자의 스킬(없으면 null).</param>
         /// <param name="enemyWaves">라운드별 적(순서대로). 체력은 라운드 사이에 그대로 이어진다.</param>
+        /// <param name="squads">아군 각자의 분대(0·1, playerTeam과 같은 순서). 없으면 전원 1분대.</param>
+        /// <param name="leaderIndex2">2분대 분대장 인덱스(두 분대 전투만, 없으면 -1).</param>
         public FieldBattleSession(List<Combatant> playerTeam, IList<bool> playerMelee, IList<SkillBase> playerSkills, int leaderIndex,
-            IList<List<Combatant>> enemyWaves, Random rng)
+            IList<List<Combatant>> enemyWaves, Random rng, IList<int> squads = null, int leaderIndex2 = -1)
         {
             PlayerTeam = playerTeam;
             _waves = enemyWaves.Select(w => w.Select(Strengthen).ToList()).ToList();
             _rng = rng;
 
             // 아군: 근접은 앞줄(오른쪽), 원거리는 뒷줄. 줄마다 위아래로 고르게 벌린다.
-            var front = Enumerable.Range(0, playerTeam.Count).Where(i => playerMelee[i]).ToList();
-            var back = Enumerable.Range(0, playerTeam.Count).Where(i => !playerMelee[i]).ToList();
+            // 두 분대면 1분대는 위쪽 절반, 2분대는 아래쪽 절반에 따로 선다.
+            int SquadAt(int i) => squads != null && i < squads.Count ? squads[i] : 0;
+            bool twoSquads = leaderIndex2 >= 0 && Enumerable.Range(0, playerTeam.Count).Any(i => SquadAt(i) == 1);
             var spawn = new Vector2[playerTeam.Count];
-            PlaceColumn(front, 400f, spawn);
-            PlaceColumn(back, 230f, spawn);
+            for (int s = 0; s < (twoSquads ? 2 : 1); s++)
+            {
+                var members = Enumerable.Range(0, playerTeam.Count).Where(i => !twoSquads || SquadAt(i) == s).ToList();
+                float top = twoSquads ? (s == 0 ? 70f : FieldHeight / 2f + 30f) : 70f;
+                float bottom = twoSquads ? (s == 0 ? FieldHeight / 2f - 30f : FieldHeight - 70f) : FieldHeight - 70f;
+                PlaceColumn(members.Where(i => playerMelee[i]).ToList(), 400f, spawn, top, bottom);
+                PlaceColumn(members.Where(i => !playerMelee[i]).ToList(), 230f, spawn, top, bottom);
+            }
             for (int i = 0; i < playerTeam.Count; i++)
             {
-                var unit = CreateUnit(playerTeam[i], true, i == leaderIndex, playerMelee[i], playerSkills[i], spawn[i]);
-                if (unit.IsLeader) Leader = unit;
+                bool leader = i == leaderIndex || (twoSquads && i == leaderIndex2);
+                var unit = CreateUnit(playerTeam[i], true, leader, playerMelee[i], playerSkills[i], spawn[i]);
+                unit.Squad = twoSquads ? SquadAt(i) : 0;
+                if (leader) Leaders.Add(unit);
             }
+            Leaders.Sort((a, b) => a.Squad.CompareTo(b.Squad));
+            Leader = Leaders.FirstOrDefault();
 
             SpawnEnemies(0);
             CombatResolver.RaiseBattleStart(PlayerTeam, EnemyTeam);
@@ -218,7 +238,7 @@ namespace GN3.Combat
         private static bool IsArcherSlot(int index, int count) => count >= 2 && index % 3 == 2;
 
         /// <summary>활을 쓰지 않는 짐승·괴물 적(이름에 늑대·울프·버섯·엔트). 전투 그림도 그 종류로 나온다(BattleMonsterSprite.KindFor).</summary>
-        private static bool IsBeast(string name) => name != null && (name.Contains("늑대") || name.Contains("울프") || name.Contains("버섯") || name.Contains("엔트"));
+        private static bool IsBeast(string name) => name != null && (name.Contains("늑대") || name.Contains("울프") || name.Contains("버섯") || GN3.World.RegionInfo.IsEnt(name));
 
         /// <summary>멀리서 포자를 쏘는 적(독버섯).</summary>
         private static bool IsSporeShooter(string name) => name != null && name.Contains("버섯");
@@ -227,8 +247,8 @@ namespace GN3.Combat
         private static bool IsRider(string name) => name != null && name.Contains("늑대기수");
         private const float RiderFieldSpeedMultiplier = 1.6f; // 이동 약 160 → 260(암살자 212보다 빠르다)
 
-        /// <summary>제자리에 뿌리박은 보스(거목 엔트): 걸어가지 않고 밀리지도 않는다. 손이 닿지 않는 적은 뿌리 내려찍기로 친다.</summary>
-        private static bool IsRooted(string name) => name != null && name.Contains("엔트");
+        /// <summary>제자리에 뿌리박은 보스(앤트킹·예전 거목 엔트): 걸어가지 않고 밀리지도 않는다. 손이 닿지 않는 적은 뿌리 내려찍기로 친다.</summary>
+        private static bool IsRooted(string name) => GN3.World.RegionInfo.IsEnt(name);
 
         /// <summary>거목 엔트 몸 반지름: 그린 그림의 뿌리(발밑) 폭 약 260의 절반 — 근접 용병이 다리 안이 아니라 몸 가장자리에 선다
         /// (그림 크기 BattleMonsterSprite Ent SizeScale과 같은 비율로 맞춘다. 2026-10-19 그림 1.4배 → 90에서 126).</summary>
@@ -284,18 +304,15 @@ namespace GN3.Combat
             return new Combatant(e.Name, stats, e.Passives);
         }
 
-        private void PlaceColumn(List<int> indices, float x, Vector2[] spawn)
+        private void PlaceColumn(List<int> indices, float x, Vector2[] spawn, float top, float bottom)
         {
             for (int k = 0; k < indices.Count; k++)
-                spawn[indices[k]] = new Vector2(x, Spread(k, indices.Count));
+                spawn[indices[k]] = new Vector2(x, Spread(k, indices.Count, top, bottom));
         }
 
-        /// <summary>count명을 필드 세로로 고르게 벌린 k번째 y.</summary>
-        private static float Spread(int k, int count)
-        {
-            float usable = FieldHeight - 2f * 70f;
-            return count <= 1 ? FieldHeight / 2f : 70f + usable * k / (count - 1);
-        }
+        /// <summary>count명을 top~bottom 사이에 고르게 벌린 k번째 y(한 명이면 가운데).</summary>
+        private static float Spread(int k, int count, float top = 70f, float bottom = FieldHeight - 70f) =>
+            count <= 1 ? (top + bottom) / 2f : top + (bottom - top) * k / (count - 1);
 
         private FieldUnit CreateUnit(Combatant c, bool playerSide, bool leader, bool melee, SkillBase skill, Vector2 position)
         {
@@ -325,6 +342,21 @@ namespace GN3.Combat
 
         // 플레이어가 직접 찍은 공격 대상(쫓아간다). 명령 없이 알아서 고른 대상은 사거리를 벗어나면 놓는다.
         private FieldUnit _orderedTarget;
+
+        /// <summary>두 분대 전투: 조종을 살아 있는 다른 분대장에게 넘긴다(넘겨준 분대장은 이제 AI). 바뀌었으면 true.</summary>
+        public bool SwitchLeader()
+        {
+            var next = Leaders.FirstOrDefault(l => l != Leader && l.IsAlive);
+            if (next == null || IsOver) return false;
+            if (Leader != null)
+            {
+                Leader.MoveGoal = null;
+                Leader.SkillTarget = null;
+            }
+            _orderedTarget = null;
+            Leader = next;
+            return true;
+        }
 
         /// <summary>필드의 한 지점으로 이동(공격·스킬 예약은 취소, 도착하면 사거리 안의 적을 알아서 때린다).</summary>
         public void OrderMove(Vector2 point)
@@ -388,6 +420,7 @@ namespace GN3.Combat
             var events = new List<BattleEvent>();
             if (!HasStarted || IsOver) return events;
             Elapsed += dt;
+            if (Leader != null && !Leader.IsAlive) SwitchLeader(); // 조종 중인 분대장이 쓰러지면 다른 분대장에게
 
             foreach (var u in Units)
             {
@@ -417,7 +450,7 @@ namespace GN3.Combat
                     StartRoar(u); // 거목 엔트: 때가 되면 다른 행동 대신 기절 포효
                     continue;
                 }
-                if (u.IsLeader) ThinkLeader(u);
+                if (u == Leader) ThinkLeader(u); // 조종하지 않는 다른 분대장은 아군 AI
                 else if (u.IsPlayerSide) ThinkAlly(u);
                 else ThinkEnemy(u);
                 Act(u, dt, events);

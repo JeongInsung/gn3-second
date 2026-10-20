@@ -22,6 +22,7 @@ namespace GN3.Mercenaries
         RivalNoted,    // 제의 이야기를 그냥 들었다
         RivalLeft,     // 기한 안에 합의하지 못해 다른 길드로 갔다(결렬)
         TalkLiked, TalkFlat, TalkDisliked,
+        PraiseBackfired, // 실력 칭찬이 아부로 들통나 기분이 상했다
         MoodGone,      // 기분이 바닥나 판을 접었다(결렬)
     }
 
@@ -176,6 +177,12 @@ namespace GN3.Mercenaries
         public NegotiationEvent Talk(TalkTopic topic)
         {
             _talked.Add(topic);
+            if (topic == TalkTopic.Praise && Roll() < PraiseFailChance)
+            {
+                var (_, min, max) = ContractTuning.PraiseFail(Demand.Personality);
+                AddMood(-(min + (int)(Roll() * (max - min + 1))));
+                return Mood <= 0 ? Break(NegotiationEvent.MoodGone) : NegotiationEvent.PraiseBackfired;
+            }
             var (mood, softens) = TalkEffect(topic);
             AddMood(mood);
             if (softens) Floor = Mathf.Max(0f, Floor - ContractTuning.TalkFloorDrop);
@@ -217,6 +224,10 @@ namespace GN3.Mercenaries
 
         private float MoodFactor => 0.5f + Mood / 100f;
         private float MoodBonus => (Mood - 50) / 200f;
+
+        /// <summary>성격마다 아부를 알아채는 정도가 다르다(ContractTuning.PraiseFail). 기분이 나쁠수록 잘 들통난다.</summary>
+        private float PraiseFailChance => Mathf.Clamp(ContractTuning.PraiseFail(Demand.Personality).chance - MoodBonus,
+            ContractTuning.PraiseFailMin, ContractTuning.PraiseFailMax);
 
         /// <summary>계산형은 맞불: 이쪽이 올린 만큼만 내려온다. 나머지는 성향 고정 비율.</summary>
         private float ConcessionRate(float s)

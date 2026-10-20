@@ -17,7 +17,11 @@ namespace GN3.Mercenaries
     /// </summary>
     public static class TrainingHall
     {
-        public const int Capacity = 3;
+        public const int BaseCapacity = 3;
+        /// <summary>정원(길드 시설 훈련소 단계마다 +1 — GuildFacilities).</summary>
+        public static int Capacity => BaseCapacity + GN3.Economy.GuildFacilities.TrainingCapacityBonus;
+        /// <summary>시간당 훈련 성장(시설 단계마다 +20%).</summary>
+        private static float GrowthPerHour => GrowthTuning.TrainingGrowthPerHour * GN3.Economy.GuildFacilities.TrainingGrowthMultiplier;
         public const float MinSessionHours = 1f;
         public const float MaxSessionHours = 3f;
 
@@ -107,7 +111,7 @@ namespace GN3.Mercenaries
         public static float HoursToNextGrowth(Mercenary merc)
         {
             if (!merc.CanGrow) return 0f;
-            return Mathf.Max(0f, (1f - merc.GrowthProgress) / (GrowthTuning.TrainingGrowthPerHour * merc.GrowthRate));
+            return Mathf.Max(0f, (1f - merc.GrowthProgress) / (GrowthPerHour * merc.GrowthRate));
         }
 
         /// <summary>저장 파일에서 불러올 때(파티 복원 뒤). 남은 시간은 저장하지 않으므로 사람마다 1~3시간을 새로 정한다.</summary>
@@ -158,7 +162,7 @@ namespace GN3.Mercenaries
                 }
                 if (trained <= 0f) continue;
 
-                var gains = merc.AddGrowth(trained * GrowthTuning.TrainingGrowthPerHour);
+                var gains = merc.AddGrowth(trained * GrowthPerHour);
                 if (gains.Count == 0) continue;
                 if (!_sessionGains.TryGetValue(merc.Id, out var session)) _sessionGains[merc.Id] = session = new List<string>();
                 session.AddRange(gains);

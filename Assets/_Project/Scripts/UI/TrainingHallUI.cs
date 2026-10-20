@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using GN3.Battle;
+using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.World;
@@ -87,7 +88,9 @@ namespace GN3.UI
             ShopListUI.BeginList(_panel);
 
             var trainees = TrainingHall.Trainees;
-            CreateHeaderRow($"훈련 중 {trainees.Count}/{TrainingHall.Capacity} · {1f / GrowthTuning.TrainingGrowthPerHour:0}시간마다 성장(어릴수록 빠름)");
+            int facility = GuildFacilities.Level(Facility.Training);
+            CreateHeaderRow($"훈련 중 {trainees.Count}/{TrainingHall.Capacity} · {1f / (GrowthTuning.TrainingGrowthPerHour * GuildFacilities.TrainingGrowthMultiplier):0.#}시간마다 성장(어릴수록 빠름)" +
+                            (facility > 0 ? $" · 시설 {facility}단계" : ""));
             if (trainees.Count == 0) ShopListUI.CreateEmptyRow(_panel, "훈련 중인 용병이 없습니다.");
             foreach (var merc in trainees)
             {
