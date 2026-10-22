@@ -23,7 +23,24 @@ namespace GN3.UI
         private readonly List<(LayoutElement layout, Text text)> _wrappedRows = new List<(LayoutElement, Text)>();
         private const int MemberRowPadding = 8;
         private readonly HashSet<string> _selectedForDispatch = new HashSet<string>();
-        private string _leaderId; // 분대장(직접 진행 전투에서 플레이어가 조종). 처음 고른 사람이 맡고 '분대장' 버튼으로 바꾼다
+        // 분대별 분대장(직접 진행 전투에서 플레이어가 조종). 분대에 처음 들어간 사람이 맡고 '분대장' 버튼으로 바꾼다.
+        // 두 분대 퀘스트(Lv5 앤트킹)만 2분대를 쓴다.
+        private readonly string[] _leaderIds = new string[2];
+        private readonly Dictionary<string, int> _squadOf = new Dictionary<string, int>(); // 고른 용병 id → 분대(0·1)
+        private int SquadCount => _pendingQuest?.SquadCount ?? 1;
+        private int SquadMembers(int squad) => _selectedForDispatch.Count(id => _squadOf.TryGetValue(id, out int s) && s == squad);
+
+        /// <summary>출발할 수 있는 편성인지. 안 되면 이유(버튼·토스트에 쓴다).</summary>
+        private string DispatchBlockReason()
+        {
+            if (_pendingQuest == null || _selectedForDispatch.Count == 0) return "용병을 고르세요";
+            int need = _pendingQuest.RequiredDispatchSize;
+            if (need > 0 && _selectedForDispatch.Count != need) return $"정확히 {need}명 필요";
+            if (SquadCount > 1)
+                for (int s = 0; s < SquadCount; s++)
+                    if (SquadMembers(s) != _pendingQuest.SquadSize) return $"분대마다 {_pendingQuest.SquadSize}명 필요";
+            return null;
+        }
         private Font _font;
         private Transform _panelTransform;
         private GameObject _dispatchButtonGO;
@@ -92,10 +109,22 @@ namespace GN3.UI
         {
             _pendingQuest = quest;
             _selectedForDispatch.Clear();
-            _leaderId = null;
+            _squadOf.Clear();
+            _leaderIds[0] = _leaderIds[1] = null;
+            // 연합 의뢰: 그 길드 용병이 손님으로 합류해 미리 뽑혀 있다(두 분대면 2분대). 빼거나 다른 의뢰에 보낼 수 없다.
+            if (quest != null && quest.IsJoint)
+                foreach (var guest in Loans.JoinQuest(quest))
+                {
+                    int squad = SquadCount > 1 ? 1 : 0;
+                    _selectedForDispatch.Add(guest.Id);
+                    _squadOf[guest.Id] = squad;
+                    if (_leaderIds[squad] == null) _leaderIds[squad] = guest.Id;
+                }
             RenderResultText(string.Empty);
             RefreshList();
         }
+
+        private bool IsLockedGuest(Mercenary merc) => _pendingQuest != null && Loans.GuestLoan(merc) is Loan loan && loan.Joint && loan.QuestId == _pendingQuest.Id;
 
         private void RefreshList()
         {
@@ -117,10 +146,24 @@ namespace GN3.UI
                 var selected = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id));
                 int teamPower = QuestDifficulty.TeamPower(selected);
                 string power = $"{QuestDifficulty.DescribeTeam(_pendingQuest, teamPower)} · {QuestDifficulty.DurationText(_pendingQuest, teamPower)}";
-                var leader = selected.FirstOrDefault(m => m.Id == _leaderId);
-                if (leader != null) power += $" · 분대장 {leader.Name}";
+                if (SquadCount > 1)
+                {
+                    for (int s = 0; s < SquadCount; s++)
+                    {
+                        var squadLeader = selected.FirstOrDefault(m => m.Id == _leaderIds[s]);
+                        power += $" · {s + 1}분대 {SquadMembers(s)}/{_pendingQuest.SquadSize}" + (squadLeader != null ? $" ★{squadLeader.Name}" : "");
+                    }
+                }
+                else
+                {
+                    var leader = selected.FirstOrDefault(m => m.Id == _leaderIds[0]);
+                    if (leader != null) power += $" · 분대장 {leader.Name}";
+                }
+                string size = _pendingQuest.RequiredDispatchSize > 0
+                    ? $"{_selectedForDispatch.Count}/{_pendingQuest.RequiredDispatchSize}명 — 정확히 {_pendingQuest.RequiredDispatchSize}명" + (SquadCount > 1 ? $", {_pendingQuest.SquadSize}명씩 두 분대" : "")
+                    : $"{_selectedForDispatch.Count}/{_pendingQuest.MaxDispatchSize}명";
                 // 한 줄에 다 넣으면 창 폭을 넘어 난이도·소요가 잘린다 → 두 줄
-                _rows.Add(CreateSectionHeader($"파견 편성 — {QuestDifficulty.RichTitle(_pendingQuest)} ({_selectedForDispatch.Count}/{_pendingQuest.MaxDispatchSize}명)\n{power}", 2));
+                _rows.Add(CreateSectionHeader($"파견 편성 — {QuestDifficulty.RichTitle(_pendingQuest)} ({size})\n{power}", 2));
             }
 
             _rows.Add(CreateSectionHeader("보유 용병"));
@@ -186,11 +229,15 @@ namespace GN3.UI
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
-            var leaderMerc = expedition.Leader;
-            string members = string.Join(", ", expedition.Members.Select(m =>
-                !m.IsAlive ? $"{m.Name}(사망)" : m == leaderMerc ? $"★{m.Name}" : m.Name));
+            // ★ = 분대장. 두 분대 퀘스트는 "1분대: … / 2분대: …"
+            string Names(IEnumerable<Mercenary> list) => string.Join(", ", list.Select(m =>
+                !m.IsAlive ? $"{m.Name}(사망)" : m == expedition.LeaderOf(expedition.SquadOf(m)) ? $"★{m.Name}" : m.Name));
+            string members = quest.SquadCount > 1
+                ? string.Join(" / ", Enumerable.Range(0, quest.SquadCount).Select(s => $"{s + 1}분대: {Names(expedition.Members.Where(m => expedition.SquadOf(m) == s))}"))
+                : Names(expedition.Members);
             string status = expedition.IsReturning ? $"귀환 중 (남은 {GameClock.FormatDuration(expedition.ReturnHoursLeft)})"
                 : expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {GameClock.FormatDuration(quest.RemainingHours)})";
+            if (expedition.AwaitingEvent) status = "<color=#f0a54a>사건 선택 대기</color> · " + status; // 우편함·알림창에서 고를 때까지 멈춤
             string info = $"{QuestDifficulty.RichTitle(quest)}    {status}    파견: {members}    {QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(expedition.Members))}";
             var infoText = CreateText(row.transform, info, 15, TextAnchor.MiddleLeft);
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
@@ -281,7 +328,8 @@ namespace GN3.UI
             var stats = merc.CurrentStats;
             Color textColor = onExpedition ? new Color(1f, 1f, 1f, 0.45f) : Color.white;
 
-            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}", 17, TextAnchor.MiddleLeft);
+            string guestTag = Loans.GuestTag(merc) is string tag ? $" <size=13><color=#6ab8ff>({tag})</color></size>" : ""; // 근처 길드에서 빌려 온 손님
+            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}{guestTag}", 17, TextAnchor.MiddleLeft);
             nameText.fontStyle = FontStyle.Bold;
             nameText.color = textColor;
             nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -328,16 +376,29 @@ namespace GN3.UI
                 bool atCap = !selected && _selectedForDispatch.Count >= _pendingQuest.MaxDispatchSize;
                 CreateActionButton(row.transform, selected ? "선택됨" : "선택",
                     selected ? new Color(0.3f, 0.55f, 0.35f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
-                    () => ToggleSelection(merc), interactable: !atCap && (selected || (!merc.IsExhausted && !merc.IsSeverelyAiling)));
+                    () => ToggleSelection(merc), interactable: !IsLockedGuest(merc) && Loans.CanDispatchFor(merc, _pendingQuest)
+                        && !atCap && (selected || (!merc.IsExhausted && !merc.IsSeverelyAiling)));
             }
 
-            // 파견에 고른 용병은 해고 대신 분대장 버튼(직접 진행 전투에서 조종할 사람)
+            // 파견에 고른 용병은 해고 대신 분대장 버튼(직접 진행 전투에서 조종할 사람). 두 분대 퀘스트는 분대 버튼도(누르면 다른 분대로).
             if (_pendingQuest != null && selected)
             {
-                bool isLeader = merc.Id == _leaderId;
+                int squad = _squadOf.TryGetValue(merc.Id, out int sq) ? sq : 0;
+                if (SquadCount > 1)
+                {
+                    int other = 1 - squad;
+                    CreateActionButton(row.transform, $"{squad + 1}분대",
+                        squad == 0 ? new Color(0.25f, 0.4f, 0.6f, 1f) : new Color(0.55f, 0.35f, 0.6f, 1f),
+                        () => MoveSquad(merc, other), interactable: SquadMembers(other) < _pendingQuest.SquadSize);
+                }
+                bool isLeader = merc.Id == _leaderIds[squad];
                 CreateActionButton(row.transform, isLeader ? "★분대장" : "분대장",
                     isLeader ? new Color(0.62f, 0.5f, 0.2f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
-                    () => { _leaderId = merc.Id; RefreshList(); });
+                    () => { _leaderIds[squad] = merc.Id; RefreshList(); });
+            }
+            else if (!onExpedition && Loans.IsGuest(merc))
+            {
+                CreateActionButton(row.transform, "손님", new Color(0.25f, 0.4f, 0.6f, 1f), () => { }, interactable: false); // 계약·해고 없음
             }
             else if (!onExpedition)
             {
@@ -374,24 +435,46 @@ namespace GN3.UI
             }
             PlayerParty.Instance.Remove(merc);
             Contracts.Remove(merc);
+            RivalGuilds.OnPlayerReleased(merc); // 며칠 안에 근처 길드가 데려갈 수 있다
             ToastLog.Show(release > 0 ? $"{merc.Name} 해고 (위약금 -{release}G)" : $"{merc.Name} 해고", false);
         }
 
         private void ToggleSelection(Mercenary merc)
         {
+            if (IsLockedGuest(merc)) return; // 연합 손님은 빠지지 않는다
             if (_selectedForDispatch.Contains(merc.Id))
             {
+                int squad = _squadOf.TryGetValue(merc.Id, out int s) ? s : 0;
                 _selectedForDispatch.Remove(merc.Id);
-                if (_leaderId == merc.Id) // 분대장을 빼면 남은 사람 중 먼저 줄에 있는 사람이 이어받는다
-                    _leaderId = PlayerParty.Instance.Members.FirstOrDefault(m => _selectedForDispatch.Contains(m.Id))?.Id;
+                _squadOf.Remove(merc.Id);
+                if (_leaderIds[squad] == merc.Id) PassLeader(squad);
             }
             else
             {
                 if (_pendingQuest != null && _selectedForDispatch.Count >= _pendingQuest.MaxDispatchSize)
                     return;
+                // 두 분대면 사람이 적은 분대(같으면 1분대)에 넣는다
+                int squad = SquadCount > 1 && SquadMembers(1) < SquadMembers(0) ? 1 : 0;
                 _selectedForDispatch.Add(merc.Id);
-                if (_leaderId == null) _leaderId = merc.Id;
+                _squadOf[merc.Id] = squad;
+                if (_leaderIds[squad] == null) _leaderIds[squad] = merc.Id;
             }
+            RefreshList();
+        }
+
+        /// <summary>분대장이 빠지면 그 분대에 남은 사람 중 먼저 줄에 있는 사람이 이어받는다.</summary>
+        private void PassLeader(int squad) =>
+            _leaderIds[squad] = PlayerParty.Instance.Members
+                .FirstOrDefault(m => _selectedForDispatch.Contains(m.Id) && _squadOf.TryGetValue(m.Id, out int s) && s == squad)?.Id;
+
+        /// <summary>두 분대 퀘스트: 고른 용병을 다른 분대로 옮긴다(그 분대에 자리가 있을 때만).</summary>
+        private void MoveSquad(Mercenary merc, int to)
+        {
+            if (_pendingQuest == null || SquadMembers(to) >= _pendingQuest.SquadSize) return;
+            int from = _squadOf.TryGetValue(merc.Id, out int s) ? s : 0;
+            _squadOf[merc.Id] = to;
+            if (_leaderIds[from] == merc.Id) PassLeader(from);
+            if (_leaderIds[to] == null) _leaderIds[to] = merc.Id;
             RefreshList();
         }
 
@@ -413,11 +496,12 @@ namespace GN3.UI
             // 밤(22시~5시)에는 출전할 수 없다. 편성(용병 고르기)은 그대로 된다.
             bool night = GameClock.IsNight;
             _lastNight = night;
-            _dispatchButtonGO.GetComponent<Button>().interactable = _selectedForDispatch.Count > 0 && !night;
+            string blocked = _selectedForDispatch.Count > 0 ? DispatchBlockReason() : null; // 인원이 안 맞으면 버튼에 이유
+            _dispatchButtonGO.GetComponent<Button>().interactable = _selectedForDispatch.Count > 0 && !night && blocked == null;
             if (_dispatchButtonText != null)
             {
-                _dispatchButtonText.text = night ? "밤에는 출전 불가\n(오전 5시부터)" : "파견 시작";
-                _dispatchButtonText.fontSize = night ? 13 : 18;
+                _dispatchButtonText.text = night ? "밤에는 출전 불가\n(오전 5시부터)" : blocked ?? "파견 시작";
+                _dispatchButtonText.fontSize = night || blocked != null ? 13 : 18;
             }
         }
 
@@ -457,6 +541,13 @@ namespace GN3.UI
                 return;
             }
 
+            string blocked = DispatchBlockReason();
+            if (blocked != null)
+            {
+                ToastLog.Show($"{_pendingQuest.Title}: {blocked}");
+                return;
+            }
+
             var members = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id)).ToList();
             var exhausted = members.Where(m => m.IsExhausted).Select(m => m.Name).ToList();
             if (exhausted.Count > 0)
@@ -470,11 +561,14 @@ namespace GN3.UI
                 ToastLog.Show($"크게 다치거나 앓는 용병은 출전할 수 없습니다: {string.Join(", ", ailing)} (병원에서 치료)");
                 return;
             }
-            ExpeditionLog.Instance.Dispatch(_pendingQuest, members, members.FirstOrDefault(m => m.Id == _leaderId));
+            var squads = SquadCount > 1 ? members.Select(m => _squadOf.TryGetValue(m.Id, out int s) ? s : 0).ToList() : null;
+            ExpeditionLog.Instance.Dispatch(_pendingQuest, members, members.FirstOrDefault(m => m.Id == _leaderIds[0]),
+                squads, SquadCount > 1 ? members.FirstOrDefault(m => m.Id == _leaderIds[1]) : null);
 
             _pendingQuest = null;
             _selectedForDispatch.Clear();
-            _leaderId = null;
+            _squadOf.Clear();
+            _leaderIds[0] = _leaderIds[1] = null;
             RefreshList();
         }
 

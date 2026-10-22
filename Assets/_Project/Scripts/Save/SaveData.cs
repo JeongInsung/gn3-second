@@ -14,7 +14,9 @@ namespace GN3.Save
         // 6: 힐러 신성력(MercenarySave.growthHoly·monthHoly). 5 이하 힐러는 다른 네 능력치 성장 평균만큼 신성력 성장을 준다.
         //    마법사 growthAttack·monthAttack은 이제 마력(값은 그대로).
         // 7: 용병 계약(contracts: 주급·만료일·성공 보너스). 6 이하는 불러올 때 기본 계약(예전 주급 공식, 60일)을 받는다.
-        public const int CurrentVersion = 7;
+        // 8: 근처 길드(rivals 등). 7 이하는 불러올 때 길드를 새로 만든다.
+        // 9: 길드 시설 단계(facilities, 지금은 꺼 둠 — GuildFacilities.Enabled). 예전 저장은 0단계.
+        public const int CurrentVersion = 9;
 
         public int version = CurrentVersion;
         public string savedAt;
@@ -36,8 +38,70 @@ namespace GN3.Save
         public List<string> storageItems = new List<string>();   // 길드 창고 약 이름
         public List<string> leaving = new List<string>(); // 파견 중 길드를 떠나기로 결심한 용병 "id|이유"(예전 저장엔 없어 빈 목록)
         public List<AffinitySave> affinities = new List<AffinitySave>(); // 용병 쌍 친밀도(예전 저장엔 없어 성격 궁합 기본값으로 시작)
-        public List<QuestClearSave> questClears = new List<QuestClearSave>(); // 지역·계층별 퀘스트 클리어 횟수(예전 저장엔 없어 0부터 시작)
+        public List<QuestClearSave> questClears = new List<QuestClearSave>(); // 지역·레벨별 퀘스트 클리어 횟수(예전 저장엔 없어 0부터 시작)
+        public int forestLevel; // 은월의 숲 열린 최고 레벨 1~5(예전 저장엔 없어 0 → Lv1부터)
+        // 게시판·시장 목록(새로고침 없이 시간 따라 바뀜 — 불러와도 같은 목록). 예전 저장엔 없어 처음 열 때 새로 뽑는다.
+        public bool hasQuestBoard;
+        public List<BoardQuestSave> questBoard = new List<BoardQuestSave>();
+        public int questBoardNextDay;
+        public bool hasMarket;
+        public List<MercenarySave> market = new List<MercenarySave>();
+        public int marketNextDay;
+        public List<LootSave> loot = new List<LootSave>(); // 전리품 가방(예전 저장엔 없어 빈 가방)
+        public List<LootSave> bestiaryKills = new List<LootSave>(); // 도감 처치 수(이름 = 도감 칸, 예전 저장엔 없어 전부 미발견)
+        public List<LootSave> bestiaryBest = new List<LootSave>(); // 도감 칸마다 쓰러뜨린 가장 높은 개체 등급(count = 등급 번호)
         public List<ContractSave> contracts = new List<ContractSave>(); // 용병 계약(예전 저장엔 없어 기본 계약을 준다)
+        // 근처 길드(버전 8). 예전 저장엔 없어 불러올 때 새로 만든다.
+        public List<RivalGuildSave> rivals = new List<RivalGuildSave>();
+        public List<MercenarySave> freeAgents = new List<MercenarySave>(); // 우리가 내보내 아직 아무 데도 안 간 용병
+        public List<int> freeAgentDays = new List<int>();                  // freeAgents와 같은 순서: 떠나는 날
+        public List<string> rivalPromised = new List<string>();            // 재계약 맞제의로 약속한 "용병id|길드id"
+        public List<string> marketOrigins = new List<string>();            // 시장 이적 매물 "용병id|길드id"
+        public List<LoanSave> loans = new List<LoanSave>();
+        public List<string> facilities = new List<string>();               // 길드 시설 "Training|2"(버전 9, 예전 저장엔 없어 전부 0단계)                // 근처 길드와 주고받은 용병(대여·연합 손님)
+        public int rivalTargetIndex = -1;                                  // 근처 길드가 노리는 게시판 의뢰(questBoard 몇 번째)
+        public string rivalTargetGuild;
+    }
+
+    [Serializable]
+    public class RivalGuildSave
+    {
+        public string id;
+        public string name;
+        public int temper;
+        public int reputation;
+        public int gold;
+        public int relation;
+        public int lastGiftDay = -1;
+        public List<MercenarySave> roster = new List<MercenarySave>();
+        public List<int> rosterEnd = new List<int>(); // roster와 같은 순서: 계약 끝나는 날
+        public List<RivalJobSave> jobs = new List<RivalJobSave>();
+        public List<int> newsDays = new List<int>();
+        public List<string> newsTexts = new List<string>();
+    }
+
+    [Serializable]
+    public class LoanSave
+    {
+        public string mercId;      // 빌려 온 손님: 파티(party)에 있는 용병 id
+        public MercenarySave merc; // 빌려 준 우리 용병(파티에 없어 여기 저장)
+        public string guildId;
+        public bool inbound;
+        public int endDay;
+        public int dailyFee;
+        public bool joint;
+        public string questId;
+        public int rosterEnd;
+    }
+
+    [Serializable]
+    public class RivalJobSave
+    {
+        public string title;
+        public int endDay;
+        public float chance;
+        public int reward;
+        public int reputation;
     }
 
     [Serializable]
@@ -55,6 +119,14 @@ namespace GN3.Save
     {
         public int region;
         public int tier;
+        public int count;
+    }
+
+    /// <summary>전리품 가방 한 종류(LootBag).</summary>
+    [Serializable]
+    public class LootSave
+    {
+        public string name;
         public int count;
     }
 
@@ -133,7 +205,30 @@ namespace GN3.Save
         public float returnHoursLeft;
         public List<string> memberIds = new List<string>();
         public string leaderId; // 분대장(예전 저장엔 없어 비어 있음 → 첫 파견원)
+        public List<int> memberSquads = new List<int>(); // memberIds와 같은 순서의 분대(0·1). 예전 저장엔 없어 전원 1분대
+        public string leaderId2; // 2분대 분대장(두 분대 퀘스트만)
+        public string allyGuildId; // 연합 의뢰(보상을 나눌 근처 길드)
+        public int allyCount;
         public List<WaveSave> waves = new List<WaveSave>(); // 라운드 구성(예전 저장엔 없어 enemy × enemyCount 한 라운드)
+    }
+
+    /// <summary>게시판에 붙어 있는(아직 수락 안 한) 퀘스트.</summary>
+    [Serializable]
+    public class BoardQuestSave
+    {
+        public string title;
+        public int region;
+        public string location;
+        public string enemy;
+        public int enemyCount;
+        public int difficulty;
+        public int durationDays;
+        public string requester;
+        public string requestText;
+        public bool challenge; // 맨 위 도전 퀘스트(근처 길드가 가져가지 않는다)
+        public string allyGuildId; // 연합 의뢰(함께하는 근처 길드)
+        public int allyCount;
+        public List<WaveSave> waves = new List<WaveSave>();
     }
 
     [Serializable]

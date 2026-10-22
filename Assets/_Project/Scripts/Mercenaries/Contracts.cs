@@ -61,6 +61,9 @@ namespace GN3.Mercenaries
         {
             var contract = Get(merc);
             if (contract != null) return contract;
+            // 근처 길드에서 빌려 온 손님: 계약·주급 없이 대여 기한까지(저장하지 않는 임시 계약)
+            var guest = Loans.GuestLoan(merc);
+            if (guest != null) return new Contract { WeeklyWage = 0, EndDay = guest.EndDay, SignedDay = GameClock.CurrentDay };
             contract = new Contract
             {
                 WeeklyWage = Mathf.Max(1, Mathf.RoundToInt(Pricing.HireCost(merc) * ContractTuning.WageRatio)),
@@ -90,13 +93,14 @@ namespace GN3.Mercenaries
         }
 
         /// <summary>재계약 협상이 필요한 때(만료 NoticeDays일 이내).</summary>
-        public static bool NeedsRenewal(Mercenary merc) => RemainingDays(merc) <= ContractTuning.NoticeDays;
+        public static bool NeedsRenewal(Mercenary merc) => !Loans.IsGuest(merc) && RemainingDays(merc) <= ContractTuning.NoticeDays;
 
         /// <summary>매일 자정: 만료 알림과 만료 처리. 파티에 없는 사람의 계약은 지운다.</summary>
         public static void DailyCheck()
         {
-            var members = PlayerParty.Instance.Members.Where(m => m.IsAlive).ToList();
-            foreach (var id in Book.Keys.Where(id => members.All(m => m.Id != id)).ToList()) Book.Remove(id);
+            var members = PlayerParty.Instance.Members.Where(m => m.IsAlive && !Loans.IsGuest(m)).ToList(); // 손님은 계약이 없다
+            // 파티에 없는 사람의 계약은 지운다(근처 길드에 빌려 준 우리 용병은 돌아올 테니 남긴다)
+            foreach (var id in Book.Keys.Where(id => members.All(m => m.Id != id) && !Loans.IsLentOutId(id)).ToList()) Book.Remove(id);
 
             foreach (var merc in members)
             {
@@ -158,7 +162,7 @@ namespace GN3.Mercenaries
             if (entries != null)
                 foreach (var e in entries)
                     Book[e.id] = new Contract { WeeklyWage = e.wage, EndDay = e.endDay, WinBonus = e.winBonus, SignedDay = e.signedDay };
-            foreach (var merc in PlayerParty.Instance.Members) Ensure(merc);
+            foreach (var merc in PlayerParty.Instance.Members.Where(m => !Loans.IsGuest(m))) Ensure(merc);
         }
     }
 }

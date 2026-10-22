@@ -154,47 +154,82 @@ namespace GN3.Save
             };
 
             foreach (var merc in PlayerParty.Instance.Members)
-            {
-                var m = new MercenarySave
-                {
-                    id = merc.Id,
-                    name = merc.Name,
-                    className = merc.Class != null ? merc.Class.ClassName : "",
-                    grade = (int)merc.Talent,
-                    age = merc.Age,
-                    birthday = merc.BirthdayIndex,
-                    growthAttack = merc.GrowthAttack,
-                    growthDefense = merc.GrowthDefense,
-                    growthHealth = merc.GrowthHealth,
-                    growthSpeed = merc.GrowthSpeed,
-                    growthHoly = merc.GrowthHoly,
-                    growthProgress = merc.GrowthProgress,
-                    hasMonthBase = true,
-                    monthAttack = merc.MonthBaseAttack,
-                    monthDefense = merc.MonthBaseDefense,
-                    monthSpeed = merc.MonthBaseSpeed,
-                    monthHoly = merc.MonthBaseHoly,
-                    monthPower = merc.MonthBasePower,
-                    personality = (int)merc.Personality,
-                    rarePassive = merc.HasRarePassive,
-                    health = merc.CurrentHealth,
-                    weapon = merc.Weapon != null ? merc.Weapon.Name : "",
-                    fatigue = merc.Fatigue,
-                    morale = merc.Morale,
-                    researchHours = merc.ResearchHours,
-                    researchBonus = merc.ResearchLevel,
-                    bodyCharacter = merc.Appearance.BodyCharacter,
-                };
-                foreach (var pair in merc.Appearance.PartSources)
-                {
-                    m.partNames.Add(pair.Key);
-                    m.partSources.Add(pair.Value);
-                }
-                foreach (var ailment in merc.Ailments)
-                    m.ailments.Add(new AilmentSave { id = ailment.Def.Id, progress = ailment.Progress, daysUntreated = ailment.DaysUntreated });
-                data.party.Add(m);
-            }
+                data.party.Add(ToSave(merc));
 
+            // 게시판·시장 목록(불러와도 같은 목록 — 불러오기로 다시 뽑는 꼼수 방지). 아직 안 뽑았으면 비워 둔다.
+            if (QuestBoardListings.Current != null)
+            {
+                data.hasQuestBoard = true;
+                data.questBoardNextDay = QuestBoardListings.NextRefreshDay;
+                foreach (var q in QuestBoardListings.Current)
+                {
+                    var b = new BoardQuestSave
+                    {
+                        title = q.Title, region = (int)q.Region, location = q.LocationName, enemy = q.EnemyName, enemyCount = q.EnemyCount,
+                        difficulty = q.Difficulty, durationDays = q.DurationDays, requester = q.Requester, requestText = q.RequestText,
+                        challenge = q.IsChallenge, allyGuildId = q.AllyGuildId, allyCount = q.AllyCount,
+                    };
+                    foreach (var w in q.Waves)
+                        b.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
+                    data.questBoard.Add(b);
+                }
+            }
+            if (MarketListings.Current != null)
+            {
+                data.hasMarket = true;
+                data.marketNextDay = MarketListings.NextRefreshDay;
+                foreach (var merc in MarketListings.Current)
+                    data.market.Add(ToSave(merc));
+                data.marketOrigins = MarketListings.SaveOrigins();
+            }
+            CaptureRest(data);
+            return data;
+        }
+
+        private static MercenarySave ToSave(Mercenary merc)
+        {
+            var m = new MercenarySave
+            {
+                id = merc.Id,
+                name = merc.Name,
+                className = merc.Class != null ? merc.Class.ClassName : "",
+                grade = (int)merc.Talent,
+                age = merc.Age,
+                birthday = merc.BirthdayIndex,
+                growthAttack = merc.GrowthAttack,
+                growthDefense = merc.GrowthDefense,
+                growthHealth = merc.GrowthHealth,
+                growthSpeed = merc.GrowthSpeed,
+                growthHoly = merc.GrowthHoly,
+                growthProgress = merc.GrowthProgress,
+                hasMonthBase = true,
+                monthAttack = merc.MonthBaseAttack,
+                monthDefense = merc.MonthBaseDefense,
+                monthSpeed = merc.MonthBaseSpeed,
+                monthHoly = merc.MonthBaseHoly,
+                monthPower = merc.MonthBasePower,
+                personality = (int)merc.Personality,
+                rarePassive = merc.HasRarePassive,
+                health = merc.CurrentHealth,
+                weapon = merc.Weapon != null ? merc.Weapon.Name : "",
+                fatigue = merc.Fatigue,
+                morale = merc.Morale,
+                researchHours = merc.ResearchHours,
+                researchBonus = merc.ResearchLevel,
+                bodyCharacter = merc.Appearance.BodyCharacter,
+            };
+            foreach (var pair in merc.Appearance.PartSources)
+            {
+                m.partNames.Add(pair.Key);
+                m.partSources.Add(pair.Value);
+            }
+            foreach (var ailment in merc.Ailments)
+                m.ailments.Add(new AilmentSave { id = ailment.Def.Id, progress = ailment.Progress, daysUntreated = ailment.DaysUntreated });
+            return m;
+        }
+
+        private static void CaptureRest(SaveData data)
+        {
             foreach (var expedition in ExpeditionLog.Instance.Active)
             {
                 var q = expedition.Quest;
@@ -215,8 +250,15 @@ namespace GN3.Save
                     outboundHours = expedition.OutboundHours,
                     returnHoursLeft = expedition.ReturnHoursLeft,
                 };
-                e.memberIds.AddRange(expedition.Members.Where(m => m.IsAlive).Select(m => m.Id));
+                foreach (var m in expedition.Members.Where(m => m.IsAlive))
+                {
+                    e.memberIds.Add(m.Id);
+                    e.memberSquads.Add(expedition.SquadOf(m));
+                }
                 e.leaderId = expedition.Leader?.Id;
+                e.leaderId2 = expedition.Quest.SquadCount > 1 ? expedition.LeaderOf(1)?.Id : null;
+                e.allyGuildId = q.AllyGuildId;
+                e.allyCount = q.AllyCount;
                 foreach (var w in q.Waves)
                     e.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
                 data.expeditions.Add(e);
@@ -229,11 +271,106 @@ namespace GN3.Save
             data.prayers = RestVenues.Cathedral.SaveIds();
             data.affinities = Affinity.SaveEntries();
             data.questClears = QuestClearHistory.SaveEntries();
+            data.forestLevel = ForestProgress.UnlockedLevel;
             data.leaving = MercenaryCondition.SaveLeaving();
             data.contracts = Contracts.SaveEntries();
             data.storageWeapons = GuildStorage.WeaponNames();
             data.storageItems = GuildStorage.ItemNames();
-            return data;
+            data.loot = LootBag.SaveEntries();
+            data.bestiaryKills = Bestiary.SaveEntries();
+            data.bestiaryBest = Bestiary.SaveBest();
+            data.facilities = GuildFacilities.SaveEntries();
+            CaptureRivals(data);
+        }
+
+        /// <summary>근처 길드: 소속 용병은 파티·시장과 같은 MercenarySave로.</summary>
+        private static void CaptureRivals(SaveData data)
+        {
+            foreach (var g in RivalGuilds.All)
+            {
+                var s = new RivalGuildSave
+                {
+                    id = g.Id, name = g.Name, temper = (int)g.Temper, reputation = g.Reputation, gold = g.Gold,
+                    relation = g.Relation, lastGiftDay = g.LastGiftDay,
+                };
+                foreach (var merc in g.Roster)
+                {
+                    s.roster.Add(ToSave(merc));
+                    s.rosterEnd.Add(g.RosterEnd.TryGetValue(merc.Id, out int end) ? end : GameClock.CurrentDay + 180);
+                }
+                foreach (var j in g.Jobs)
+                    s.jobs.Add(new RivalJobSave { title = j.Title, endDay = j.EndDay, chance = j.Chance, reward = j.Reward, reputation = j.Reputation });
+                foreach (var (day, text) in g.News)
+                {
+                    s.newsDays.Add(day);
+                    s.newsTexts.Add(text);
+                }
+                data.rivals.Add(s);
+            }
+            foreach (var (merc, until) in RivalGuilds.FreeAgents)
+            {
+                data.freeAgents.Add(ToSave(merc));
+                data.freeAgentDays.Add(until);
+            }
+            foreach (var pair in RivalGuilds.Promised) data.rivalPromised.Add(pair.Key + "|" + pair.Value);
+            foreach (var l in Loans.All)
+                data.loans.Add(new LoanSave
+                {
+                    mercId = l.Merc.Id, merc = l.Inbound ? null : ToSave(l.Merc), guildId = l.GuildId, inbound = l.Inbound, endDay = l.EndDay,
+                    dailyFee = l.DailyFee, joint = l.Joint, questId = l.QuestId, rosterEnd = l.RosterEnd,
+                });
+            var target = RivalGuilds.TargetQuest;
+            data.rivalTargetIndex = target != null && QuestBoardListings.Current != null ? QuestBoardListings.Current.IndexOf(target) : -1;
+            data.rivalTargetGuild = RivalGuilds.TargetGuild?.Id;
+        }
+
+        private static void RestoreRivals(SaveData data, MercenaryClassSO[] classes)
+        {
+            var guilds = new List<RivalGuild>();
+            foreach (var s in data.rivals ?? new List<RivalGuildSave>())
+            {
+                var g = new RivalGuild
+                {
+                    Id = s.id, Name = s.name, Temper = (RivalTemper)s.temper, Reputation = s.reputation, Gold = s.gold,
+                    Relation = s.relation, LastGiftDay = s.lastGiftDay,
+                };
+                for (int i = 0; i < s.roster.Count; i++)
+                {
+                    var merc = FromSave(s.roster[i], classes, data.version);
+                    if (merc == null) continue;
+                    g.Roster.Add(merc);
+                    g.RosterEnd[merc.Id] = i < s.rosterEnd.Count ? s.rosterEnd[i] : data.day + 180;
+                }
+                foreach (var j in s.jobs)
+                    g.Jobs.Add(new RivalJob { Title = j.title, EndDay = j.endDay, Chance = j.chance, Reward = j.reward, Reputation = j.reputation });
+                for (int i = 0; i < s.newsDays.Count && i < s.newsTexts.Count; i++)
+                    g.News.Add((s.newsDays[i], s.newsTexts[i]));
+                guilds.Add(g);
+            }
+            var free = new List<(Mercenary, int)>();
+            for (int i = 0; i < data.freeAgents.Count; i++)
+            {
+                var merc = FromSave(data.freeAgents[i], classes, data.version);
+                if (merc != null) free.Add((merc, i < data.freeAgentDays.Count ? data.freeAgentDays[i] : data.day + 7));
+            }
+            var promised = new List<KeyValuePair<string, string>>();
+            foreach (var entry in data.rivalPromised)
+            {
+                int bar = entry.IndexOf('|');
+                if (bar > 0) promised.Add(new KeyValuePair<string, string>(entry.Substring(0, bar), entry.Substring(bar + 1)));
+            }
+            RivalGuilds.Restore(guilds, free, promised);
+            RivalGuilds.RestoreTarget(data.rivalTargetIndex, data.rivalTargetGuild);
+
+            var loans = new List<Loan>();
+            foreach (var l in data.loans)
+            {
+                var merc = l.inbound ? PlayerParty.Instance.Members.FirstOrDefault(m => m.Id == l.mercId)
+                    : l.merc != null && !string.IsNullOrEmpty(l.merc.className) ? FromSave(l.merc, classes, data.version) : null;
+                if (merc == null) continue;
+                loans.Add(new Loan { Merc = merc, GuildId = l.guildId, Inbound = l.inbound, EndDay = l.endDay, DailyFee = l.dailyFee, Joint = l.joint, QuestId = l.questId, RosterEnd = l.rosterEnd });
+            }
+            Loans.Restore(loans);
         }
 
         // ---------- 불러오기 ----------
@@ -266,53 +403,8 @@ namespace GN3.Save
             var mercs = new List<Mercenary>();
             foreach (var m in data.party)
             {
-                var cls = classes.FirstOrDefault(c => c.ClassName == m.className);
-                if (cls == null)
-                {
-                    Debug.LogWarning($"[SaveSystem] 클래스 '{m.className}'를 찾지 못해 {m.name}을(를) 건너뜀");
-                    continue;
-                }
-                var sources = new List<KeyValuePair<string, string>>();
-                for (int i = 0; i < m.partNames.Count && i < m.partSources.Count; i++)
-                    sources.Add(new KeyValuePair<string, string>(m.partNames[i], m.partSources[i]));
-                var appearance = RandomCharacterComposer.Rebuild(sources, m.bodyCharacter);
-
-                var merc = new Mercenary(m.name, cls, m.age, m.birthday, appearance, (Personality)m.personality, m.rarePassive,
-                    (MercenaryGrade)m.grade, m.id);
-                var weapon = string.IsNullOrEmpty(m.weapon) ? null : WeaponCatalog.All.FirstOrDefault(w => w.Name == m.weapon);
-                // 성장·수련은 최대 체력을 바꾸므로 체력보다 먼저
-                if (data.version >= 3)
-                {
-                    // 버전 5 이하 힐러: 신성력 성장이 없었다 → 다른 네 능력치 성장 평균만큼 준다(오래 키운 힐러가 새 힐러보다 약하지 않게).
-                    int holy = data.version >= 6 ? m.growthHoly
-                        : cls.HolyGrowth > 0 ? (int)Math.Round((m.growthAttack + m.growthDefense + m.growthHealth + m.growthSpeed) / 4.0) : 0;
-                    merc.RestoreGrowth(m.age, m.birthday, m.growthAttack, m.growthDefense, m.growthHealth, m.growthSpeed, holy, m.growthProgress);
-                }
-                else
-                {
-                    // 레벨제 저장: Lv N = 다섯 능력치 모두 N-1회 성장(신성력은 힐러만 의미 있음). 나이·생일은 새로 정한다.
-                    int grown = Math.Max(1, m.level) - 1;
-                    merc.RestoreGrowth(LegacyRng.Next(20, 30), LegacyRng.Next(GN3.World.GameCalendar.DaysPerYear), grown, grown, grown, grown,
-                        cls.HolyGrowth > 0 ? grown : 0, 0f);
-                }
-                merc.RestoreResearch(m.researchHours, m.researchBonus);
-                merc.RestoreState(m.health, weapon);
-                if (data.version < 4)
-                {
-                    merc.MatchLegacyPower(LegacyRng); // 재능 능력치 배율이 빠진 만큼 성장으로 메운다
-                    merc.SetHealth(m.health);
-                }
-                if (m.hasMonthBase && data.version >= 6) merc.RestoreMonthBase(m.monthAttack, m.monthDefense, m.monthSpeed, m.monthHoly, m.monthPower);
-                else merc.SnapshotMonth(); // 예전 저장: 지금 값을 이번 달 기준으로(버전 5는 힐러 신성력·전투력이 바뀌어 다시 찍는다)
-                merc.RestoreCondition(m.fatigue, m.morale);
-                if (m.ailments != null)
-                    foreach (var ailment in m.ailments)
-                    {
-                        // 에셋을 지웠으면 그 상태이상은 건너뛴다.
-                        var def = string.IsNullOrEmpty(ailment.id) ? AilmentCatalog.FindLegacy(ailment.kind) : AilmentCatalog.Find(ailment.id);
-                        if (def != null) merc.AddAilment(def, ailment.progress, ailment.daysUntreated);
-                    }
-                mercs.Add(merc);
+                var merc = FromSave(m, classes, data.version);
+                if (merc != null) mercs.Add(merc);
             }
 
             // 지금 상태를 비우고 채운다. 파견을 먼저 넣어야 마을이 파견 중인 용병을 걸어 다니게 만들지 않는다.
@@ -323,19 +415,89 @@ namespace GN3.Save
             Guild.Restore(data.reputation);
             GameClock.Restore(data.day, data.hour);
 
+            RestoreRest(data, mercs, classes);
+
+            OnLoaded?.Invoke();
+            return true;
+        }
+
+        /// <summary>용병 하나를 되살린다(파티·시장 공용). 직업 에셋을 못 찾으면 null.</summary>
+        private static Mercenary FromSave(MercenarySave m, MercenaryClassSO[] classes, int version)
+        {
+            var cls = classes.FirstOrDefault(c => c.ClassName == m.className);
+            if (cls == null)
+            {
+                Debug.LogWarning($"[SaveSystem] 클래스 '{m.className}'를 찾지 못해 {m.name}을(를) 건너뜀");
+                return null;
+            }
+            var sources = new List<KeyValuePair<string, string>>();
+            for (int i = 0; i < m.partNames.Count && i < m.partSources.Count; i++)
+                sources.Add(new KeyValuePair<string, string>(m.partNames[i], m.partSources[i]));
+            var appearance = RandomCharacterComposer.Rebuild(sources, m.bodyCharacter);
+
+            var merc = new Mercenary(m.name, cls, m.age, m.birthday, appearance, (Personality)m.personality, m.rarePassive,
+                (MercenaryGrade)m.grade, m.id);
+            var weapon = string.IsNullOrEmpty(m.weapon) ? null : WeaponCatalog.All.FirstOrDefault(w => w.Name == m.weapon);
+            // 성장·수련은 최대 체력을 바꾸므로 체력보다 먼저
+            if (version >= 3)
+            {
+                // 버전 5 이하 힐러: 신성력 성장이 없었다 → 다른 네 능력치 성장 평균만큼 준다(오래 키운 힐러가 새 힐러보다 약하지 않게).
+                int holy = version >= 6 ? m.growthHoly
+                    : cls.HolyGrowth > 0 ? (int)Math.Round((m.growthAttack + m.growthDefense + m.growthHealth + m.growthSpeed) / 4.0) : 0;
+                merc.RestoreGrowth(m.age, m.birthday, m.growthAttack, m.growthDefense, m.growthHealth, m.growthSpeed, holy, m.growthProgress);
+            }
+            else
+            {
+                // 레벨제 저장: Lv N = 다섯 능력치 모두 N-1회 성장(신성력은 힐러만 의미 있음). 나이·생일은 새로 정한다.
+                int grown = Math.Max(1, m.level) - 1;
+                merc.RestoreGrowth(LegacyRng.Next(20, 30), LegacyRng.Next(GN3.World.GameCalendar.DaysPerYear), grown, grown, grown, grown,
+                    cls.HolyGrowth > 0 ? grown : 0, 0f);
+            }
+            merc.RestoreResearch(m.researchHours, m.researchBonus);
+            merc.RestoreState(m.health, weapon);
+            if (version < 4)
+            {
+                merc.MatchLegacyPower(LegacyRng); // 재능 능력치 배율이 빠진 만큼 성장으로 메운다
+                merc.SetHealth(m.health);
+            }
+            if (m.hasMonthBase && version >= 6) merc.RestoreMonthBase(m.monthAttack, m.monthDefense, m.monthSpeed, m.monthHoly, m.monthPower);
+            else merc.SnapshotMonth(); // 예전 저장: 지금 값을 이번 달 기준으로(버전 5는 힐러 신성력·전투력이 바뀌어 다시 찍는다)
+            merc.RestoreCondition(m.fatigue, m.morale);
+            if (m.ailments != null)
+                foreach (var ailment in m.ailments)
+                {
+                    // 에셋을 지웠으면 그 상태이상은 건너뛴다.
+                    var def = string.IsNullOrEmpty(ailment.id) ? AilmentCatalog.FindLegacy(ailment.kind) : AilmentCatalog.Find(ailment.id);
+                    if (def != null) merc.AddAilment(def, ailment.progress, ailment.daysUntreated);
+                }
+            return merc;
+        }
+
+        private static void RestoreRest(SaveData data, List<Mercenary> mercs, MercenaryClassSO[] classes)
+        {
             foreach (var e in data.expeditions)
             {
-                var members = e.memberIds.Select(id => mercs.FirstOrDefault(m => m.Id == id)).Where(m => m != null).ToList();
+                var members = new List<Mercenary>();
+                var squads = new List<int>();
+                for (int i = 0; i < e.memberIds.Count; i++)
+                {
+                    var merc = mercs.FirstOrDefault(m => m.Id == e.memberIds[i]);
+                    if (merc == null) continue;
+                    members.Add(merc);
+                    squads.Add(e.memberSquads != null && i < e.memberSquads.Count ? e.memberSquads[i] : 0);
+                }
                 if (members.Count == 0) continue;
                 var waves = e.waves != null && e.waves.Count > 0
                     ? e.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList()
                     : null; // 예전 저장: enemy × enemyCount 한 라운드
-                var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays, waves);
+                var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays, waves)
+                    { AllyGuildId = e.allyGuildId, AllyCount = e.allyCount };
                 // 버전 1 저장은 일 단위뿐이라 × 24시간으로 읽는다.
                 bool hours = data.version >= 2;
                 quest.SetRemainingHours(hours ? e.remainingHours : e.remainingDays * Quest.HoursPerDay);
                 var leader = string.IsNullOrEmpty(e.leaderId) ? null : members.FirstOrDefault(m => m.Id == e.leaderId);
-                var expedition = new Expedition(quest, members, leader);
+                var leader2 = string.IsNullOrEmpty(e.leaderId2) ? null : members.FirstOrDefault(m => m.Id == e.leaderId2);
+                var expedition = new Expedition(quest, members, leader, squads, leader2);
                 expedition.RestoreState(hours ? e.outboundHours : e.outboundDays * Quest.HoursPerDay, e.returning,
                     hours ? e.returnHoursLeft : e.returnDaysLeft * Quest.HoursPerDay);
                 ExpeditionLog.Instance.Restore(expedition);
@@ -351,12 +513,27 @@ namespace GN3.Save
             RestVenues.Cathedral.Restore(data.prayers);
             Affinity.Restore(data.affinities);
             QuestClearHistory.Restore(data.questClears);
+
+            // 게시판·시장 목록: 레벨 개방 이벤트(ForestProgress.OnChanged)보다 먼저 되돌린다. 예전 저장엔 없어 처음 열 때 새로 뽑는다.
+            List<Quest> board = null;
+            if (data.hasQuestBoard)
+                board = data.questBoard.Select(b => new Quest(b.title, (Region)b.region, b.location, b.enemy, b.enemyCount, b.difficulty, b.durationDays,
+                    b.waves != null && b.waves.Count > 0 ? b.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList() : null,
+                    b.requester, b.requestText) { IsChallenge = b.challenge, AllyGuildId = b.allyGuildId, AllyCount = b.allyCount }).ToList();
+            QuestBoardListings.Restore(board, data.questBoardNextDay);
+            List<Mercenary> market = null;
+            if (data.hasMarket)
+                market = data.market.Select(m => FromSave(m, classes, data.version)).Where(m => m != null).ToList();
+            MarketListings.Restore(market, data.marketNextDay, data.marketOrigins);
+
+            ForestProgress.Restore(data.forestLevel);
             MercenaryCondition.RestoreLeaving(data.leaving);
             Contracts.Restore(data.contracts);
             GuildStorage.Restore(data.storageWeapons, data.storageItems);
-
-            OnLoaded?.Invoke();
-            return true;
+            LootBag.Restore(data.loot);
+            Bestiary.Restore(data.bestiaryKills, data.bestiaryBest);
+            GuildFacilities.Restore(data.facilities);
+            RestoreRivals(data, classes);
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

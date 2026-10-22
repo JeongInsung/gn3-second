@@ -194,7 +194,7 @@ namespace GN3.UI
             Label(c, $"성격: {PersonalityTable.Get(merc.Personality).Label}", UITheme.BodySize, UITheme.MutedText, TextAnchor.MiddleLeft, new Vector2(x, -178f), new Vector2(w, 26f));
 
             // 계약 조건
-            string terms = $"주급 {offer.WeeklyWage}G · {offer.LengthDays}일({GameCalendar.Format(GameClock.CurrentDay + offer.LengthDays)}까지)";
+            string terms = $"주급 {offer.WeeklyWage}G · {ContractTuning.LengthLabel(offer.LengthDays)}({GameCalendar.Format(GameClock.CurrentDay + offer.LengthDays)}까지)";
             string extras = (offer.SigningFee > 0 ? $"계약금 {offer.SigningFee}G" : "") +
                             (offer.WinBonus > 0 ? (offer.SigningFee > 0 ? " · " : "") + $"성공 보너스 {offer.WinBonus}G" : "");
             Label(c, terms + (extras.Length > 0 ? "\n" + extras : ""), UITheme.BodySize, UITheme.BodyText, TextAnchor.UpperLeft, new Vector2(34f, -290f), new Vector2(CardWidth - 68f, 52f));

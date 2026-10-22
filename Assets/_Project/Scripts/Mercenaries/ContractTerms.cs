@@ -16,24 +16,25 @@ namespace GN3.Mercenaries
         public int WinBonus;
     }
 
-    /// <summary>용병이 속으로 바라는 조건(숨은 값). 협상 창은 귀띔 범위와 대답으로만 보여 준다.</summary>
+    /// <summary>용병이 처음 부르는 조건과 속마음(숨은 값). 협상 창은 귀띔 범위·기분·대답으로만 보여 준다.</summary>
     public struct ContractDemand
     {
-        public int WeeklyWage;
+        public int WeeklyWage;       // 처음 부르는 주급(만족도 1)
         public int SigningFee;
-        public int Patience;        // 기분 나쁜 제안을 몇 번까지 참는지
+        public float Floor;          // 속마음 마지노선(만족도 비율) — 이 아래로는 절대 서명하지 않는다
+        public NegotiationStyle Style;
+        public Personality Personality;
         public Interest Interest;
         public int LengthPreference; // +1 긴 계약을 좋아함, −1 짧은 계약을 좋아함, 0 상관없음
         public float BonusValue;     // 성과 보너스 1G를 주급 몇 G로 쳐주는지
     }
-
-    public enum OfferResult { Accepted, Counter, Insulted }
 
     /// <summary>
     /// 용병의 요구 조건·관심도와 제안 평가(풋볼매니저식 계약 협상). 수치는 ContractTuning.
     ///  - 요구 주급 = 고용비 × 20% × 성격 욕심 × 관심도 보정, 요구 계약금 = 고용비(재계약은 25%) × 같은 보정.
     ///  - 관심도: 길드 상한 등급보다 약한 용병일수록, 지금 등급 안 명성이 높을수록 오고 싶어 한다. 재계약은 사기로 정한다.
     ///  - 평가: 계약 기간 전체 가치(주급 × 주 수 + 계약금 + 보너스 × 가치 × 주 수)를 요구 가치와 비교한다.
+    ///  - 요구는 처음 부르는 값일 뿐, 성향(NegotiationStyle)마다 그 아래 숨은 마지노선이 있다. 밀고 당기기는 Negotiation.
     /// 같은 용병은 같은 날 늘 같은 요구를 한다(용병 id로 정한 seed).
     /// </summary>
     public static class ContractTerms
@@ -55,16 +56,16 @@ namespace GN3.Mercenaries
             if (renewal && merc.Morale < ConditionTuning.LowMorale) mood *= ContractTuning.LowMoraleRenewalMultiplier;
 
             int cost = Pricing.HireCost(merc);
-            int patience = Greedy(p) ? 2
-                : p == Personality.Cheerful || p == Personality.Steady || p == Personality.Composed ? 4
-                : ContractTuning.BasePatience;
-            if (interest == Interest.Reluctant) patience = Mathf.Max(1, patience - 1);
+            var style = NegotiationStyles.For(p);
+            float floor = NegotiationStyles.Get(style).Floor + ((float)rng.NextDouble() * 2f - 1f) * ContractTuning.FloorJitter;
 
             return new ContractDemand
             {
                 WeeklyWage = Mathf.Max(1, Mathf.RoundToInt(cost * ContractTuning.WageRatio * greed * mood)),
                 SigningFee = Mathf.Max(0, Mathf.RoundToInt(cost * (renewal ? ContractTuning.RenewalFeeRatio : 1f) * greed * mood)),
-                Patience = patience,
+                Floor = Mathf.Min(1f, floor),
+                Style = style,
+                Personality = p,
                 Interest = interest,
                 LengthPreference = merc.Age >= 30 || p == Personality.Cautious || p == Personality.Pessimistic ? 1
                     : merc.Age <= 22 && merc.Talent >= MercenaryGrade.C ? -1 : 0,
@@ -100,7 +101,7 @@ namespace GN3.Mercenaries
             Greedy(p) ? -10 : p == Personality.Cheerful || p == Personality.Steady ? 10 : 0;
 
         /// <summary>지금 길드 등급 안에서 다음 등급까지 명성이 얼마나 찼는지 0~1(최고 등급이면 1).</summary>
-        private static float ReputationProgress()
+        public static float ReputationProgress()
         {
             if (Guild.IsMaxRank) return 1f;
             int from = Guild.Current.Required, to = Guild.Ranks[Guild.Rank + 1].Required;
@@ -127,17 +128,11 @@ namespace GN3.Mercenaries
             return liked ? 1f - ContractTuning.LengthPreference : 1f + ContractTuning.LengthPreference;
         }
 
-        public static OfferResult Evaluate(ContractDemand demand, ContractOffer offer)
-        {
-            float s = Satisfaction(demand, offer);
-            return s >= 1f ? OfferResult.Accepted : s >= ContractTuning.CounterThreshold ? OfferResult.Counter : OfferResult.Insulted;
-        }
-
-        /// <summary>역제안: 기간·계약금·보너스는 그대로 두고 모자란 만큼 주급을 올린 조건.</summary>
-        public static ContractOffer Counter(ContractDemand demand, ContractOffer offer)
+        /// <summary>역제안: 기간·계약금·보너스는 그대로 두고 만족도가 target(지금 부르는 값)에 닿도록 주급을 올린 조건.</summary>
+        public static ContractOffer Counter(ContractDemand demand, ContractOffer offer, float target = 1f)
         {
             float weeks = offer.LengthDays / 7f;
-            float wanted = demand.WeeklyWage * weeks * LengthFactor(demand, offer.LengthDays) + demand.SigningFee;
+            float wanted = (demand.WeeklyWage * weeks * LengthFactor(demand, offer.LengthDays) + demand.SigningFee) * target;
             float rest = offer.SigningFee + offer.WinBonus * demand.BonusValue * ContractTuning.QuestsPerWeek * weeks;
             var counter = offer;
             counter.WeeklyWage = Mathf.Max(offer.WeeklyWage + 1, Mathf.CeilToInt((wanted - rest) / Mathf.Max(0.1f, weeks)));
@@ -148,7 +143,7 @@ namespace GN3.Mercenaries
         public static ContractOffer Fair(ContractDemand demand) => new ContractOffer
         {
             WeeklyWage = demand.WeeklyWage,
-            LengthDays = demand.LengthPreference > 0 ? 90 : demand.LengthPreference < 0 ? 30 : ContractTuning.DefaultLengthDays,
+            LengthDays = demand.LengthPreference > 0 ? ContractTuning.PreferredLongDays : demand.LengthPreference < 0 ? ContractTuning.ShortContractDays : ContractTuning.DefaultLengthDays,
             SigningFee = demand.SigningFee,
             WinBonus = 0,
         };
@@ -170,7 +165,7 @@ namespace GN3.Mercenaries
         };
 
         /// <summary>id 문자열 → 안정된 seed(플랫폼·실행마다 같다). 날짜를 섞어 같은 용병도 날이 바뀌면 조금 달라진다.</summary>
-        private static int Seed(string id)
+        public static int Seed(string id)
         {
             unchecked
             {

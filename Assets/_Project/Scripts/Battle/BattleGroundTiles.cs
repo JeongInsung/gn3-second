@@ -40,6 +40,13 @@ namespace GN3.Battle
         private const float TreeMinLight = 0.88f;       // 나무마다 밝기 0.88~1
         private const float TitleShadeHeight = 110f, TitleShadeAlpha = 0.65f; // 제목이 나무 위에서도 읽히게
 
+        // 보스전(숲 깊은 곳): 판 양옆 숲 띠와 숲 그늘
+        private const float SideBandInset = 40f;     // 판 가장자리에서 띠가 시작하는 거리(판 안 싸우는 곳은 비운다)
+        private const float SideBandWidth = 420f;    // 띠 폭(판 바깥 잔디 480 안)
+        private const float SideBandBottom = -120f;  // 띠 아래 끝(아래 패널이 덮는 곳까지)
+        private const int SideTreeAttempts = 1200;   // 한쪽 띠에 던져 볼 자리 수
+        private const float DeepForestShade = 0.85f; // 바닥을 이만큼 더 어둡게(우거진 숲 그늘)
+
         private class Theme
         {
             public string Sheet;
@@ -62,7 +69,8 @@ namespace GN3.Battle
             _treeFrames = null;
         }
 
-        public static void Build(RectTransform field, Region region, int seed)
+        /// <param name="deepForest">보스전(은월의 숲 깊은 곳): 판 왼쪽·오른쪽 바깥까지 숲으로 둘러싸고 바닥을 숲 그늘로 조금 어둡게.</param>
+        public static void Build(RectTransform field, Region region, int seed, bool deepForest = false)
         {
             var theme = For(region);
             var cells = Sheet(theme.Sheet);
@@ -81,7 +89,7 @@ namespace GN3.Battle
             int columns = Mathf.CeilToInt(size.x / CellSize);
             int rows = Mathf.CeilToInt(size.y / CellSize);
             var rng = new System.Random(seed);
-            Color color = theme.Tint * Shade;
+            Color color = theme.Tint * (Shade * (deepForest ? DeepForestShade : 1f));
             color.a = 1f;
 
             for (int y = 0; y < rows; y++)
@@ -90,13 +98,13 @@ namespace GN3.Battle
             // 판 안에만 따로 얹는 그늘·색은 두지 않는다: 판 밖(나무 밑) 잔디와 한 장으로 이어져 보이게.
             var flowerSpots = BattleDecor.BuildField(layer.transform, size, rng); // 꽃밭·풀·바위
 
-            BuildSurroundings(field, theme, cells, color, columns, rows, rng);
+            BuildSurroundings(field, theme, cells, color, columns, rows, rng, deepForest);
             var atmosphere = BattleFx.BuildAtmosphere(field);
             BattleDecor.BuildLife(atmosphere, field, flowerSpots); // 나비·빛 가루·구름 그림자
         }
 
         /// <summary>판 바깥 잔디 + 위쪽 숲 + 제목 그늘. 캔버스 루트의 Backdrop 바로 다음에 둬서 제목·판·아래 패널보다 뒤에 그린다.</summary>
-        private static void BuildSurroundings(RectTransform field, Theme theme, Sprite[] cells, Color color, int columns, int rows, System.Random rng)
+        private static void BuildSurroundings(RectTransform field, Theme theme, Sprite[] cells, Color color, int columns, int rows, System.Random rng, bool deepForest)
         {
             var root = field.parent;
             if (root == null) return;
@@ -128,7 +136,7 @@ namespace GN3.Battle
             }
 
             BattleDecor.BuildOutskirts(area.transform, field.sizeDelta, OuterColumns * CellSize, rng);
-            BuildForest(area.transform, field.sizeDelta, rng);
+            BuildForest(area.transform, field, rng, deepForest);
 
             var shade = new GameObject("TitleShade", typeof(RectTransform), typeof(Image));
             shade.transform.SetParent(surroundings.transform, false);
@@ -143,39 +151,51 @@ namespace GN3.Battle
             shadeImage.raycastTarget = false;
         }
 
-        /// <summary>판 위쪽에 참나무를 무작위로 빼곡히(크기·좌우·밝기도 나무마다 다르게). 뒤(위)부터 그려 앞 나무가 앞에 보인다.</summary>
-        private static void BuildForest(Transform parent, Vector2 fieldSize, System.Random rng)
+        /// <summary>판 위쪽에 참나무를 무작위로 빼곡히(크기·좌우·밝기도 나무마다 다르게). 뒤(위)부터 그려 앞 나무가 앞에 보인다.
+        /// deepForest(보스전)면 판 왼쪽·오른쪽 바깥 띠에도 심어 숲 한가운데처럼 둘러싼다(판에서 멀수록 어둡게).
+        /// 양옆 나무는 수관이 판 안까지 뻗어서, 판 뒤(바깥 층)에 두면 판 바닥에 덮여 가장자리에서 세로로 잘려 보인다
+        /// → 판 안 층(ForestSides: 바닥 타일 바로 위, 땅 표시·유닛·빛 막 아래)에 심는다. 판 좌표 = 바깥 층 좌표라 자리는 같다.</summary>
+        private static void BuildForest(Transform parent, RectTransform field, System.Random rng, bool deepForest)
         {
             var frames = TreeFrames();
             if (frames == null) return;
+            Vector2 fieldSize = field.sizeDelta;
 
-            var shadows = BattleDecor.CreateLayer(parent, "ForestShadows"); // 나무 해 그림자(나무보다 먼저 그린다)
-            var forest = new GameObject("Forest", typeof(RectTransform));
-            forest.transform.SetParent(parent, false);
-            var forestRect = (RectTransform)forest.transform;
-            forestRect.anchorMin = forestRect.anchorMax = forestRect.pivot = Vector2.zero;
-            var sway = forest.AddComponent<BattleTreeSway>();
+            var (shadows, sway) = CreateForestLayer(parent, "Forest", -1);
+            BattleTreeSway sideSway = null;
+            RectTransform sideShadows = null;
+            if (deepForest) (sideShadows, sideSway) = CreateForestLayer(field, "ForestSides", 1); // GroundTiles(0번) 바로 위
 
             // 무작위로 던진 자리 중 이미 심은 나무와 너무 가깝지 않은 곳만 남긴다 → 빼곡하지만 줄이 맞지 않는다.
             float left = -OuterColumns * CellSize, right = fieldSize.x + OuterColumns * CellSize;
-            var trees = new List<(Vector2 pos, float scale)>();
+            var trees = new List<(Vector2 pos, float scale, float depth, bool side)>();
             for (int attempt = 0; attempt < TreeAttempts; attempt++)
             {
                 float depth = (float)rng.NextDouble(); // 0 = 맨 앞(판 가장자리), 1 = 맨 뒤
                 var pos = new Vector2(Mathf.Lerp(left, right, (float)rng.NextDouble()),
                                       fieldSize.y + Mathf.Lerp(TreeBandBottom, TreeBandTop, depth));
                 float scale = Mathf.Lerp(TreeMinScale, TreeMaxScale, (float)rng.NextDouble()) * (1f - TreeBackShrink * depth);
-                bool crowded = false;
-                foreach (var other in trees)
-                    if (Vector2.Distance(other.pos, pos) < TreeWidth * (scale + other.scale) * 0.5f * TreeSpacingFactor) { crowded = true; break; }
-                if (!crowded) trees.Add((pos, scale));
+                TryPlant(trees, pos, scale, Mathf.InverseLerp(fieldSize.y + TreeBandBottom, fieldSize.y + TreeBandTop, pos.y), false);
+            }
+            if (deepForest)
+            {
+                // 판 양옆 바깥 띠: 판 가장자리에서 멀수록(depth 1) 작고 어둡게. 아래 끝은 아래 패널이 덮는다.
+                for (int attempt = 0; attempt < SideTreeAttempts * 2; attempt++)
+                {
+                    bool leftSide = attempt % 2 == 0;
+                    float depth = (float)rng.NextDouble();
+                    float x = leftSide ? -SideBandInset - depth * SideBandWidth : fieldSize.x + SideBandInset + depth * SideBandWidth;
+                    var pos = new Vector2(x, Mathf.Lerp(SideBandBottom, fieldSize.y + TreeBandBottom, (float)rng.NextDouble()));
+                    float scale = Mathf.Lerp(TreeMinScale, TreeMaxScale, (float)rng.NextDouble()) * (1f - TreeBackShrink * depth);
+                    TryPlant(trees, pos, scale, depth, true);
+                }
             }
             trees.Sort((a, b) => b.pos.y.CompareTo(a.pos.y)); // 뒤(위)부터 그려 앞 나무가 가린다
 
-            foreach (var (pos, scale) in trees)
+            foreach (var (pos, scale, depth, side) in trees)
             {
                 var go = new GameObject("Tree", typeof(RectTransform), typeof(Image));
-                go.transform.SetParent(forest.transform, false);
+                go.transform.SetParent(side ? sideSway.transform : sway.transform, false);
                 var rect = (RectTransform)go.transform;
                 rect.anchorMin = rect.anchorMax = Vector2.zero;
                 rect.pivot = new Vector2(0.5f, 0f);
@@ -183,15 +203,39 @@ namespace GN3.Battle
                 rect.sizeDelta = new Vector2(TreeWidth, TreeHeight) * scale;
                 if (rng.NextDouble() < 0.5) rect.localScale = new Vector3(-1f, 1f, 1f); // 좌우 뒤집어 같은 모양 반복을 줄인다
 
-                float depth = Mathf.InverseLerp(fieldSize.y + TreeBandBottom, fieldSize.y + TreeBandTop, pos.y);
-                float light = Mathf.Lerp(TreeMinLight, 1f, (float)rng.NextDouble()) * (1f - TreeBackDarken * depth);
+                float light =Mathf.Lerp(TreeMinLight, 1f, (float)rng.NextDouble()) * (1f - TreeBackDarken * depth);
                 var image = go.GetComponent<Image>();
                 image.color = new Color(light, light, light, 1f);
                 image.raycastTarget = false;
-                sway.Add(image, rng.Next(TreeFrameCount));
-                BattleShadow.Attach(image, shadows, 0.8f); // 마을 나무와 같은 높이 비율
+                (side ? sideSway : sway).Add(image, rng.Next(TreeFrameCount));
+                BattleShadow.Attach(image, side ? sideShadows : shadows, 0.8f); // 마을 나무와 같은 높이 비율
             }
             sway.Init(frames, TreeFps);
+            if (sideSway != null) sideSway.Init(frames, TreeFps);
+        }
+
+        /// <summary>나무 그림자 층 + 나무 층(흔들림 포함)을 parent 안에 만든다. siblingIndex ≥ 0이면 그 순서부터(그림자 → 나무), 아니면 맨 뒤에.</summary>
+        private static (RectTransform shadows, BattleTreeSway sway) CreateForestLayer(Transform parent, string name, int siblingIndex)
+        {
+            var shadows = BattleDecor.CreateLayer(parent, name + "Shadows"); // 나무 해 그림자(나무보다 먼저 그린다)
+            var forest = new GameObject(name, typeof(RectTransform));
+            forest.transform.SetParent(parent, false);
+            var forestRect = (RectTransform)forest.transform;
+            forestRect.anchorMin = forestRect.anchorMax = forestRect.pivot = Vector2.zero;
+            if (siblingIndex >= 0)
+            {
+                shadows.SetSiblingIndex(siblingIndex);
+                forest.transform.SetSiblingIndex(siblingIndex + 1);
+            }
+            return (shadows, forest.AddComponent<BattleTreeSway>());
+        }
+
+        /// <summary>이미 심은 나무와 너무 가깝지 않으면 심는다 → 빼곡하지만 줄이 맞지 않는다.</summary>
+        private static void TryPlant(List<(Vector2 pos, float scale, float depth, bool side)> trees, Vector2 pos, float scale, float depth, bool side)
+        {
+            foreach (var other in trees)
+                if (Vector2.Distance(other.pos, pos) < TreeWidth * (scale + other.scale) * 0.5f * TreeSpacingFactor) return;
+            trees.Add((pos, scale, depth, side));
         }
 
         private static void AddTile(Transform parent, int x, int y, Sprite sprite, Color color)

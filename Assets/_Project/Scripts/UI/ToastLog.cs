@@ -32,6 +32,8 @@ namespace GN3.UI
         {
             if (string.IsNullOrEmpty(message)) return;
             if (mail) Mailbox.Post(MailKind.Notice, message);
+            // Play 밖(에디터 도구·테스트 코드)에서는 띄우지 않는다: 코루틴이 돌지 않아 사라지지 않는 알림이 편집 씬에 남는다.
+            if (!Application.isPlaying) return;
             // 날짜 건너뛰기 중엔 띄우지 않고 세기만 한다(끝나면 FlushHeld가 한 줄로). 우편함·하루 보고서엔 그대로 남는다.
             if (TimeAdvanceController.IsSkippingDays)
             {
@@ -45,14 +47,18 @@ namespace GN3.UI
         private static int _heldCount;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForPlaySession() => _heldCount = 0;
+        private static void ResetForPlaySession()
+        {
+            _heldCount = 0;
+            _instance = null; // 도메인 리로드가 꺼져 있어 지난 Play의 알림 판을 다시 쓰지 않게
+        }
 
         /// <summary>날짜 건너뛰기가 끝날 때: 그동안 모아 둔 알림 수를 한 줄로 띄운다("일주일 동안 알림 12건 · 우편함에서 확인").</summary>
         public static void FlushHeld(string period)
         {
             int count = _heldCount;
             _heldCount = 0;
-            if (count <= 0) return;
+            if (count <= 0 || !Application.isPlaying) return;
             if (_instance == null) _instance = Create();
             _instance.Add($"{period} 동안 알림 {count}건 · 우편함에서 확인");
         }

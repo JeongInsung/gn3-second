@@ -19,6 +19,7 @@ namespace GN3.Mercenaries
 
             // 현재 파티에 고용 중인 용병의 이름은 시장에 다시 등장하지 않는다(해고하면 다시 등장 가능).
             var excludedNames = new HashSet<string>(PlayerParty.Instance.Members.Select(m => m.Name));
+            excludedNames.UnionWith(GN3.Economy.RivalGuilds.RosterNames()); // 근처 길드 소속과도 겹치지 않게
 
             for (int i = 0; i < count; i++)
             {

@@ -10,7 +10,10 @@ namespace GN3.Combat
     {
         public Combatant Combatant { get; }
         public bool IsPlayerSide { get; }
+        /// <summary>자기 분대의 분대장(두 분대 전투면 둘). 지금 조종 중인 분대장은 FieldBattleSession.Leader.</summary>
         public bool IsLeader { get; }
+        /// <summary>분대(0=1분대, 1=2분대). 적과 한 분대 전투는 0.</summary>
+        public int Squad { get; internal set; }
         /// <summary>근접(전사·암살자·몬스터)은 붙어서, 원거리(궁수·마법사·힐러 등)는 떨어져서 때린다.</summary>
         public bool IsMelee { get; }
         public SkillBase Skill { get; }
@@ -31,6 +34,15 @@ namespace GN3.Combat
         /// <summary>공격 동작이 끝날 때까지 남은 시간. 그동안은 이동·새 공격·스킬을 하지 않고 밀려나지도 않는다.</summary>
         public float BusyTimer { get; internal set; }
         public bool IsBusy => BusyTimer > 0f;
+        /// <summary>기절(거목 엔트 포효)이 풀릴 때까지 남은 시간. 그동안은 생각·이동·공격·스킬을 하지 않고 공격 대기도 차지 않는다.</summary>
+        public float StunTimer { get; internal set; }
+        public bool IsStunned => StunTimer > 0f;
+        /// <summary>이번 기절의 전체 길이(남은 시간 막대가 가득에서 줄어들게 — 포효 2초·해머 1초).</summary>
+        public float StunTotal { get; internal set; }
+        /// <summary>공격 시작부터 그림에서 공격이 닿는 순간까지(전투 초). UI가 그림에 맞춰 넣는다 — 해머 기절을 닿는 순간에 건다(0이면 바로).</summary>
+        public float AttackHitDelay { get; set; }
+        /// <summary>뿌리박은 엔트만: 다음 기절 포효까지 남은 시간.</summary>
+        internal float RoarTimer { get; set; }
 
         /// <summary>기본공격 대상(살아 있는 동안 계속 붙는다).</summary>
         public FieldUnit Target { get; internal set; }
@@ -41,6 +53,8 @@ namespace GN3.Combat
 
         public bool IsAlive => Combatant.IsAlive;
         public float AttackRange => IsMelee ? FieldBattleSession.MeleeRange : FieldBattleSession.RangedRange;
+        /// <summary>몸 반지름: 사거리·밀어내기를 몸 가장자리부터 잰다. 보통 0, 큰 보스(거목 엔트)만 크다.</summary>
+        public float BodyRadius { get; internal set; }
         public float AttackReadyRatio => AttackInterval > 0f ? Math.Min(1f, AttackTimer / AttackInterval) : 1f;
 
         internal FieldUnit(Combatant combatant, bool isPlayerSide, bool isLeader, bool isMelee, SkillBase skill,
@@ -110,7 +124,11 @@ namespace GN3.Combat
         public List<Combatant> EnemyTeam { get; private set; }
         /// <summary>지금까지 나온 모든 라운드의 적(결과용).</summary>
         public List<Combatant> AllEnemies { get; } = new List<Combatant>();
-        public FieldUnit Leader { get; }
+        /// <summary>지금 플레이어가 조종 중인 분대장. 두 분대 전투면 SwitchLeader(Tab)로 바꾸고, 쓰러지면 다른 분대장에게 넘어간다.</summary>
+        public FieldUnit Leader { get; private set; }
+        /// <summary>분대장들(분대 순서). 한 분대 전투면 하나.</summary>
+        public List<FieldUnit> Leaders { get; } = new List<FieldUnit>();
+        public bool HasTwoSquads => Leaders.Count > 1;
         public List<BattleEvent> Log { get; } = new List<BattleEvent>();
         public int ActionCount { get; private set; }
         public float Elapsed { get; private set; }
@@ -146,24 +164,37 @@ namespace GN3.Combat
         /// <param name="playerMelee">아군 각자가 근접인지(playerTeam과 같은 순서).</param>
         /// <param name="playerSkills">아군 각자의 스킬(없으면 null).</param>
         /// <param name="enemyWaves">라운드별 적(순서대로). 체력은 라운드 사이에 그대로 이어진다.</param>
+        /// <param name="squads">아군 각자의 분대(0·1, playerTeam과 같은 순서). 없으면 전원 1분대.</param>
+        /// <param name="leaderIndex2">2분대 분대장 인덱스(두 분대 전투만, 없으면 -1).</param>
         public FieldBattleSession(List<Combatant> playerTeam, IList<bool> playerMelee, IList<SkillBase> playerSkills, int leaderIndex,
-            IList<List<Combatant>> enemyWaves, Random rng)
+            IList<List<Combatant>> enemyWaves, Random rng, IList<int> squads = null, int leaderIndex2 = -1)
         {
             PlayerTeam = playerTeam;
             _waves = enemyWaves.Select(w => w.Select(Strengthen).ToList()).ToList();
             _rng = rng;
 
             // 아군: 근접은 앞줄(오른쪽), 원거리는 뒷줄. 줄마다 위아래로 고르게 벌린다.
-            var front = Enumerable.Range(0, playerTeam.Count).Where(i => playerMelee[i]).ToList();
-            var back = Enumerable.Range(0, playerTeam.Count).Where(i => !playerMelee[i]).ToList();
+            // 두 분대면 1분대는 위쪽 절반, 2분대는 아래쪽 절반에 따로 선다.
+            int SquadAt(int i) => squads != null && i < squads.Count ? squads[i] : 0;
+            bool twoSquads = leaderIndex2 >= 0 && Enumerable.Range(0, playerTeam.Count).Any(i => SquadAt(i) == 1);
             var spawn = new Vector2[playerTeam.Count];
-            PlaceColumn(front, 400f, spawn);
-            PlaceColumn(back, 230f, spawn);
+            for (int s = 0; s < (twoSquads ? 2 : 1); s++)
+            {
+                var members = Enumerable.Range(0, playerTeam.Count).Where(i => !twoSquads || SquadAt(i) == s).ToList();
+                float top = twoSquads ? (s == 0 ? 70f : FieldHeight / 2f + 30f) : 70f;
+                float bottom = twoSquads ? (s == 0 ? FieldHeight / 2f - 30f : FieldHeight - 70f) : FieldHeight - 70f;
+                PlaceColumn(members.Where(i => playerMelee[i]).ToList(), 400f, spawn, top, bottom);
+                PlaceColumn(members.Where(i => !playerMelee[i]).ToList(), 230f, spawn, top, bottom);
+            }
             for (int i = 0; i < playerTeam.Count; i++)
             {
-                var unit = CreateUnit(playerTeam[i], true, i == leaderIndex, playerMelee[i], playerSkills[i], spawn[i]);
-                if (unit.IsLeader) Leader = unit;
+                bool leader = i == leaderIndex || (twoSquads && i == leaderIndex2);
+                var unit = CreateUnit(playerTeam[i], true, leader, playerMelee[i], playerSkills[i], spawn[i]);
+                unit.Squad = twoSquads ? SquadAt(i) : 0;
+                if (leader) Leaders.Add(unit);
             }
+            Leaders.Sort((a, b) => a.Squad.CompareTo(b.Squad));
+            Leader = Leaders.FirstOrDefault();
 
             SpawnEnemies(0);
             CombatResolver.RaiseBattleStart(PlayerTeam, EnemyTeam);
@@ -206,8 +237,8 @@ namespace GN3.Combat
 
         private static bool IsArcherSlot(int index, int count) => count >= 2 && index % 3 == 2;
 
-        /// <summary>활을 쓰지 않는 짐승·괴물 적(이름에 늑대·울프·버섯). 전투 그림도 그 종류로 나온다(BattleMonsterSprite.KindFor).</summary>
-        private static bool IsBeast(string name) => name != null && (name.Contains("늑대") || name.Contains("울프") || name.Contains("버섯"));
+        /// <summary>활을 쓰지 않는 짐승·괴물 적(이름에 늑대·울프·버섯·엔트). 전투 그림도 그 종류로 나온다(BattleMonsterSprite.KindFor).</summary>
+        private static bool IsBeast(string name) => name != null && (name.Contains("늑대") || name.Contains("울프") || name.Contains("버섯") || GN3.World.RegionInfo.IsEnt(name));
 
         /// <summary>멀리서 포자를 쏘는 적(독버섯).</summary>
         private static bool IsSporeShooter(string name) => name != null && name.Contains("버섯");
@@ -216,11 +247,29 @@ namespace GN3.Combat
         private static bool IsRider(string name) => name != null && name.Contains("늑대기수");
         private const float RiderFieldSpeedMultiplier = 1.6f; // 이동 약 160 → 260(암살자 212보다 빠르다)
 
+        /// <summary>제자리에 뿌리박은 보스(앤트킹·예전 거목 엔트): 걸어가지 않고 밀리지도 않는다. 손이 닿지 않는 적은 뿌리 내려찍기로 친다.</summary>
+        private static bool IsRooted(string name) => GN3.World.RegionInfo.IsEnt(name);
+
+        /// <summary>거목 엔트 몸 반지름: 그린 그림의 뿌리(발밑) 폭 약 260의 절반 — 근접 용병이 다리 안이 아니라 몸 가장자리에 선다
+        /// (그림 크기 BattleMonsterSprite Ent SizeScale과 같은 비율로 맞춘다. 2026-10-19 그림 1.4배 → 90에서 126).</summary>
+        private const float RootedBodyRadius = 126f;
+
+        /// <summary>몸 가장자리끼리의 거리(몸 반지름이 0이면 중심 거리와 같다).</summary>
+        private static float Gap(FieldUnit a, FieldUnit b) => Distance(a, b) - a.BodyRadius - b.BodyRadius;
+
+        /// <summary>u의 사거리 안에 t가 있는지(몸 가장자리 기준).</summary>
+        private static bool InReach(FieldUnit u, FieldUnit t) => Gap(u, t) <= u.AttackRange;
+
+        /// <summary>밀어내기에서 버티는 유닛: 공격 동작 중이거나 뿌리박은 적.</summary>
+        private static bool Anchored(FieldUnit u) => u.IsBusy || (!u.IsPlayerSide && IsRooted(u.Combatant.Name));
+
         private static Combatant Renamed(Combatant c, string name) => new Combatant(name, c.Stats, c.Passives);
 
         /// <summary>쓰러진 이번 라운드 적을 치우고 다음 라운드 적을 세운다. 아군은 서 있던 자리·체력 그대로.</summary>
         private void StartNextWave()
         {
+            CancelSlams(); // 앞 라운드 보스가 걸어 둔 예고는 없앤다
+            CancelRoars();
             var removed = Units.Where(u => !u.IsPlayerSide).ToList();
             foreach (var u in removed)
             {
@@ -255,18 +304,15 @@ namespace GN3.Combat
             return new Combatant(e.Name, stats, e.Passives);
         }
 
-        private void PlaceColumn(List<int> indices, float x, Vector2[] spawn)
+        private void PlaceColumn(List<int> indices, float x, Vector2[] spawn, float top, float bottom)
         {
             for (int k = 0; k < indices.Count; k++)
-                spawn[indices[k]] = new Vector2(x, Spread(k, indices.Count));
+                spawn[indices[k]] = new Vector2(x, Spread(k, indices.Count, top, bottom));
         }
 
-        /// <summary>count명을 필드 세로로 고르게 벌린 k번째 y.</summary>
-        private static float Spread(int k, int count)
-        {
-            float usable = FieldHeight - 2f * 70f;
-            return count <= 1 ? FieldHeight / 2f : 70f + usable * k / (count - 1);
-        }
+        /// <summary>count명을 top~bottom 사이에 고르게 벌린 k번째 y(한 명이면 가운데).</summary>
+        private static float Spread(int k, int count, float top = 70f, float bottom = FieldHeight - 70f) =>
+            count <= 1 ? (top + bottom) / 2f : top + (bottom - top) * k / (count - 1);
 
         private FieldUnit CreateUnit(Combatant c, bool playerSide, bool leader, bool melee, SkillBase skill, Vector2 position)
         {
@@ -274,11 +320,14 @@ namespace GN3.Combat
             float fill = (BaseFillPerSecond + c.Stats.MoveSpeed * FillPerSpeedPerSecond) * jitter;
             float interval = 100f / Math.Max(1f, fill) * AttackPace;
             if (!playerSide) interval /= EnemyAttackSpeedMultiplier;
+            if (!playerSide && IsRooted(c.Name)) interval /= RootedAttackSpeedMultiplier;
             float speed = BaseMoveSpeed + c.Stats.MoveSpeed * MoveSpeedPerStat;
             if (!playerSide && IsRider(c.Name)) speed *= RiderFieldSpeedMultiplier;
             var unit = new FieldUnit(c, playerSide, leader, melee, skill, position, speed, interval)
             {
                 AttackTimer = interval * (float)_rng.NextDouble() * StartingTimerJitter,
+                BodyRadius = !playerSide && IsRooted(c.Name) ? RootedBodyRadius : 0f,
+                RoarTimer = !playerSide && IsRooted(c.Name) ? RoarFirstDelay : 0f,
             };
             Units.Add(unit);
             _byCombatant[c] = unit;
@@ -293,6 +342,21 @@ namespace GN3.Combat
 
         // 플레이어가 직접 찍은 공격 대상(쫓아간다). 명령 없이 알아서 고른 대상은 사거리를 벗어나면 놓는다.
         private FieldUnit _orderedTarget;
+
+        /// <summary>두 분대 전투: 조종을 살아 있는 다른 분대장에게 넘긴다(넘겨준 분대장은 이제 AI). 바뀌었으면 true.</summary>
+        public bool SwitchLeader()
+        {
+            var next = Leaders.FirstOrDefault(l => l != Leader && l.IsAlive);
+            if (next == null || IsOver) return false;
+            if (Leader != null)
+            {
+                Leader.MoveGoal = null;
+                Leader.SkillTarget = null;
+            }
+            _orderedTarget = null;
+            Leader = next;
+            return true;
+        }
 
         /// <summary>필드의 한 지점으로 이동(공격·스킬 예약은 취소, 도착하면 사거리 안의 적을 알아서 때린다).</summary>
         public void OrderMove(Vector2 point)
@@ -356,6 +420,7 @@ namespace GN3.Combat
             var events = new List<BattleEvent>();
             if (!HasStarted || IsOver) return events;
             Elapsed += dt;
+            if (Leader != null && !Leader.IsAlive) SwitchLeader(); // 조종 중인 분대장이 쓰러지면 다른 분대장에게
 
             foreach (var u in Units)
             {
@@ -368,21 +433,32 @@ namespace GN3.Combat
                     u.BusyTimer = 0f;
                     continue;
                 }
-                u.AttackTimer = Math.Min(u.AttackInterval, u.AttackTimer + dt);
+                if (u.StunTimer > 0f) u.StunTimer = Math.Max(0f, u.StunTimer - dt); // 기절 중엔 공격 대기도 차지 않는다
+                else u.AttackTimer = Math.Min(u.AttackInterval, u.AttackTimer + dt);
                 if (u.Cooldown > 0f) u.Cooldown = Math.Max(0f, u.Cooldown - dt);
                 if (u.BusyTimer > 0f) u.BusyTimer = Math.Max(0f, u.BusyTimer - dt);
+                if (u.RoarTimer > 0f) u.RoarTimer = Math.Max(0f, u.RoarTimer - dt);
             }
 
             foreach (var u in Units.ToList())
             {
                 if (!u.IsAlive || IsOver) continue;
+                if (u.IsStunned) continue; // 기절: 아무것도 못 한다(명령은 남는다)
                 if (u.IsBusy) continue; // 공격 동작 중: 명령은 남겨 두고 동작이 끝난 뒤 이어서 한다
-                if (u.IsLeader) ThinkLeader(u);
+                if (!u.IsPlayerSide && IsRooted(u.Combatant.Name) && u.RoarTimer <= 0f)
+                {
+                    StartRoar(u); // 거목 엔트: 때가 되면 다른 행동 대신 기절 포효
+                    continue;
+                }
+                if (u == Leader) ThinkLeader(u); // 조종하지 않는 다른 분대장은 아군 AI
                 else if (u.IsPlayerSide) ThinkAlly(u);
                 else ThinkEnemy(u);
                 Act(u, dt, events);
             }
 
+            TickSlams(dt, events);
+            TickRoars(dt);
+            TickPendingStuns(dt);
             TickPoison(dt, events);
             Separate(dt);
             UpdateWaveBreak(dt);
@@ -427,11 +503,11 @@ namespace GN3.Combat
         {
             if (u.SkillTarget != null && !u.SkillTarget.IsAlive) u.SkillTarget = null;
             if (u.Target != null && !u.Target.IsAlive) u.Target = null;
-            if (u.Target != null && u.Target != _orderedTarget && Distance(u, u.Target) > u.AttackRange) u.Target = null;
+            if (u.Target != null && u.Target != _orderedTarget && !InReach(u, u.Target)) u.Target = null;
             if (u.Target == null && u.MoveGoal == null && u.SkillTarget == null)
             {
                 var near = Nearest(u, Enemies(u));
-                if (near != null && Distance(u, near) <= u.AttackRange) u.Target = near;
+                if (near != null && InReach(u, near)) u.Target = near;
             }
         }
 
@@ -443,7 +519,7 @@ namespace GN3.Combat
             if (u.Skill == null || u.Cooldown > 0f || u.SkillTarget != null) return;
 
             // 자동 전투와 같은 판단(SkillAI). 공격 스킬은 사거리 안의 적만, 치유는 어디 있든(다가가서 쓴다).
-            var inRange = Enemies(u).Where(e => Distance(u, e) <= u.AttackRange).Select(e => e.Combatant);
+            var inRange = Enemies(u).Where(e => InReach(u, e)).Select(e => e.Combatant);
             u.SkillTarget = UnitOf(SkillAI.ChooseTarget(u.Skill, PlayerTeam, inRange, u.Target?.Combatant));
         }
 
@@ -463,7 +539,7 @@ namespace GN3.Combat
         /// <summary>대상이 없거나 죽었거나, 아직 사거리 밖인데 더 가까운 적이 있으면 가장 가까운 적으로 바꾼다.</summary>
         private void RetargetNearest(FieldUnit u)
         {
-            if (u.Target != null && u.Target.IsAlive && Distance(u, u.Target) <= u.AttackRange) return;
+            if (u.Target != null && u.Target.IsAlive && InReach(u, u.Target)) return;
             var near = Nearest(u, Enemies(u));
             if (near == null) { u.Target = null; return; }
             if (u.Target == null || !u.Target.IsAlive || Distance(u, near) < Distance(u, u.Target) * 0.8f)
@@ -476,24 +552,30 @@ namespace GN3.Combat
             if (u.SkillTarget != null)
             {
                 var t = u.SkillTarget;
-                if (t == u || Distance(u, t) <= u.AttackRange)
+                if (t == u || InReach(u, t))
                 {
                     Face(u, t.Position);
                     UseSkill(u, t, events);
                 }
-                else MoveToward(u, t.Position, u.AttackRange * ApproachFraction, dt);
+                else MoveToward(u, t.Position, u.AttackRange * ApproachFraction + u.BodyRadius + t.BodyRadius, dt);
                 return;
             }
 
             if (u.Target != null)
             {
                 var t = u.Target;
-                if (Distance(u, t) <= u.AttackRange)
+                if (InReach(u, t))
                 {
                     Face(u, t.Position);
-                    if (u.AttackTimer >= u.AttackInterval) BasicAttack(u, t, events);
+                    if (u.AttackTimer >= u.AttackInterval) Attack(u, t, events, outOfReach: false);
                 }
-                else MoveToward(u, t.Position, u.AttackRange * ApproachFraction, dt);
+                else if (!u.IsPlayerSide && IsRooted(u.Combatant.Name))
+                {
+                    // 뿌리박은 거목 엔트: 다가가지 않고, 손이 닿지 않으면 뿌리 내려찍기로만 친다
+                    Face(u, t.Position);
+                    if (u.AttackTimer >= u.AttackInterval) Attack(u, t, events, outOfReach: true);
+                }
+                else MoveToward(u, t.Position, u.AttackRange * ApproachFraction + u.BodyRadius + t.BodyRadius, dt);
                 return;
             }
 
@@ -503,14 +585,60 @@ namespace GN3.Combat
             }
         }
 
-        private void BasicAttack(FieldUnit u, FieldUnit target, List<BattleEvent> events)
+        /// <summary>기본공격 차례. 거목 엔트는 순번(3타마다)에 뿌리 내려찍기 시전(예고 뒤 분출), 아니면 휘두르기 —
+        /// 손이 닿는 아군이 없으면 휘두를 차례는 뿌리를 모으며 그냥 넘긴다(멀리 있어도 3타마다 내려찍기는 온다).</summary>
+        private void Attack(FieldUnit u, FieldUnit target, List<BattleEvent> events, bool outOfReach)
+        {
+            var slam = u.IsPlayerSide ? null : u.Combatant.Passives.OfType<RootSlamPassive>().FirstOrDefault();
+            if (slam == null) { BasicAttack(u, target, events); return; }
+            if (slam.TryTriggerAoeAttack(_rng)) StartSlam(u);
+            else if (outOfReach) u.AttackTimer = 0f;
+            else
+            {
+                // 하강 해머 슬램(기본 공격): 순번은 방금 셌다 — 광역 판정을 다시 굴리지 않는다.
+                // 회피되지 않고 맞았으면(쓰러뜨리지 않았으면) 해머가 그림에서 닿는 순간 1초 기절.
+                int before = events.Count;
+                BasicAttack(u, target, events, allowAoe: false);
+                for (int i = before; i < events.Count; i++)
+                    if (events[i].Target == target.Combatant && !events[i].Evaded && !events[i].TargetDefeated)
+                        _pendingStuns.Add((target, u.AttackHitDelay));
+            }
+        }
+
+        /// <summary>거목 엔트 하강 해머 슬램에 맞으면 기절하는 시간(직접 전투만 — 자동 전투엔 시간 개념이 없다).</summary>
+        public const float HammerStunSeconds = 1f;
+
+        private readonly List<(FieldUnit target, float delay)> _pendingStuns = new List<(FieldUnit, float)>();
+
+        /// <summary>해머가 닿기를 기다리는 기절을 시간만큼 줄이고, 닿으면 건다.</summary>
+        private void TickPendingStuns(float dt)
+        {
+            for (int i = _pendingStuns.Count - 1; i >= 0; i--)
+            {
+                var (target, delay) = _pendingStuns[i];
+                delay -= dt;
+                if (delay > 0f) { _pendingStuns[i] = (target, delay); continue; }
+                _pendingStuns.RemoveAt(i);
+                if (target.IsAlive) ApplyStun(target, HammerStunSeconds);
+            }
+        }
+
+        /// <summary>기절을 건다(이미 기절 중이면 더 긴 쪽).</summary>
+        private static void ApplyStun(FieldUnit unit, float seconds)
+        {
+            if (seconds <= unit.StunTimer) return;
+            unit.StunTimer = seconds;
+            unit.StunTotal = seconds;
+        }
+
+        private void BasicAttack(FieldUnit u, FieldUnit target, List<BattleEvent> events, bool allowAoe = true)
         {
             foreach (var passive in u.Combatant.Passives)
                 passive.OnRoundStart(u.Combatant, ++ActionCount, _rng);
 
             var targetTeam = u.IsPlayerSide ? EnemyTeam : PlayerTeam;
             var produced = new List<BattleEvent>();
-            if (u.Combatant.Passives.Any(p => p.TryTriggerAoeAttack(_rng)))
+            if (allowAoe && u.Combatant.Passives.Any(p => p.TryTriggerAoeAttack(_rng)))
             {
                 foreach (var e in targetTeam.Where(c => c.IsAlive).ToList())
                     produced.Add(CombatResolver.ResolveAttack(u.Combatant, e, ActionCount, targetTeam, _rng));
@@ -523,6 +651,165 @@ namespace GN3.Combat
             u.BusyTimer = u.AttackAnimSeconds;
             events.AddRange(produced);
             Log.AddRange(produced);
+        }
+
+        // ---------- 거목 엔트 뿌리 내려찍기(예고 → 분출) ----------
+
+        /// <summary>예고 시간(전투 초): 붉은 범위가 차오르는 동안 분대장은 빠져나갈 수 있다.
+        /// 2026-10-19 1.6 → 2.6(사용자 요청: 보고 반응해 피할 여유).</summary>
+        public const float SlamTelegraphSeconds = 2.6f;
+        /// <summary>거목 엔트는 공격 간격을 이만큼 짧게(이동 속도 능력치가 낮아 약 2.6초였다 → 약 1.7초). 2026-10-19 사용자 요청.</summary>
+        private const float RootedAttackSpeedMultiplier = 1.5f;
+        /// <summary>범위 반지름. 화면의 붉은 원과 같은 크기다. 2026-10-19 70 → 110(사용자 요청: 범위를 더 크게).</summary>
+        public const float SlamZoneRadius = 110f;
+        /// <summary>한 번에 솟는 범위 수 — 아군을 노리지 않고 엔트 앞(아군 쪽) 판 위 무작위 자리에 흩어 놓는다(2026-10-19 사용자 요청).</summary>
+        public const int SlamZoneCount = 6;
+        private const float SlamZoneSpacing = 1.5f; // 범위 중심끼리 반지름의 이 배보다 가깝지 않게(고루 흩어지게)
+        private const int SlamZoneTries = 30;
+        private const float SlamRecoverSeconds = 0.5f; // 분출 뒤 내려찍기 동작이 끝날 때까지(그동안 다음 공격 없음)
+
+        private readonly List<RootSlamCast> _slams = new List<RootSlamCast>();
+
+        /// <summary>뿌리 내려찍기 예고가 시작됐다(UI가 붉은 범위를 그리고, 분출 순간 가시를 띄운다).</summary>
+        public event Action<RootSlamCast> OnSlamTelegraph;
+
+        /// <summary>시전: 엔트 앞 판 위 무작위 자리에 범위 SlamZoneCount개를 정해 두고 예고 시간 뒤에 분출한다(아군을 노리지 않는다).</summary>
+        private void StartSlam(FieldUnit u)
+        {
+            var zones = RandomSlamZones(u);
+            var cast = new RootSlamCast(u, zones, SlamTelegraphSeconds);
+            _slams.Add(cast);
+            u.AttackTimer = 0f;
+            u.BusyTimer = SlamTelegraphSeconds + SlamRecoverSeconds; // 예고 중엔 휘두르지 않는다(LastWasSlam도 분출까지 유지)
+            OnSlamTelegraph?.Invoke(cast);
+        }
+
+        /// <summary>엔트 앞(아군 쪽 — 판 왼쪽 끝부터 엔트 몸 앞까지) 판 안에 범위 중심을 고루 흩어 고른다.
+        /// 서로 SlamZoneSpacing × 반지름보다 가까우면 다시 고르고, SlamZoneTries번 안에 못 찾으면 마지막 자리를 쓴다.</summary>
+        private Vector2[] RandomSlamZones(FieldUnit caster)
+        {
+            const float r = SlamZoneRadius;
+            float minX = EdgeMargin + r, maxX = Math.Max(minX, caster.Position.X - caster.BodyRadius - r);
+            float minY = r, maxY = FieldHeight - r;
+            var zones = new Vector2[SlamZoneCount];
+            for (int i = 0; i < zones.Length; i++)
+            {
+                Vector2 p = default;
+                for (int t = 0; t < SlamZoneTries; t++)
+                {
+                    p = new Vector2(minX + (float)_rng.NextDouble() * (maxX - minX), minY + (float)_rng.NextDouble() * (maxY - minY));
+                    bool apart = true;
+                    for (int j = 0; j < i; j++)
+                        if (Vector2.Distance(p, zones[j]) < r * SlamZoneSpacing) { apart = false; break; }
+                    if (apart) break;
+                }
+                zones[i] = p;
+            }
+            return zones;
+        }
+
+        private void TickSlams(float dt, List<BattleEvent> events)
+        {
+            for (int i = _slams.Count - 1; i >= 0; i--)
+            {
+                var cast = _slams[i];
+                if (!cast.Caster.IsAlive || IsOver)
+                {
+                    cast.State = RootSlamCast.Phase.Cancelled;
+                    _slams.RemoveAt(i);
+                    continue;
+                }
+                cast.Remaining = Math.Max(0f, cast.Remaining - dt);
+                if (cast.Remaining > 0f) continue;
+                _slams.RemoveAt(i);
+                Erupt(cast, events);
+            }
+        }
+
+        /// <summary>분출: 그 순간 범위 안(몸 반지름 포함)에 서 있는 아군만 맞는다.</summary>
+        private void Erupt(RootSlamCast cast, List<BattleEvent> events)
+        {
+            var caster = cast.Caster.Combatant;
+            foreach (var passive in caster.Passives)
+                passive.OnRoundStart(caster, ++ActionCount, _rng);
+            var produced = new List<BattleEvent>();
+            foreach (var p in Units.Where(p => p.IsPlayerSide && p.IsAlive).ToList())
+                if (cast.Zones.Any(z => Vector2.Distance(z, p.Position) <= SlamZoneRadius + p.BodyRadius))
+                    produced.Add(CombatResolver.ResolveAttack(caster, p.Combatant, ActionCount, PlayerTeam, _rng));
+            cast.State = RootSlamCast.Phase.Erupted;
+            cast.HitCount = produced.Count;
+            events.AddRange(produced);
+            Log.AddRange(produced);
+        }
+
+        private void CancelSlams()
+        {
+            foreach (var cast in _slams) cast.State = RootSlamCast.Phase.Cancelled;
+            _slams.Clear();
+        }
+
+        // ---------- 거목 엔트 기절 포효(예고 → 기절) ----------
+
+        /// <summary>전투 시작 뒤 첫 포효까지, 그 뒤 포효 간격(전투 초).</summary>
+        public const float RoarFirstDelay = 8f, RoarInterval = 15f;
+        /// <summary>예고(엔트 앞쪽 큰 붉은 반원) 시간. 이 안에 범위 밖(앞쪽 끝 너머나 엔트 뒤)으로 나가면 기절하지 않는다.
+        /// 2026-10-19 범위를 크게 하며 2.0 → 2.6(내려찍기와 같게 — 용병 이동 약 140~180/초로 앞쪽 끝까지 약 410을 빠져나갈 수 있게),
+        /// 같은 날 2.6 → 3.6(사용자 요청: 포효 준비 시간을 더 길게).</summary>
+        public const float RoarTelegraphSeconds = 3.6f;
+        /// <summary>범위: 엔트가 바라보는 쪽(용병 쪽) 반원 — 중심에서 이 거리(+ 상대 몸 반지름) 안이고 엔트보다 앞쪽.
+        /// 근접(중심 약 208)은 물론 사거리 끝에서 쏘는 원거리(약 480~546)까지 걸리고, 판 세로 전체를 덮는다. 엔트 뒤쪽은 안전.
+        /// 2026-10-19 원 330 → 앞쪽 반원 620(사용자: 원거리가 안 맞는다).</summary>
+        public const float RoarRadius = 620f;
+        public const float RoarStunSeconds = 2f;
+        // 포효를 마치는 동작(그동안 다른 행동 없음): 터진 뒤 입 벌린 장 유지(둘째 포효 소리의 큰 부분 1.23초 × 전투 배속 0.7 ≈ 0.86)
+        // + 입을 다무는 2장(0.25) — 포효 소리가 끝나기 전에 휘두르기로 동작이 끊기지 않게(BossRoarAudio.Stun, BattleUIController.RoarTelegraph).
+        private const float RoarRecoverSeconds = 1.2f;
+
+        private readonly List<RoarCast> _roars = new List<RoarCast>();
+
+        /// <summary>기절 포효 예고가 시작됐다(UI가 큰 붉은 원을 그리고, 터지는 순간 충격파·기절 표시).</summary>
+        public event Action<RoarCast> OnRoarTelegraph;
+
+        private void StartRoar(FieldUnit u)
+        {
+            var cast = new RoarCast(u, u.Position, u.Facing, RoarRadius, RoarTelegraphSeconds); // 바라보는 쪽(대상 쪽) 반원으로 고정
+            _roars.Add(cast);
+            u.RoarTimer = RoarInterval;
+            u.BusyTimer = RoarTelegraphSeconds + RoarRecoverSeconds; // 예고 중엔 다른 공격 없음
+            OnRoarTelegraph?.Invoke(cast);
+        }
+
+        private void TickRoars(float dt)
+        {
+            for (int i = _roars.Count - 1; i >= 0; i--)
+            {
+                var cast = _roars[i];
+                if (!cast.Caster.IsAlive || IsOver)
+                {
+                    cast.State = RoarCast.Phase.Cancelled;
+                    _roars.RemoveAt(i);
+                    continue;
+                }
+                cast.Remaining = Math.Max(0f, cast.Remaining - dt);
+                if (cast.Remaining > 0f) continue;
+                _roars.RemoveAt(i);
+                // 터짐: 그 순간 앞쪽 반원 안(몸 반지름 포함)에 있는 아군은 기절(이미 기절이면 더 긴 쪽)
+                int stunned = 0;
+                foreach (var p in Units.Where(p => p.IsPlayerSide && p.IsAlive))
+                    if (cast.Contains(p.Position, p.BodyRadius))
+                    {
+                        ApplyStun(p, RoarStunSeconds);
+                        stunned++;
+                    }
+                cast.StunnedCount = stunned;
+                cast.State = RoarCast.Phase.Erupted;
+            }
+        }
+
+        private void CancelRoars()
+        {
+            foreach (var cast in _roars) cast.State = RoarCast.Phase.Cancelled;
+            _roars.Clear();
         }
 
         private void UseSkill(FieldUnit u, FieldUnit target, List<BattleEvent> events)
@@ -577,16 +864,18 @@ namespace GN3.Combat
                 var b = alive[j];
                 var delta = b.Position - a.Position;
                 float dist = delta.Length();
-                if (dist >= SeparationRadius) continue;
+                float radius = SeparationRadius + a.BodyRadius + b.BodyRadius; // 큰 보스 둘레엔 더 멀리 선다
+                if (dist >= radius) continue;
                 var dir = dist > 0.01f ? delta / dist : new Vector2((float)_rng.NextDouble() - 0.5f, (float)_rng.NextDouble() - 0.5f);
                 if (dir.LengthSquared() < 0.0001f) dir = Vector2.UnitY;
                 dir = Vector2.Normalize(dir);
-                // 공격 동작 중인 쪽은 밀리지 않고 상대가 그만큼 더 비켜선다(둘 다 동작 중이면 그대로).
-                if (a.IsBusy && b.IsBusy) continue;
-                float share = a.IsBusy || b.IsBusy ? 1f : 0.5f;
-                var push = dir * ((SeparationRadius - dist) * share * strength);
-                if (!a.IsBusy) a.Position = ClampToField(a.Position - push);
-                if (!b.IsBusy) b.Position = ClampToField(b.Position + push);
+                // 공격 동작 중인 쪽·뿌리박은 엔트는 밀리지 않고 상대가 그만큼 더 비켜선다(둘 다 버티면 그대로).
+                bool aHolds = Anchored(a), bHolds = Anchored(b);
+                if (aHolds && bHolds) continue;
+                float share = aHolds || bHolds ? 1f : 0.5f;
+                var push = dir * ((radius - dist) * share * strength);
+                if (!aHolds) a.Position = ClampToField(a.Position - push);
+                if (!bHolds) b.Position = ClampToField(b.Position + push);
             }
         }
 
@@ -611,5 +900,60 @@ namespace GN3.Combat
         }
 
         public static float Distance(FieldUnit a, FieldUnit b) => Vector2.Distance(a.Position, b.Position);
+    }
+
+    /// <summary>거목 엔트의 뿌리 내려찍기 한 번: 시전 순간 정한 범위들(중심 = 엔트 앞 무작위 자리, 반지름 SlamZoneRadius)과 남은 예고 시간.
+    /// 상태는 FieldBattleSession만 바꾸고, UI는 읽어서 붉은 범위·분출 가시를 그린다.</summary>
+    public class RootSlamCast
+    {
+        public enum Phase { Pending, Erupted, Cancelled }
+
+        public FieldUnit Caster { get; }
+        public Vector2[] Zones { get; }
+        public float Total { get; }
+        public float Remaining { get; internal set; }
+        public Phase State { get; internal set; } = Phase.Pending;
+        /// <summary>분출 때 맞은 아군 수.</summary>
+        public int HitCount { get; internal set; }
+        /// <summary>예고가 얼마나 찼는지 0 → 1.</summary>
+        public float Progress => Total > 0f ? 1f - Remaining / Total : 1f;
+
+        public RootSlamCast(FieldUnit caster, Vector2[] zones, float seconds)
+        {
+            Caster = caster;
+            Zones = zones;
+            Total = Remaining = seconds;
+        }
+    }
+
+    /// <summary>거목 엔트의 기절 포효 한 번: 엔트가 바라보는 쪽 반원(중심·방향·반지름)과 남은 예고 시간. 터지면 반원 안 아군이 기절한다.</summary>
+    public class RoarCast
+    {
+        public enum Phase { Pending, Erupted, Cancelled }
+
+        public FieldUnit Caster { get; }
+        public Vector2 Center { get; }
+        /// <summary>반원이 펼쳐지는 쪽: −1 왼쪽, +1 오른쪽(시전 순간 엔트가 보던 쪽).</summary>
+        public float Facing { get; }
+        public float Radius { get; }
+        public float Total { get; }
+        public float Remaining { get; internal set; }
+        public Phase State { get; internal set; } = Phase.Pending;
+        /// <summary>터질 때 기절한 아군 수.</summary>
+        public int StunnedCount { get; internal set; }
+        public float Progress => Total > 0f ? 1f - Remaining / Total : 1f;
+
+        public RoarCast(FieldUnit caster, Vector2 center, float facing, float radius, float seconds)
+        {
+            Caster = caster;
+            Center = center;
+            Facing = facing >= 0f ? 1f : -1f;
+            Radius = radius;
+            Total = Remaining = seconds;
+        }
+
+        /// <summary>이 자리(몸 반지름 포함)가 반원 안인가: 반지름 안이고, 엔트 중심보다 바라보는 쪽(곧은 변 위 포함).</summary>
+        public bool Contains(Vector2 position, float bodyRadius) =>
+            Vector2.Distance(Center, position) <= Radius + bodyRadius && (position.X - Center.X) * Facing >= 0f;
     }
 }

@@ -53,6 +53,83 @@ namespace GN3.Battle
             if (go != null) Object.Destroy(go);
         }
 
+        /// <summary>포효 충격파: 중심에서 반지름까지 빠르게 퍼지며 흐려지는 굵은 고리(필드 좌표, 전투 배속을 따른다).</summary>
+        public static IEnumerator Shockwave(RectTransform layer, Vector2 center, float radius, Color color)
+        {
+            var go = new GameObject("Shockwave", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(layer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.anchoredPosition = center;
+            var image = go.GetComponent<Image>();
+            image.sprite = BattlePlaceholderSprites.Ring;
+            image.raycastTarget = false;
+
+            const float duration = 0.5f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                if (go == null) yield break;
+                float k = t / duration;
+                float size = Mathf.Lerp(radius * 0.4f, radius * 2f, 1f - (1f - k) * (1f - k));
+                rect.sizeDelta = new Vector2(size, size);
+                image.color = new Color(color.r, color.g, color.b, 1f - k);
+                yield return null;
+            }
+            if (go != null) Object.Destroy(go);
+        }
+
+        /// <summary>기절 표시: 머리 위에서 빙빙 도는 노란 별 3개. 유닛 루트(발 기준)에 y 높이로 단다(처음엔 꺼짐).
+        /// 이름표처럼 BattleUnitLabels가 빛 막 위로 옮기도록 유닛을 만들 때 미리 만든다. 켜고 끄기는 SetActive.</summary>
+        public static GameObject CreateStunStars(Transform unitRoot, float y)
+        {
+            var go = new GameObject("StunStars", typeof(RectTransform), typeof(BattleStunStars));
+            go.transform.SetParent(unitRoot, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = new Vector2(0f, y);
+            rect.sizeDelta = new Vector2(84f, 30f);
+            var stars = new Text[3];
+            for (int i = 0; i < stars.Length; i++)
+            {
+                var star = new GameObject("Star", typeof(RectTransform), typeof(Text), typeof(Outline));
+                star.transform.SetParent(go.transform, false);
+                var text = stars[i] = star.GetComponent<Text>();
+                text.text = "★";
+                text.font = UITheme.BoldFont;
+                text.fontSize = 24;
+                text.alignment = TextAnchor.MiddleCenter;
+                text.color = new Color(1f, 0.88f, 0.3f);
+                text.raycastTarget = false;
+                ((RectTransform)star.transform).sizeDelta = new Vector2(30f, 30f);
+                star.GetComponent<Outline>().effectColor = new Color(0.3f, 0.15f, 0f, 0.9f);
+            }
+
+            // 남은 기절 시간 막대(별 아래, 노란색이 왼쪽으로 줄어든다)
+            var back = new GameObject("StunBar", typeof(RectTransform), typeof(Image));
+            back.transform.SetParent(go.transform, false);
+            var backRect = (RectTransform)back.transform;
+            backRect.anchorMin = backRect.anchorMax = backRect.pivot = new Vector2(0.5f, 0.5f);
+            backRect.anchoredPosition = new Vector2(0f, -16f);
+            backRect.sizeDelta = new Vector2(56f, 6f);
+            var backImage = back.GetComponent<Image>();
+            backImage.color = new Color(0.12f, 0.08f, 0.03f, 0.85f);
+            backImage.raycastTarget = false;
+            var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fill.transform.SetParent(back.transform, false);
+            var fillRect = (RectTransform)fill.transform;
+            fillRect.anchorMin = Vector2.zero;
+            fillRect.anchorMax = Vector2.one;
+            fillRect.offsetMin = new Vector2(1f, 1f);
+            fillRect.offsetMax = new Vector2(-1f, -1f);
+            var fillImage = fill.GetComponent<Image>();
+            fillImage.color = new Color(1f, 0.86f, 0.3f);
+            fillImage.raycastTarget = false;
+
+            go.GetComponent<BattleStunStars>().Init(stars, fillRect);
+            go.SetActive(false);
+            return go;
+        }
+
         /// <summary>맞은 자리에서 커지며 사라지는 고리.</summary>
         public static IEnumerator HitSpark(RectTransform layer, Vector2 position, Color color)
         {
@@ -84,30 +161,59 @@ namespace GN3.Battle
         private static void ResetForPlaySession()
         {
             _shaking = false;
+            _shakeStrength = 0f;
+            _shakeOrigins = null;
+            _shakeTargetsRef = null;
             _vignette = _leaf = _dash = null;
             _barPlate = _barPlateGold = null; // Sprite.Create로 만든 스프라이트는 Play가 끝나면 파괴된다
         }
 
         /// <summary>대상들을 함께 흔들고 원래 자리로 돌려놓는다(판과 바깥 잔디를 같이 흔들어 이음새가 벌어지지 않게). 이미 흔드는 중이면 건너뛴다.</summary>
-        public static IEnumerator Shake(RectTransform[] targets, float strength, float duration)
+        /// <remarks>
+        /// 이미 흔드는 중이면 약한 흔들림은 건너뛰고, 더 센 흔들림은 이어받는다(원래 자리는 처음 흔들기 시작할 때 것을 그대로 쓴다 — 자리가 어긋나지 않게).
+        /// rumble이면 매 프레임 무작위 대신 부드러운 잡음으로 묵직하게 우르릉 떨고 천천히 잦아든다(보스 포효).
+        /// </remarks>
+        public static IEnumerator Shake(RectTransform[] targets, float strength, float duration, bool rumble = false)
         {
-            if (_shaking) yield break;
+            // 씬이 바뀌며 흔들던 코루틴이 끊겼으면(대상 배열이 다르다) 흔드는 중이 아닌 것으로 본다
+            if (_shaking && _shakeTargetsRef != targets) _shaking = false;
+            if (_shaking && strength <= _shakeStrength) yield break;
+            int token = ++_shakeToken;
+            if (!_shaking)
+            {
+                _shakeTargetsRef = targets;
+                _shakeOrigins = new Vector2[targets.Length];
+                for (int i = 0; i < targets.Length; i++)
+                    if (targets[i] != null) _shakeOrigins[i] = targets[i].anchoredPosition;
+            }
+            var origins = _shakeOrigins;
             _shaking = true;
-            var origins = new Vector2[targets.Length];
-            for (int i = 0; i < targets.Length; i++)
-                if (targets[i] != null) origins[i] = targets[i].anchoredPosition;
+            _shakeStrength = strength;
+            float seed = Random.value * 100f;
             for (float t = 0f; t < duration; t += Time.deltaTime)
             {
-                float fade = 1f - t / duration;
-                var offset = Random.insideUnitCircle * strength * fade;
+                if (token != _shakeToken) yield break; // 더 센 흔들림이 이어받았다
+                float k = t / duration;
+                float fade = rumble ? 1f - k * k : 1f - k; // 우르릉은 오래 버티다 끝에 잦아든다
+                _shakeStrength = strength * fade;
+                var offset = rumble
+                    ? new Vector2(Mathf.PerlinNoise(seed, t * 22f) - 0.5f, Mathf.PerlinNoise(seed + 7f, t * 22f) - 0.5f) * (2f * strength * fade)
+                    : Random.insideUnitCircle * strength * fade;
                 for (int i = 0; i < targets.Length; i++)
-                    if (targets[i] != null) targets[i].anchoredPosition = origins[i] + offset;
+                    if (targets[i] != null && i < origins.Length) targets[i].anchoredPosition = origins[i] + offset;
                 yield return null;
             }
+            if (token != _shakeToken) yield break;
             for (int i = 0; i < targets.Length; i++)
-                if (targets[i] != null) targets[i].anchoredPosition = origins[i];
+                if (targets[i] != null && i < origins.Length) targets[i].anchoredPosition = origins[i];
             _shaking = false;
+            _shakeStrength = 0f;
         }
+
+        private static int _shakeToken;
+        private static float _shakeStrength;
+        private static Vector2[] _shakeOrigins;
+        private static RectTransform[] _shakeTargetsRef;
 
         // ---------- 배치 구역 ----------
 
@@ -221,6 +327,50 @@ namespace GN3.Battle
         }
 
         // ---------- 독 ----------
+
+        /// <summary>위험 범위(땅 위 붉은 원, 판정 반지름 그대로). layer는 유닛 아래 땅 층, center는 필드 좌표.
+        /// halfFacing이 0이 아니면 그쪽(−1 왼쪽, +1 오른쪽) 반원만 — 거목 엔트 기절 포효(RoarCast.Contains와 같은 모양).</summary>
+        public static BattleDangerZone CreateDangerZone(RectTransform layer, Vector2 center, float radius, float halfFacing = 0f)
+        {
+            var go = new GameObject("DangerZone", typeof(RectTransform), typeof(BattleDangerZone));
+            go.transform.SetParent(layer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = center;
+            rect.sizeDelta = new Vector2(radius * 2f, radius * 2f);
+            var zone = go.GetComponent<BattleDangerZone>();
+            zone.Build(halfFacing);
+            return zone;
+        }
+
+        private const float RootSpikeSize = 260f;    // 가시 칸 크기(그림은 칸 아래 15% 위에 서 있다). 범위 반지름 110(지름 220)을 채우게 150 → 260
+        private const float RootSpikeBaseline = 0.15f; // root_spikes 시트의 발밑 높이(칸 비율) — 장마다 여기에 맞춰 구웠다
+        private const float RootSpikeFps = 16f;
+
+        /// <summary>거목 엔트의 뿌리 내려찍기: 범위 한가운데 땅에서 뿌리 가시가 솟았다 들어간다(root_spikes 8장 한 번).</summary>
+        public static IEnumerator RootSpikes(RectTransform layer, Vector2 feet)
+        {
+            var frames = BattleMonsterSprite.SheetFrames("root_spikes");
+            if (frames == null) yield break;
+            var go = new GameObject("RootSpikes", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(layer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.sizeDelta = new Vector2(RootSpikeSize, RootSpikeSize);
+            rect.anchoredPosition = feet - new Vector2(0f, RootSpikeSize * RootSpikeBaseline);
+            var image = go.GetComponent<Image>();
+            image.raycastTarget = false;
+            for (float t = 0f; ; t += Time.deltaTime) // 전투 배속·일시정지를 따른다
+            {
+                int f = Mathf.FloorToInt(t * RootSpikeFps);
+                if (go == null || f >= frames.Length) break;
+                image.sprite = frames[f];
+                yield return null;
+            }
+            if (go != null) Object.Destroy(go);
+        }
 
         /// <summary>독 피해 한 번: 초록 거품 몇 개가 몸에서 피어올라 사라진다.</summary>
         public static IEnumerator PoisonPuff(RectTransform layer, Vector2 position)
@@ -579,6 +729,7 @@ namespace GN3.Battle
         Wolf,
         Mushroom,
         GoblinRider,
+        Ent,
     }
 
     /// <summary>
@@ -613,6 +764,15 @@ namespace GN3.Battle
             public float DieFps;
             public float FeetOffset = DefaultFeetOffset; // 발이 원본 칸 아래에서 떠 있는 비율(시트마다 다르다)
             public float SizeScale = 1f;                  // 전투 화면 크기 배율(BattleUIController의 MonsterSize에 곱한다)
+            public string Slam, Intro;                    // 두 번째 공격(광역)·등장 동작(없는 종류가 대부분)
+            public string Portrait;                       // 보스 등장 컷인 그림(한 장, BossCutIn). 없으면 컷인 없이 배너만
+            public string Roar;                           // 기절 포효(거목 엔트 붉은 눈 포효). RoarPeakFrame = 입을 크게 벌리는 장(기절이 터지는 순간)
+            public int RoarFrames, RoarPeakFrame;
+            public float RoarFps;
+            public int SlamFrames, SlamHitFrame, IntroFrames;
+            public float SlamFps, IntroFps;
+            // 포효 소리에 맞춰 입을 가장 크게 벌린 장들을 번갈아 유지하는 구간(장 번호, 둘 다 포함). From = 소리가 크게 터지는 순간에 닿는 장
+            public int IntroHoldFrom, IntroHoldTo, RoarHoldFrom, RoarHoldTo;
         }
 
         private static readonly Dictionary<MonsterKind, Sheets> Kinds = new Dictionary<MonsterKind, Sheets>
@@ -661,14 +821,31 @@ namespace GN3.Battle
                 IdleFps = 8f, WalkFps = 16f, AttackFrames = 8, AttackHitFrame = 3, AttackFps = 14f, DieFrames = 8, DieFps = 10f, // 걷기는 빨리 달려 16fps
                 FeetOffset = 0.02f, SizeScale = 1f / 0.85f,
             },
+            // 보스 거목 엔트(엔트 킹, 2026-10-19 "앤트 보스 2" 그림 — 모든 동작이 하체를 땅에 고정한 12장 4×3 시트):
+            // 대기 12장 · 기본 공격 = 망치 강타 12장(주먹을 머리 위로 → 7번째 장에 땅을 강타, 흙 튐 — 맞으면 1초 기절, FieldBattleSession)
+            // · 뿌리 내려찍기 = 한 손 내려치기 12장(팔을 치켜들어 휘두르고 → 9번째 장에 손바닥으로 땅을 친다 — 예고 원이 다 찬 순간)
+            // · 등장 포효 12장 · 기절 포효 12장 · 쓰러짐 12장(고개를 떨구고 선 채로 시든다, 잎이 진다).
+            // 걷지 않는 보스(제자리에 뿌리박음)라 걷기도 대기 시트. 대기 몸 키를 예전과 같게 구워(--shrink 0.832) 화면 크기·발밑은 그대로.
+            [MonsterKind.Ent] = new Sheets
+            {
+                Idle = "ent_idle", Walk = "ent_idle", Attack = "ent_attack", Die = "ent_die",
+                IdleFps = 6f, WalkFps = 6f, AttackFrames = 12, AttackHitFrame = 6, AttackFps = 14f, DieFrames = 12, DieFps = 8f, // 망치 강타: 타격 0.43초 · 동작 0.86초
+                Slam = "ent_slam", SlamFrames = 12, SlamHitFrame = 8, SlamFps = 12f, // 내려치기: 땅 치는 장까지 0.67초
+                Intro = "ent_roar", IntroFrames = 12, IntroFps = 9f, IntroHoldFrom = 6, IntroHoldTo = 7, // 7·8번째 장: 팔 펼치고 입 크게
+                Portrait = "ent_portrait", // 레트로 픽셀 나무 괴물(배경 투명, 오른쪽 위를 노려봄)
+                // 기절 포효: 3번째 장에 눈이 붉어짐 → 7번째 장에 입을 크게 벌리고 팔을 펼친다(그 순간 기절, 0.5초).
+                Roar = "ent_roar_stun", RoarFrames = 12, RoarPeakFrame = 6, RoarFps = 12f, RoarHoldFrom = 6, RoarHoldTo = 7,
+                FeetOffset = 0.033f, SizeScale = 1f / 0.7f * 1.5f * 1.4f, // 발밑·크기: 예전 굽기(0.7배)에 맞춘 값 그대로 — 새 그림을 같은 키·발밑으로 구웠다(용병 키의 약 4배, 몸 반지름은 FieldBattleSession.RootedBodyRadius)
+            },
         };
 
-        /// <summary>적 이름으로 그림 종류: 늑대기수는 늑대 탄 고블린, 늑대 계열(늑대·울프)은 늑대, 버섯은 독버섯,
+        /// <summary>적 이름으로 그림 종류: 늑대기수는 늑대 탄 고블린, 늑대 계열(늑대·울프)은 늑대, 버섯은 독버섯, 엔트는 거목 엔트,
         /// 그 밖엔 근접 검 고블린 / 원거리 고블린 궁수.</summary>
         public static MonsterKind KindFor(string name, bool melee) =>
             name != null && name.Contains("늑대기수") ? MonsterKind.GoblinRider // 이름에 "늑대"도 있어 늑대보다 먼저
             : IsWolf(name) ? MonsterKind.Wolf
             : name != null && name.Contains("버섯") ? MonsterKind.Mushroom
+            : GN3.World.RegionInfo.IsEnt(name) ? MonsterKind.Ent // 앤트킹(예전 저장은 거목 엔트)
             : melee ? MonsterKind.Sword : MonsterKind.Archer;
 
         private const float GoblinSizeScale = 0.8f; // 고블린(검·궁수)은 용병보다 조금 작게 — 예전 크기는 커 보였다
@@ -687,7 +864,10 @@ namespace GN3.Battle
         private Image _image;
         private Sheets _sheets = Kinds[MonsterKind.Sword];
         private float _time;
-        private float _attackTime = -1f; // 0 이상이면 공격 재생 중
+        private float _attackTime = -1f; // 0 이상이면 공격(또는 내려찍기·등장) 재생 중
+        private string _action;          // 지금 재생 중인 동작 시트(공격·내려찍기·등장)
+        private int _actionFrames;
+        private float _actionFps;
         private float _dieTime;          // 쓰러진 뒤 흐른 시간
         private bool _moving;
         private bool _dead;
@@ -696,6 +876,18 @@ namespace GN3.Battle
 
         /// <summary>검 고블린 숨쉬기 8장(몬스터 그림이 있는지 확인용). 시트가 없으면 null.</summary>
         public static Sprite[] Frames() => Slice(Kinds[MonsterKind.Sword].Idle);
+
+        /// <summary>보스 등장 컷인 그림(종류마다 한 장). 없으면 null.</summary>
+        public static Sprite PortraitFor(MonsterKind kind)
+        {
+            string name = Kinds[kind].Portrait;
+            if (name == null) return null;
+            var texture = Resources.Load<Texture2D>(Folder + name);
+            return texture == null ? null : Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+        }
+
+        /// <summary>같은 폴더의 4×2 이펙트 시트(뿌리 가시 등)를 8장으로. 없으면 null.</summary>
+        public static Sprite[] SheetFrames(string name) => Slice(name);
 
         /// <summary>몬스터 그림 칸을 놓는다. size = 원본 칸 기준 크기(보스 배율 포함). 여백까지 담게 키우고, 발이 그림자 위에 오게 내린다.</summary>
         public static void Layout(RectTransform rect, float size, MonsterKind kind = MonsterKind.Sword)
@@ -706,20 +898,23 @@ namespace GN3.Battle
             rect.anchoredPosition = new Vector2(0f, -(Padding + SourceCell * Kinds[kind].FeetOffset) * scale);
         }
 
-        /// <summary>시트를 8장으로 자른다(시트마다 한 번). 시트가 없거나 name이 null이면 null.</summary>
+        /// <summary>시트를 칸마다 자른다(시트마다 한 번). 칸은 정사각이라 행 수는 시트 모양으로 정한다 — 4×2면 8장, 4×3(엔트 킹 해머·뿌리내리기)이면 12장.
+        /// 시트가 없거나 name이 null이면 null.</summary>
         private static Sprite[] Slice(string name)
         {
             if (name == null) return null;
             if (_cache.TryGetValue(name, out var cached) && cached[0] != null) return cached; // 파괴됐으면 다시 자른다
             var texture = Resources.Load<Texture2D>(Folder + name);
             if (texture == null) return null;
-            float w = texture.width / (float)Columns, h = texture.height / (float)Rows;
-            var sprites = new Sprite[Columns * Rows];
+            float w = texture.width / (float)Columns;
+            int rows = Mathf.Max(1, Mathf.RoundToInt(texture.height / w));
+            float h = texture.height / (float)rows;
+            var sprites = new Sprite[Columns * rows];
             for (int i = 0; i < sprites.Length; i++)
             {
                 int col = i % Columns, row = i / Columns;
                 // 텍스처 좌표는 아래가 0이라 윗줄이 가장 큰 y.
-                sprites[i] = Sprite.Create(texture, new Rect(col * w, (Rows - 1 - row) * h, w, h), new Vector2(0.5f, 0f));
+                sprites[i] = Sprite.Create(texture, new Rect(col * w, (rows - 1 - row) * h, w, h), new Vector2(0.5f, 0f));
             }
             _cache[name] = sprites;
             return sprites;
@@ -734,6 +929,9 @@ namespace GN3.Battle
             // 그만큼 동작이 건너뛰어 화살이 활을 놓는 장면을 지나서 나가 보인다.
             Slice(_sheets.Walk);
             Slice(_sheets.Attack);
+            Slice(_sheets.Slam);
+            Slice(_sheets.Intro);
+            Slice(_sheets.Roar);
             Slice(_sheets.Die);
             _time = Random.Range(0f, Columns * Rows / _sheets.IdleFps);
             Show();
@@ -743,6 +941,12 @@ namespace GN3.Battle
         public float AttackHitDelay => _sheets.AttackHitFrame / _sheets.AttackFps;
         /// <summary>공격 동작 전체 길이(초). 그동안 그 몬스터는 움직이지 않는다(FieldUnit.AttackAnimSeconds).</summary>
         public float AttackSeconds => _sheets.AttackFrames / _sheets.AttackFps;
+        /// <summary>두 번째 공격(광역 내려찍기)이 있는 종류인지와 그 타격 순간·길이(초).</summary>
+        public bool HasSlam => Slice(_sheets.Slam) != null;
+        public float SlamHitDelay => _sheets.SlamHitFrame / _sheets.SlamFps;
+        public float SlamSeconds => _sheets.SlamFrames / _sheets.SlamFps;
+        /// <summary>등장 동작 길이(초). 등장 시트가 없으면 0.</summary>
+        public float IntroSeconds => Slice(_sheets.Intro) != null ? _sheets.IntroFrames / _sheets.IntroFps : 0f;
         /// <summary>쓰러짐 동작 길이(초). 흐려지기는 이 뒤에 시작한다.</summary>
         public float DieSeconds => _sheets.DieFrames / _sheets.DieFps;
         /// <summary>쓰러짐 시트가 있으면 그림이 직접 쓰러지므로 옆으로 눕히지 않는다.</summary>
@@ -750,12 +954,64 @@ namespace GN3.Battle
         /// <summary>걷기 그림이 없어 이동 중엔 UI가 통통 튀게 한다.</summary>
         public bool IsHopping => _sheets.Walk == null;
 
-        /// <summary>공격을 처음부터 한 번 재생한다(공격 시트가 없으면 대기 그대로).</summary>
-        public void PlayAttack()
+        /// <summary>공격을 처음부터 한 번 재생한다(공격 시트가 없으면 대기 그대로). slam이면 두 번째 공격(내려찍기)을.</summary>
+        public void PlayAttack(bool slam = false)
         {
-            if (_dead || Slice(_sheets.Attack) == null) return;
+            if (slam && HasSlam) PlayAction(_sheets.Slam, _sheets.SlamFrames, _sheets.SlamFps);
+            else PlayAction(_sheets.Attack, _sheets.AttackFrames, _sheets.AttackFps);
+        }
+
+        /// <summary>등장 동작(보스 포효)을 한 번 재생한다. 시트가 없으면 아무것도 안 한다.
+        /// holdSeconds(전투 초)만큼 입을 가장 크게 벌린 장을 유지한다(포효 소리의 큰 부분과 같이 끝나게). 동작 전체 길이를 돌려준다.</summary>
+        public float PlayIntro(float holdSeconds = 0f)
+        {
+            PlayAction(_sheets.Intro, _sheets.IntroFrames, _sheets.IntroFps, _sheets.IntroHoldFrom, _sheets.IntroHoldTo, holdSeconds);
+            return ActionSeconds;
+        }
+
+        /// <summary>시작부터 입을 가장 크게 벌린 장(포효 소리가 크게 터지는 순간)까지(전투 초).</summary>
+        public float IntroPeakDelay => _sheets.IntroFps > 0f ? _sheets.IntroHoldFrom / _sheets.IntroFps : 0f;
+
+        /// <summary>기절 포효를 한 번 재생한다(시트가 없으면 아무것도 안 함). 시작부터 입을 크게 벌리는 장까지는 RoarPeakDelay,
+        /// 그 장들을 holdSeconds(전투 초)만큼 유지한다. 동작 전체 길이를 돌려준다.</summary>
+        public float PlayRoar(float holdSeconds = 0f)
+        {
+            PlayAction(_sheets.Roar, _sheets.RoarFrames, _sheets.RoarFps, _sheets.RoarHoldFrom, _sheets.RoarHoldTo, holdSeconds);
+            return ActionSeconds;
+        }
+        public float RoarPeakDelay => _sheets.RoarFps > 0f ? _sheets.RoarPeakFrame / _sheets.RoarFps : 0f;
+
+        private void PlayAction(string sheet, int frames, float fps, int holdFrom = 0, int holdTo = -1, float holdSeconds = 0f)
+        {
+            if (_dead || Slice(sheet) == null) return;
+            _action = sheet;
+            _actionFrames = frames;
+            _actionFps = fps;
+            _holdFrom = holdFrom;
+            _holdTo = holdTo;
+            // 유지 구간은 적어도 그 장들을 한 번씩은 보여 준다
+            _holdLength = holdTo >= holdFrom ? Mathf.Max(holdTo - holdFrom + 1, holdSeconds * fps) : 0f;
             _attackTime = 0f;
             Show();
+        }
+
+        private int _holdFrom, _holdTo;
+        private float _holdLength; // 유지 구간 길이(장 단위, 0이면 유지 없음)
+
+        /// <summary>지금 동작의 전체 길이(전투 초, 유지 구간 포함).</summary>
+        private float ActionSeconds => _actionFps > 0f
+            ? (_holdLength > 0f ? _holdFrom + _holdLength + (_actionFrames - _holdTo - 1) : _actionFrames) / _actionFps
+            : 0f;
+
+        /// <summary>동작 시작 뒤 t장째(소수)에 보일 장 번호. 끝났으면 −1. 유지 구간에선 From~To를 번갈아 보여 준다.</summary>
+        private int ActionFrameAt(float t)
+        {
+            if (_holdLength <= 0f) return t >= _actionFrames ? -1 : Mathf.FloorToInt(t);
+            if (t < _holdFrom) return Mathf.FloorToInt(t);
+            float h = t - _holdFrom;
+            if (h < _holdLength) return _holdFrom + Mathf.FloorToInt(h) % (_holdTo - _holdFrom + 1);
+            int f = _holdTo + 1 + Mathf.FloorToInt(h - _holdLength);
+            return f >= _actionFrames ? -1 : f;
         }
 
         /// <summary>움직이는 동안 걷기, 멈추면 숨쉬기.</summary>
@@ -794,7 +1050,7 @@ namespace GN3.Battle
             if (_attackTime >= 0f)
             {
                 _attackTime += Time.deltaTime;
-                if (_attackTime * _sheets.AttackFps >= _sheets.AttackFrames) _attackTime = -1f; // 끝 → 대기로
+                if (ActionFrameAt(_attackTime * _actionFps) < 0) _attackTime = -1f; // 끝 → 대기로
             }
             Show();
         }
@@ -810,10 +1066,11 @@ namespace GN3.Battle
             }
             if (_attackTime >= 0f)
             {
-                var attack = Slice(_sheets.Attack);
+                var attack = Slice(_action);
                 if (attack != null)
                 {
-                    _image.sprite = attack[Mathf.Min(Mathf.FloorToInt(_attackTime * _sheets.AttackFps), _sheets.AttackFrames - 1)];
+                    int frame = ActionFrameAt(_attackTime * _actionFps);
+                    _image.sprite = attack[frame < 0 ? _actionFrames - 1 : frame];
                     return;
                 }
             }
@@ -833,6 +1090,273 @@ namespace GN3.Battle
         /// <summary>시험·디버그용: 지금 공격 동작 중인지 / 걷는 중인지.</summary>
         public bool IsAttacking => _attackTime >= 0f;
         public bool IsWalking => _moving && !_dead && _attackTime < 0f;
+    }
+
+    /// <summary>
+    /// 위험 범위(뿌리 내려찍기·기절 포효 예고). 범위 크기에 맞춰 코드로 그린 텍스처(DangerZoneArt)라 크든 작든 테두리가 늘 얇고 또렷하다:
+    ///  - 바닥: 가운데 옅고 가장자리로 갈수록 진한 붉은 그라데이션 + 옅은 사선 줄무늬
+    ///  - 차오름 파동: 가운데서 가장자리로 퍼지는 원판(앞쪽 끝이 밝은 얇은 선) — SetProgress(0→1)
+    ///  - 테두리: 약 4px 밝은 선 + 바깥 빛번짐(밤·비 조명 아래서도 읽히게 진하게). 맥박은 처음 느리게 → 끝날수록 빠르게, 마지막 20%는 전체가 더 밝아진다(곧 터짐)
+    ///  - 반원이면 Radial360 절반만 칠하고 곧은 변에도 같은 선
+    /// 나타날 때 살짝 커졌다 자리 잡고, 터지면 Flash()로 하얗게 번쩍인 뒤 사라지고, 취소되면 FadeOut()으로 흐려진다. 전투 배속·일시정지를 따른다.
+    /// </summary>
+    public class BattleDangerZone : MonoBehaviour
+    {
+        private static readonly Color AreaColor = new Color(1f, 0.22f, 0.16f);
+        private static readonly Color WaveColor = new Color(1f, 0.32f, 0.22f);
+        private static readonly Color EdgeColor = new Color(1f, 0.55f, 0.45f);
+        private const float AppearSeconds = 0.15f, FlashSeconds = 0.15f;
+
+        private Image _area, _wave, _edge, _line;
+        private RectTransform _waveRect;
+        private CanvasGroup _group;
+        private float _halfFacing;
+        private float _blink, _age, _flashAge = -1f;
+        private float _progress;
+        private bool _fading;
+
+        /// <param name="halfFacing">0이면 원, −1/+1이면 그쪽 반원(가운데를 지나는 세로 곧은 변에도 선).</param>
+        public void Build(float halfFacing = 0f)
+        {
+            _halfFacing = halfFacing;
+            _group = gameObject.AddComponent<CanvasGroup>();
+            _group.alpha = 0f;
+            _group.blocksRaycasts = false;
+            var art = DangerZoneArt.For(((RectTransform)transform).sizeDelta.x);
+            _area = Layer("Area", art.Area, AreaColor, 0f);
+            _wave = Layer("Wave", art.Wave, WaveColor, 0f);
+            _waveRect = _wave.rectTransform;
+            _waveRect.localScale = Vector3.zero;
+            _edge = Layer("Edge", art.Edge, EdgeColor, DangerZoneArt.Glow); // 빛번짐이 범위 밖으로 번지도록 그만큼 크게
+            if (_halfFacing != 0f)
+            {
+                _line = Layer("Line", art.Line, EdgeColor, 0f);
+                _line.type = Image.Type.Simple;
+                var lineRect = _line.rectTransform;
+                lineRect.anchorMin = new Vector2(0.5f, 0f);
+                lineRect.anchorMax = new Vector2(0.5f, 1f);
+                lineRect.sizeDelta = new Vector2(DangerZoneArt.LineWidth, 0f);
+            }
+        }
+
+        private Image Layer(string name, Sprite sprite, Color color, float outset)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(transform, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(-outset, -outset);
+            rect.offsetMax = new Vector2(outset, outset);
+            var image = go.GetComponent<Image>();
+            image.sprite = sprite;
+            image.color = color;
+            image.raycastTarget = false;
+            if (_halfFacing != 0f)
+            {
+                // 반원: 아래(왼쪽 반원)·위(오른쪽 반원)에서 시계 방향으로 절반만 칠한다
+                image.type = Image.Type.Filled;
+                image.fillMethod = Image.FillMethod.Radial360;
+                image.fillOrigin = (int)(_halfFacing < 0f ? Image.Origin360.Bottom : Image.Origin360.Top);
+                image.fillClockwise = true;
+                image.fillAmount = 0.5f;
+            }
+            return image;
+        }
+
+        public void SetProgress(float progress)
+        {
+            _progress = Mathf.Clamp01(progress);
+            _waveRect.localScale = Vector3.one * _progress;
+        }
+
+        /// <summary>터짐: 파동이 가장자리까지 찬 채로 하얗게 번쩍이고 사라진다.</summary>
+        public void Flash()
+        {
+            if (_flashAge >= 0f) return;
+            _flashAge = 0f;
+            _waveRect.localScale = Vector3.one;
+        }
+
+        public void FadeOut() => _fading = true;
+
+        private void Update()
+        {
+            float dt = Time.deltaTime;
+            if (_flashAge >= 0f)
+            {
+                _flashAge += dt;
+                float k = Mathf.Clamp01(_flashAge / FlashSeconds);
+                var white = Color.Lerp(Color.white, WaveColor, k);
+                _wave.color = new Color(white.r, white.g, white.b, 1f);
+                _area.color = Color.Lerp(Color.white, AreaColor, k);
+                _group.alpha = 1f - k;
+                if (k >= 1f) Destroy(gameObject);
+                return;
+            }
+            if (_fading)
+            {
+                _group.alpha -= dt * 3f;
+                if (_group.alpha <= 0f) Destroy(gameObject);
+                return;
+            }
+
+            // 나타남: 살짝 크게 시작해 자리 잡으며 또렷해진다
+            _age += dt;
+            float appear = Mathf.Clamp01(_age / AppearSeconds);
+            float ease = 1f - (1f - appear) * (1f - appear);
+            _group.alpha = ease;
+            transform.localScale = Vector3.one * Mathf.Lerp(1.06f, 1f, ease);
+
+            // 테두리 맥박: 처음엔 초당 2번, 터지기 직전엔 초당 9번. 마지막 20%는 전체가 더 밝게(곧 터짐)
+            _blink += dt * Mathf.Lerp(2f, 9f, _progress) * Mathf.PI * 2f;
+            float pulse = (Mathf.Sin(_blink) + 1f) * 0.5f;
+            float heat = Mathf.Clamp01((_progress - 0.8f) / 0.2f);
+            var edge = new Color(EdgeColor.r, EdgeColor.g, EdgeColor.b, Mathf.Lerp(0.6f, 1f, Mathf.Max(pulse, heat)));
+            _edge.color = edge;
+            if (_line != null) _line.color = edge;
+            _area.color = Color.Lerp(AreaColor, new Color(1f, 0.55f, 0.45f), heat * 0.6f);
+        }
+    }
+
+    /// <summary>
+    /// 위험 범위 그림을 범위 지름(화면 px)마다 한 번 코드로 그린다(최대 1024px 텍스처, 지름이 같으면 재사용).
+    /// 굵기·간격은 화면 px 기준이라 작은 원(지름 140)과 큰 반원(지름 1240)에서 똑같이 보인다. 모두 흰색 — Image.color로 색을 입힌다.
+    /// </summary>
+    internal static class DangerZoneArt
+    {
+        public const float Glow = 10f;       // 테두리 빛번짐이 범위 밖으로 번지는 폭(화면 px)
+        public const float LineWidth = 4f + 2f * Glow;
+        private const float EdgeThickness = 4f, StripeSpacing = 16f, StripeWidth = 6f;
+        private const int MaxTexture = 1024;
+
+        public struct Set { public Sprite Area, Wave, Edge, Line; }
+
+        private static readonly Dictionary<int, Set> Cache = new Dictionary<int, Set>();
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlaySession() => Cache.Clear();
+
+        public static Set For(float diameter)
+        {
+            int d = Mathf.Max(16, Mathf.RoundToInt(diameter));
+            if (Cache.TryGetValue(d, out var cached) && cached.Area != null) return cached;
+            float r = d / 2f;
+            var set = new Set
+            {
+                Area = Disc(d, (rs, x, y) =>
+                {
+                    // 가운데 옅고 가장자리로 갈수록 진하게 + 옅은 사선 줄무늬
+                    float t = rs / r;
+                    float a = Mathf.Lerp(0.12f, 0.4f, t * t);
+                    if (Mathf.Repeat(x + y, StripeSpacing) < StripeWidth) a += 0.1f;
+                    return a * Mathf.Clamp01(r - rs + 0.5f);
+                }),
+                Wave = Disc(d, (rs, x, y) =>
+                {
+                    // 앞쪽 끝(가장자리) 밝은 얇은 선 + 안쪽으로 옅어지는 채움
+                    float front = Mathf.Clamp01(2.5f - (r - rs));
+                    float inner = 0.32f * Mathf.Pow(rs / r, 3f);
+                    return Mathf.Max(front, inner) * Mathf.Clamp01(r - rs + 0.5f);
+                }),
+                Edge = Disc(d + 2f * Glow, (rs, x, y) => Profile(Mathf.Abs(rs - (r - EdgeThickness / 2f)))),
+                Line = LineSprite(),
+            };
+            Cache[d] = set;
+            return set;
+        }
+
+        /// <summary>선 단면: 가운데 EdgeThickness 굵기는 꽉 차고(가장자리 안티앨리어싱), 바깥으로 빛번짐이 옅어진다.</summary>
+        private static float Profile(float distance)
+        {
+            float line = Mathf.Clamp01(EdgeThickness / 2f + 0.5f - distance);
+            float glow = 0.6f * Mathf.Exp(-Mathf.Max(0f, distance - EdgeThickness / 2f) / 4f);
+            return Mathf.Max(line, glow);
+        }
+
+        /// <summary>size(화면 px) 칸에 원 모양 텍스처. alpha(rs = 중심에서 화면 px 거리, x·y = 화면 px 좌표)로 픽셀마다 알파를 정한다.</summary>
+        private static Sprite Disc(float size, System.Func<float, float, float, float> alpha)
+        {
+            int t = Mathf.Min(MaxTexture, Mathf.CeilToInt(size));
+            float k = size / t; // 텍스처 1픽셀 = 화면 k px
+            var pixels = new Color[t * t];
+            float c = t / 2f;
+            for (int py = 0; py < t; py++)
+            for (int px = 0; px < t; px++)
+            {
+                float sx = (px + 0.5f - c) * k, sy = (py + 0.5f - c) * k;
+                float rs = Mathf.Sqrt(sx * sx + sy * sy);
+                pixels[py * t + px] = new Color(1f, 1f, 1f, Mathf.Clamp01(alpha(rs, sx, sy)));
+            }
+            return ToSprite(t, t, pixels, "DangerZone");
+        }
+
+        private static Sprite LineSprite()
+        {
+            int w = Mathf.CeilToInt(LineWidth);
+            var pixels = new Color[w * 2];
+            for (int x = 0; x < w; x++)
+            {
+                float a = Profile(Mathf.Abs(x + 0.5f - w / 2f));
+                pixels[x] = pixels[w + x] = new Color(1f, 1f, 1f, a);
+            }
+            return ToSprite(w, 2, pixels, "DangerZoneLine");
+        }
+
+        private static Sprite ToSprite(int w, int h, Color[] pixels, string name)
+        {
+            var texture = new Texture2D(w, h, TextureFormat.RGBA32, false)
+            {
+                name = name,
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.DontSave,
+            };
+            texture.SetPixels(pixels);
+            texture.Apply();
+            return Sprite.Create(texture, new Rect(0f, 0f, w, h), new Vector2(0.5f, 0.5f));
+        }
+    }
+
+    /// <summary>기절 별 3개가 머리 위 납작한 타원을 따라 돈다(뒤로 갈 때 작고 옅게). 전투 배속·일시정지를 따른다.</summary>
+    public class BattleStunStars : MonoBehaviour
+    {
+        private float _angle;
+        private Text[] _stars;
+        private RectTransform _fill;
+
+        public void Init(Text[] stars, RectTransform fill)
+        {
+            _stars = stars;
+            _fill = fill;
+        }
+
+        /// <summary>남은 기절 시간 비율(1 → 0). 막대가 왼쪽으로 줄어든다.</summary>
+        public void SetRemaining(float ratio)
+        {
+            if (_fill == null) return;
+            var max = _fill.anchorMax;
+            max.x = Mathf.Clamp01(ratio);
+            _fill.anchorMax = max;
+        }
+
+        private void Update()
+        {
+            if (_stars == null) return;
+            _angle += Time.deltaTime * 4.5f;
+            for (int i = 0; i < _stars.Length; i++)
+            {
+                float a = _angle + i * Mathf.PI * 2f / _stars.Length;
+                var star = _stars[i].rectTransform;
+                float front = (Mathf.Sin(a) + 1f) * 0.5f; // 1 = 앞
+                star.anchoredPosition = new Vector2(Mathf.Cos(a) * 32f, 4f + Mathf.Sin(a) * 9f);
+                star.localScale = Vector3.one * Mathf.Lerp(0.7f, 1.15f, front);
+                star.localRotation = Quaternion.Euler(0f, 0f, a * 40f); // 별도 빙글빙글
+                var c = _stars[i].color;
+                c.a = Mathf.Lerp(0.55f, 1f, front);
+                _stars[i].color = c;
+            }
+        }
     }
 
     /// <summary>보스 꼬리표가 숨 쉬듯 살짝 커졌다 작아진다(전투 일시정지와 상관없이).</summary>

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using GN3.CharacterAnim;
 using GN3.Combat;
+using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
 using GN3.UI;
@@ -36,7 +37,11 @@ namespace GN3.Battle
             public float PoisonBubbleTimer; // 중독 중 몸에서 거품을 피워 올리는 간격
             public bool PoisonShown;        // 독을 건 공격이 화면에서 닿았는가(그 전엔 중독 표시를 미룬다)
             public Color[] BaseColors;
-            public GameObject Bars;         // 머리 위 체력·공격 대기 막대(쓰러지면 숨김)
+            public GameObject Bars;         // 머리 위 체력·공격 대기 막대(쓰러지면 숨김). 보스는 화면 위 큰 막대(BossHud 안)
+            public CanvasGroup BossHud;     // 보스만: 화면 위쪽 가운데 칭호·이름·큰 체력 막대
+            public GameObject StunStars;    // 아군만: 기절 중 머리 위에서 도는 별(+ 남은 기절 시간 막대)
+            public bool WasStunned;         // 지난 프레임에 기절이었는가(걸리는 순간을 알아챈다)
+            public bool StunTinted;         // 기절 색을 입혔는가(풀리면 원래 색으로)
             public RectTransform HpFill;    // 오른쪽 끝(anchorMax.x) = 체력 비율
             public Image HpFillImage;
             public RectTransform HpTrail;   // 깎인 만큼 잠깐 남았다 줄어드는 밝은 막대
@@ -59,7 +64,7 @@ namespace GN3.Battle
         private Font _font;
         private Expedition _expedition;
         private List<Mercenary> _fighters;
-        private Mercenary _leaderMerc; // 결과 화면 ★ 표시(전투 중 쓰러져도 그대로)
+        private readonly List<Mercenary> _leaderMercs = new List<Mercenary>(); // 결과 화면 ★ 표시(분대장들, 전투 중 쓰러져도 그대로)
         private FieldBattleSession _session;
         private readonly Dictionary<FieldUnit, UnitView> _views = new Dictionary<FieldUnit, UnitView>();
         private readonly List<UnitView> _drawOrder = new List<UnitView>();
@@ -68,8 +73,10 @@ namespace GN3.Battle
         private float _overSince = -1f;
         private AudioSource _music;     // 전투 브금(설정 창의 음악 볼륨을 따른다) // 전투가 끝난(한쪽이 다 쓰러진) 시각 — ResultDelaySeconds 뒤 결과창
         private bool _leaderDownNoticed;
+        private FieldUnit _lastControlled; // 두 분대 전투: 지난 갱신 때 조종하던 분대장(쓰러져 넘어간 것을 알리려고)
         private bool _paused;       // Space: 전투 멈춤(멈춘 동안에도 분대장 명령은 내릴 수 있다)
         private bool _deploying;    // 배치 단계(전투 시작 전)
+        private bool _cutIn;        // 보스 등장 컷인 중(전투 시간이 멈춘다)
         private readonly Dictionary<FieldUnit, Mercenary> _mercOf = new Dictionary<FieldUnit, Mercenary>();
         private readonly Dictionary<FieldUnit, System.Numerics.Vector2> _defaultPos = new Dictionary<FieldUnit, System.Numerics.Vector2>();
         private FieldUnit _dragUnit;
@@ -132,14 +139,21 @@ namespace GN3.Battle
             var melee = _fighters.Select(m => IsMeleeClass(m.Class.Kind)).ToList();
             var skills = _fighters.Select(m => ClassSkillFactory.Create(m.Class.Kind)).ToList();
             int leaderIndex = Math.Max(0, _fighters.IndexOf(expedition.Leader));
-            _leaderMerc = expedition.Leader;
+            // 두 분대 퀘스트(Lv5 앤트킹): 분대마다 분대장, Tab으로 조종할 분대장을 바꾼다
+            bool twoSquads = quest.SquadCount > 1 && expedition.LeaderOf(1) != null;
+            var squads = twoSquads ? _fighters.Select(m => expedition.SquadOf(m)).ToList() : null;
+            int leaderIndex2 = twoSquads ? _fighters.IndexOf(expedition.LeaderOf(1)) : -1;
+            _leaderMercs.Add(expedition.Leader);
+            if (twoSquads) _leaderMercs.Add(expedition.LeaderOf(1));
 
             var rng = new System.Random();
             var waves = Enumerable.Range(0, quest.WaveCount).Select(w => ExpeditionBattle.SpawnWave(quest, w, rng)).ToList();
 
-            _session = new FieldBattleSession(combatants, melee, skills, leaderIndex, waves, rng);
+            _session = new FieldBattleSession(combatants, melee, skills, leaderIndex, waves, rng, squads, leaderIndex2);
             _session.OnWaveCleared += OnWaveCleared;
             _session.OnWaveStarted += OnWaveStarted;
+            _session.OnSlamTelegraph += cast => StartCoroutine(SlamTelegraph(cast));
+            _session.OnRoarTelegraph += cast => StartCoroutine(RoarTelegraph(cast));
             _session.OnSkillUsed += (unit, skill) =>
             {
                 if (_views.TryGetValue(unit, out var v)) StartCoroutine(FloatText(v, skill.Name, new Color(0.6f, 0.85f, 1f), 175f));
@@ -198,6 +212,7 @@ namespace GN3.Battle
                 _views.Remove(u);
                 _drawOrder.Remove(v);
                 Destroy(v.Root.gameObject);
+                if (v.BossHud != null) Destroy(v.BossHud.gameObject);
             }
             int tier = _expedition.Quest.Waves[wave].Tier;
             foreach (var u in added)
@@ -208,10 +223,81 @@ namespace GN3.Battle
             }
             var w = _expedition.Quest.Waves[wave];
             bool last = wave == _session.WaveCount - 1;
-            AppendLog($"<color=#ffd36b>{wave + 1}라운드 시작 — {(w.IsBoss ? "보스 " : "")}{w.EnemyName} ×{w.Count}</color>");
+            string bossTitle = w.IsBoss ? GN3.World.RegionInfo.BossTitle(w.EnemyName) : null; // "은월의 숲의 주인"
+            string bossName = bossTitle != null ? $"{bossTitle}, {w.EnemyName}" : w.EnemyName;
+            AppendLog($"<color=#ffd36b>{wave + 1}라운드 시작 — {(w.IsBoss ? $"보스 {bossName}" : w.EnemyName)} ×{w.Count}</color>");
+            if (w.IsBoss && StartBossCutIn()) return; // 그림이 있는 보스는 컷인이 배너를 대신하고, 끝나면 포효
             StartCoroutine(Banner(w.IsBoss ? "보스 등장!" : last ? $"마지막 {wave + 1}라운드" : $"{wave + 1}라운드",
-                w.IsBoss ? $"{wave + 1}라운드 — {w.EnemyName}" : $"{w.EnemyName} ×{w.Count}",
+                w.IsBoss ? $"{wave + 1}라운드 — {bossName}" : $"{w.EnemyName} ×{w.Count}",
                 w.IsBoss ? new Color(1f, 0.45f, 0.4f) : Color.white));
+            if (w.IsBoss) PlayBossIntros();
+        }
+
+        /// <summary>
+        /// 컷인 그림이 있는 보스(거목 엔트)면 등장 컷인(BossCutIn)을 띄우고 true. 컷인 동안은 전투가 멈추고(_cutIn),
+        /// 끝나면 필드에서 포효(PlayBossIntros)하며 전투가 이어진다. 그림이 없으면 false(배너로).
+        /// </summary>
+        private bool StartBossCutIn()
+        {
+            var boss = _views.Values.FirstOrDefault(v => !v.Unit.IsPlayerSide && v.BossHud != null && v.Monster != null);
+            var portrait = boss != null ? BattleMonsterSprite.PortraitFor(boss.Monster.Kind) : null;
+            if (portrait == null) return false;
+            string name = boss.Unit.Combatant.Name;
+            StartCoroutine(PlayBossCutIn(portrait, GN3.World.RegionInfo.BossTitle(name), name));
+            return true;
+        }
+
+        private IEnumerator PlayBossCutIn(Sprite portrait, string title, string name)
+        {
+            _cutIn = true;
+            yield return BossCutIn.Play(_canvas.transform, portrait, title, name,
+                () => { if (_shakeTargets != null) StartCoroutine(BattleFx.Shake(_shakeTargets, ShakeStrength, ShakeSeconds)); });
+            _cutIn = false;
+            PlayBossIntros();
+        }
+
+        /// <summary>보스 컷인이 끝난 뒤에 이어서 튼다(첫 라운드가 보스면 "전투 시작!" 배너가 컷인 뒤에 보이게).</summary>
+        private IEnumerator AfterCutIn(IEnumerator next)
+        {
+            while (_cutIn) yield return null;
+            yield return next;
+        }
+
+        /// <summary>
+        /// 보스 등장: 등장 동작이 있는 보스(거목 엔트 포효)는 그 자리에서 포효한다. 포효하는 동안은 움직이지 않는다.
+        /// 거목 엔트는 첫째 포효 소리(BossRoarAudio.Intro)와 싱크: 소리가 크게 터지는 순간 = 입을 가장 크게 벌린 장, 큰 소리가 이어지는 동안 그 장을 유지하고
+        /// 판이 우르릉 흔들린다. 소리는 실제 시간이라 전투 배속(BattleSpeed)을 곱해 전투 시간으로 맞춘다.
+        /// </summary>
+        private void PlayBossIntros()
+        {
+            foreach (var v in _views.Values)
+            {
+                if (v.Unit.IsPlayerSide || v.Monster == null || v.Monster.IntroSeconds <= 0f) continue;
+                bool voiced = v.Monster.Kind == MonsterKind.Ent;
+                float hold = voiced ? BossRoarAudio.Intro.LoudLength * BattleSpeed : 0f;
+                v.Unit.BusyTimer = v.Monster.PlayIntro(hold);
+                float peak = v.Monster.IntroPeakDelay; // 입을 가장 크게 벌린 장까지(전투 초)
+                if (voiced)
+                {
+                    StartCoroutine(PlayRoarSound(BossRoarAudio.IntroClip, Mathf.Max(0f, peak - BossRoarAudio.Intro.Onset * BattleSpeed)));
+                    StartCoroutine(RumbleAfter(peak, ShakeStrength * 1.8f, hold + 0.25f));
+                }
+                else StartCoroutine(ShakeAfter(peak));
+            }
+        }
+
+        /// <summary>delay(전투 초) 뒤에 포효 소리를 튼다.</summary>
+        private IEnumerator PlayRoarSound(AudioClip clip, float delay)
+        {
+            if (delay > 0f) yield return new WaitForSeconds(delay);
+            GameAudio.PlayClip(clip);
+        }
+
+        /// <summary>delay(전투 초) 뒤에 판을 묵직하게 우르릉 흔든다(포효).</summary>
+        private IEnumerator RumbleAfter(float delay, float strength, float duration)
+        {
+            if (delay > 0f) yield return new WaitForSeconds(delay);
+            if (_shakeTargets != null) yield return BattleFx.Shake(_shakeTargets, strength, duration, rumble: true);
         }
 
         /// <summary>필드 위쪽 가운데에 큰 글자로 잠깐 띄운다(나타났다 사라짐).</summary>
@@ -254,12 +340,13 @@ namespace GN3.Battle
             foreach (var kv in _mercOf)
                 BattleFormation.Remember(kv.Value.Id, new Vector2(kv.Key.Position.X, kv.Key.Position.Y));
             _session.Begin();
+            if (_expedition.Quest.Waves[0].IsBoss && !StartBossCutIn()) PlayBossIntros(); // 첫 라운드부터 보스(그림이 있으면 컷인 뒤 포효)
             if (_deployZone != null) StartCoroutine(BattleFx.FadeOutAndDestroy(_deployZone, 0.4f));
             _deployZone = null;
             _resetButton.gameObject.SetActive(false);
 
             var leader = _session.Leader;
-            StartCoroutine(Banner("전투 시작!", leader != null ? $"분대장 {leader.Combatant.Name} 지휘" : "", new Color(1f, 0.85f, 0.4f)));
+            StartCoroutine(AfterCutIn(Banner("전투 시작!", leader != null ? $"분대장 {leader.Combatant.Name} 지휘" : "", new Color(1f, 0.85f, 0.4f))));
             AppendLog(leader != null
                 ? $"전투 시작! 분대장 {leader.Combatant.Name} 지휘 — 땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬"
                 : "전투 시작!");
@@ -376,6 +463,13 @@ namespace GN3.Battle
                 return;
             }
 
+            if (_cutIn)
+            {
+                // 보스 등장 컷인 중: 전투 시간은 멈추고(세션 Tick 없음, 키 입력은 컷인이 받는다) 그림만 숨 쉰다
+                foreach (var v in _views.Values) UpdateUnitView(v);
+                return;
+            }
+
             HandleKeys();
             var events = _session.Tick(Time.deltaTime);
             if (events.Count > 0) ApplyEventsVisual(events);
@@ -400,6 +494,17 @@ namespace GN3.Battle
             if (kb.qKey.wasPressedThisFrame) PressSkill();
             if (kb.escapeKey.wasPressedThisFrame) _picking = false;
             if (kb.spaceKey.wasPressedThisFrame) SetPaused(!_paused);
+            if (kb.tabKey.wasPressedThisFrame) SwitchSquad();
+        }
+
+        /// <summary>두 분대 전투: Tab으로 조종할 분대장을 바꾼다(넘겨준 분대장은 알아서 싸운다).</summary>
+        private void SwitchSquad()
+        {
+            if (_deploying || !_session.HasTwoSquads || !_session.SwitchLeader()) return;
+            _picking = false;
+            var leader = _session.Leader;
+            AppendLog($"<color=#ffd34a>{leader.Squad + 1}분대장 {leader.Combatant.Name} 조종</color>");
+            RefreshPanel();
         }
 
         // ---------- 입력 ----------
@@ -497,7 +602,13 @@ namespace GN3.Battle
             }
 
             var c = leader.Combatant;
-            _leaderLabel.text = $"★ 분대장 {c.Name}   체력 {c.CurrentHealth}/{c.Stats.MaxHealth}";
+            bool canSwitch = _session.HasTwoSquads && _session.Leaders.Any(l => l != leader && l.IsAlive);
+            _leaderLabel.text = _session.HasTwoSquads
+                ? $"★ {leader.Squad + 1}분대장 {c.Name}   체력 {c.CurrentHealth}/{c.Stats.MaxHealth}" + (canSwitch ? "   (Tab: 분대 전환)" : "")
+                : $"★ 분대장 {c.Name}   체력 {c.CurrentHealth}/{c.Stats.MaxHealth}";
+            if (_session.HasTwoSquads && leader != _lastControlled && _lastControlled != null && !_lastControlled.IsAlive)
+                AppendLog($"<color=#ff8a7a>{_lastControlled.Squad + 1}분대장 {_lastControlled.Combatant.Name}이(가) 쓰러졌다! {leader.Squad + 1}분대장 {c.Name}이(가) 지휘를 이어받는다</color>");
+            _lastControlled = leader;
 
             var skill = leader.Skill;
             if (skill == null)
@@ -520,7 +631,7 @@ namespace GN3.Battle
                 ? (skill != null && skill.TargetType == SkillTargetType.Ally
                     ? "치료할 아군을 클릭 (Q: 자신 · Esc: 취소)"
                     : "스킬을 쓸 적을 클릭 (Esc: 취소)")
-                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지";
+                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지" + (_session.HasTwoSquads ? " · Tab: 분대 전환" : "");
         }
 
         private void UpdateUnitView(UnitView v)
@@ -545,6 +656,8 @@ namespace GN3.Battle
             bool poisoned = alive && u.Combatant.IsPoisoned && v.PoisonShown;
             UpdateBars(v, alive, poisoned);
             UpdatePoison(v, poisoned);
+            bool stunned = alive && u.IsStunned;
+            UpdateStun(v, stunned, poisoned);
 
             var leader = _session.Leader;
             bool targeted = alive && leader != null && leader.IsAlive && leader.Target == u;
@@ -554,6 +667,7 @@ namespace GN3.Battle
             // 바라보는 쪽(그림은 오른쪽을 본다). 죽으면 옆으로 눕힌다.
             v.Body.localScale = new Vector3(u.Facing, 1f, 1f);
             v.Body.localRotation = Quaternion.Euler(0f, 0f, animatedDeath ? 0f : 90f * u.Facing * fall);
+            if (stunned) v.Body.localRotation = Quaternion.Euler(0f, 0f, StunSwayDegrees * Mathf.Sin(Time.time * 7f + v.HopPhase)); // 기절: 비틀비틀
 
             if (v.Animator != null)
             {
@@ -589,6 +703,12 @@ namespace GN3.Battle
         private static readonly Color ReadyFull = new Color(1f, 0.8f, 0.45f);  // 다 참(곧 공격)
         private const float BarPlateHeight = 26f; // 테두리 4 + 공격 대기 4 + 구분선 1 + 체력 13 + 테두리 4
         private const float ReadyBarHeight = 4f;
+        // 보스 큰 막대(화면 위쪽 가운데, 제목·라운드 줄 아래): 같은 판을 크게
+        private const float BossBarWidth = 900f;
+        private const float BossBarPlateHeight = 38f; // 테두리 4 + 공격 대기 6 + 구분선 1 + 체력 23 + 테두리 4
+        private const float BossReadyBarHeight = 6f;
+        private const float BossHudY = -96f, BossHudHeight = 74f; // 위 끝 기준(제목 -24, 라운드 줄 -62~-90 아래)
+        private const float BossHudSlide = 30f;       // 나타날 때 위에서 이만큼 내려온다
         private const float TrailHoldSeconds = 0.4f;
         private const float TrailDrainPerSecond = 0.8f;
 
@@ -596,7 +716,15 @@ namespace GN3.Battle
         /// 30% 아래면 깜빡여 눈에 띄게 한다.</summary>
         private void UpdateBars(UnitView v, bool alive, bool poisoned)
         {
-            v.Bars.SetActive(alive);
+            if (v.BossHud != null)
+            {
+                // 보스 큰 막대: 나타날 땐 위에서 내려오며 또렷해지고, 쓰러지면 빈 막대로 천천히 흐려진다
+                v.BossHud.alpha = Mathf.MoveTowards(v.BossHud.alpha, alive ? 1f : 0f, Time.unscaledDeltaTime * (alive ? 3f : 0.8f));
+                ((RectTransform)v.BossHud.transform).anchoredPosition =
+                    new Vector2(0f, BossHudY + BossHudSlide * (1f - (alive ? v.BossHud.alpha : 1f)));
+                if (!alive) { SetLength(v.HpFill, 0f); if (v.HpText != null) v.HpText.text = $"0/{v.Unit.Combatant.Stats.MaxHealth}"; }
+            }
+            v.Bars.SetActive(alive || v.BossHud != null);
             if (!alive) return;
 
             var c = v.Unit.Combatant;
@@ -671,7 +799,9 @@ namespace GN3.Battle
                 var targetView = _views[target];
 
                 bool heal = evt.Damage < 0;
-                if (!heal)
+                // 거목 엔트 뿌리 분출 피해: 내려찍는 동작·가시·흔들림은 예고 연출(SlamTelegraph)이 분출 순간에 이미 했다 → 피격만 바로
+                bool slam = !heal && IsSlam(attackerView);
+                if (!heal && !slam)
                 {
                     attackerView.Animator?.PlaySlash();
                     if (attackerView.Monster != null) attackerView.Monster.PlayAttack(); // 고블린 검 공격·궁수 사격
@@ -686,7 +816,7 @@ namespace GN3.Battle
                 bool hit = !heal && !evt.Evaded && evt.Damage > 0;
                 // 판정은 이미 났다. 보이는 피격(숫자·번쩍임·체력 막대·쓰러짐)은 칼이 내려치는 프레임이나 투사체가 닿을 때로 미룬다.
                 // 원거리는 같은 순간(궁수는 활을 놓는 프레임)에 투사체를 쏜다.
-                float delay = heal ? 0f : HitDelay(attackerView);
+                float delay = heal || slam ? 0f : HitDelay(attackerView);
                 if (!attacker.IsMelee && attacker != target && !heal)
                 {
                     targetView.PendingHits++;
@@ -708,6 +838,89 @@ namespace GN3.Battle
             if (attacker.Monster != null) return attacker.Monster.AttackHitDelay;
             if (attacker.Animator != null) return attacker.Animator.SlashHitDelay;
             return 0f;
+        }
+
+        /// <summary>이번 피해가 거목 엔트의 뿌리 분출인지(분출까지 엔트는 다른 공격을 하지 않아 LastWasSlam이 그대로다).</summary>
+        private static bool IsSlam(UnitView attacker) =>
+            attacker.Monster != null && attacker.Monster.HasSlam
+            && attacker.Unit.Combatant.Passives.OfType<RootSlamPassive>().Any(p => p.LastWasSlam);
+
+        /// <summary>
+        /// 뿌리 내려찍기 예고: 범위마다 땅 위에 붉은 원(안쪽이 예고 시간 동안 차오르고 테두리가 점점 빠르게 깜빡임).
+        /// 엔트는 땅을 치는 장이 분출 순간에 맞게 내려찍기를 시작하고, 분출하면 범위마다 가시가 솟고 판이 흔들린다.
+        /// 엔트가 쓰러지거나 라운드가 바뀌어 취소되면 원만 흐려진다.
+        /// </summary>
+        private IEnumerator SlamTelegraph(RootSlamCast cast)
+        {
+            _views.TryGetValue(cast.Caster, out var casterView);
+            var zones = cast.Zones.Select(z => BattleFx.CreateDangerZone(_groundLayer, new Vector2(z.X, z.Y), FieldBattleSession.SlamZoneRadius)).ToList();
+            bool swung = false;
+            while (cast.State == RootSlamCast.Phase.Pending && !_session.IsOver)
+            {
+                foreach (var zone in zones) zone.SetProgress(cast.Progress);
+                if (!swung && casterView?.Monster != null && cast.Remaining <= casterView.Monster.SlamHitDelay)
+                {
+                    casterView.Monster.PlayAttack(slam: true); // 땅을 치는 장 = 분출
+                    swung = true;
+                }
+                yield return null;
+            }
+            if (cast.State == RootSlamCast.Phase.Erupted)
+            {
+                foreach (var z in cast.Zones) StartCoroutine(BattleFx.RootSpikes(_fxLayer, new Vector2(z.X, z.Y)));
+                if (_shakeTargets != null) StartCoroutine(BattleFx.Shake(_shakeTargets, ShakeStrength, ShakeSeconds));
+                foreach (var zone in zones) zone.Flash(); // 하얗게 번쩍이고 사라진다
+            }
+            else
+                foreach (var zone in zones) zone.FadeOut();
+        }
+
+        private IEnumerator ShakeAfter(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            if (_shakeTargets != null) yield return BattleFx.Shake(_shakeTargets, ShakeStrength, ShakeSeconds);
+        }
+
+        /// <summary>
+        /// 기절 포효 예고: 엔트 둘레에 큰 붉은 원(판정 반지름 그대로)이 차오르고, 입을 크게 벌리는 장이 터지는 순간에 맞게 포효한다.
+        /// 터지면 충격파 고리·큰 흔들림과 로그, 원 안 용병 머리 위엔 기절 별(UpdateUnitView). 취소되면 원만 흐려진다.
+        /// </summary>
+        private IEnumerator RoarTelegraph(RoarCast cast)
+        {
+            _views.TryGetValue(cast.Caster, out var casterView);
+            var center = new Vector2(cast.Center.X, cast.Center.Y);
+            var zone = BattleFx.CreateDangerZone(_groundLayer, center, cast.Radius, cast.Facing); // 용병 쪽 반원
+            AppendLog($"<color=#ff8a6a>{Josa.IGa(cast.Caster.Combatant.Name)} 포효하려 한다! 붉은 범위 밖으로(엔트 뒤는 안전)!</color>");
+            // 둘째 포효 소리(BossRoarAudio.Stun)와 싱크: 기절이 터지는 순간 = 소리가 크게 터지는 순간 = 입을 가장 크게 벌린 장.
+            // 소리는 그보다 Onset만큼 먼저, 동작은 RoarPeakDelay만큼 먼저 시작하고, 큰 소리가 이어지는 동안 입 벌린 장을 유지한다.
+            float hold = BossRoarAudio.Stun.LoudLength * BattleSpeed;
+            float soundLead = BossRoarAudio.Stun.Onset * BattleSpeed;
+            bool roared = false, voiced = false;
+            while (cast.State == RoarCast.Phase.Pending && !_session.IsOver)
+            {
+                zone.SetProgress(cast.Progress);
+                if (!voiced && cast.Remaining <= soundLead)
+                {
+                    GameAudio.PlayClip(BossRoarAudio.StunClip);
+                    voiced = true;
+                }
+                if (!roared && casterView?.Monster != null && cast.Remaining <= casterView.Monster.RoarPeakDelay)
+                {
+                    casterView.Monster.PlayRoar(hold); // 입을 크게 벌리는 장 = 기절
+                    roared = true;
+                }
+                yield return null;
+            }
+            if (cast.State == RoarCast.Phase.Erupted)
+            {
+                zone.Flash();
+                StartCoroutine(BattleFx.Shockwave(_fxLayer, center, cast.Radius, new Color(1f, 0.55f, 0.35f)));
+                if (_shakeTargets != null) StartCoroutine(BattleFx.Shake(_shakeTargets, ShakeStrength * 2.4f, hold + 0.3f, rumble: true)); // 큰 소리 동안 우르릉
+                AppendLog(cast.StunnedCount > 0
+                    ? $"<color=#ffd36b>{cast.Caster.Combatant.Name}의 포효! 용병 {cast.StunnedCount}명 기절</color>"
+                    : $"<color=#ffd36b>{cast.Caster.Combatant.Name}의 포효 — 모두 피했다!</color>");
+            }
+            else zone.FadeOut();
         }
 
         private IEnumerator DelayedHit(float delay, UnitView attacker, UnitView target, string label, Color color, bool hit, int damage)
@@ -766,6 +979,7 @@ namespace GN3.Battle
             {
                 Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam,
                 WavesCleared = _session.WavesCleared, WaveCount = _session.WaveCount,
+                NamedArchers = true, // 궁수는 "고블린 궁수"로 이름이 붙어 있다
             };
             var report = ExpeditionBattle.ConcludeReport(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
 
@@ -919,10 +1133,49 @@ namespace GN3.Battle
                 if (v.Tintables[i] != null) v.Tintables[i].color = Color.Lerp(v.BaseColors[i], green * v.BaseColors[i], k);
         }
 
-        private IEnumerator HitFlash(UnitView v)
+        private static readonly Color StunColor = new Color(1f, 0.86f, 0.3f);      // 기절 글자·고리·번쩍임(노랑)
+        private static readonly Color StunTint = new Color(0.62f, 0.58f, 0.95f);   // 기절 중 그림(회보랏빛)
+        private const float StunSwayDegrees = 7f;
+
+        /// <summary>
+        /// 기절 표시: 걸리는 순간 머리 위 큰 노란 "기절!" + 발밑에서 노란 고리가 퍼지고 노랗게 번쩍인다.
+        /// 기절 중엔 별이 돌고 그 아래 남은 시간 막대가 줄며, 그림은 회보랏빛으로 어둡게 맥박친다(중독 색보다 우선, 비틀거림은 UpdateUnitView).
+        /// 풀리면 별·막대가 사라지고 색이 원래(중독이면 중독 색)로 돌아간다.
+        /// </summary>
+        private void UpdateStun(UnitView v, bool stunned, bool poisoned)
+        {
+            if (v.StunStars == null) return;
+            if (stunned && !v.WasStunned)
+            {
+                var feet = v.Root.anchoredPosition;
+                StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(0f, 200f), "기절!", StunColor, true));
+                StartCoroutine(BattleFx.Shockwave(_fxLayer, feet + new Vector2(0f, 8f), 70f, StunColor));
+                StartCoroutine(HitFlash(v, StunColor));
+            }
+            v.WasStunned = stunned;
+            if (v.StunStars.activeSelf != stunned) v.StunStars.SetActive(stunned);
+            if (stunned)
+            {
+                v.StunStars.GetComponent<BattleStunStars>().SetRemaining(v.Unit.StunTimer / Mathf.Max(0.01f, v.Unit.StunTotal)); // 포효 2초·해머 1초 모두 가득에서
+                float k = 0.55f + 0.15f * Mathf.Sin(Time.time * 6f);
+                for (int i = 0; i < v.Tintables.Length; i++)
+                    if (v.Tintables[i] != null) v.Tintables[i].color = Color.Lerp(v.BaseColors[i], StunTint * v.BaseColors[i], k);
+                v.StunTinted = true;
+            }
+            else if (v.StunTinted)
+            {
+                v.StunTinted = false;
+                if (!poisoned) // 중독이면 UpdatePoison이 매 프레임 중독 색을 입힌다
+                    for (int i = 0; i < v.Tintables.Length; i++)
+                        if (v.Tintables[i] != null) v.Tintables[i].color = v.BaseColors[i];
+            }
+        }
+
+        private IEnumerator HitFlash(UnitView v) => HitFlash(v, new Color(1f, 0.35f, 0.3f));
+
+        private IEnumerator HitFlash(UnitView v, Color hit)
         {
             const float duration = 0.3f;
-            var hit = new Color(1f, 0.35f, 0.3f);
             for (float t = 0f; t < duration; t += Time.deltaTime)
             {
                 float k = t / duration;
@@ -1033,7 +1286,15 @@ namespace GN3.Battle
             fieldImage.sprite = UITheme.Inset;
             fieldImage.type = Image.Type.Sliced;
             fieldGO.AddComponent<BattleClickTarget>().OnClick = OnGroundClicked;
-            BattleGroundTiles.Build(_field, quest.Region, quest.Title.GetHashCode()); // 지역별 바닥 타일(맨 아래 층)
+            BattleGroundTiles.Build(_field, quest.Region, quest.Title.GetHashCode(), // 지역별 바닥 타일(맨 아래 층)
+                deepForest: quest.Waves.Any(w => w.IsBoss)); // 보스전은 숲 한가운데(양옆까지 숲)
+            if (quest.Waves.Any(w => w.IsBoss))
+            {
+                // 보스 위험 범위 그림을 씬을 여는 김에 미리 그려 둔다(큰 반원은 약 0.4초 걸려 전투 중에 처음 그리면 멈칫한다)
+                DangerZoneArt.For(FieldBattleSession.SlamZoneRadius * 2f);
+                DangerZoneArt.For(FieldBattleSession.RoarRadius * 2f);
+                BossRoarAudio.Prepare(); // 포효 소리 두 개도 미리 잘라 둔다
+            }
             _groundLayer = CreateLayer("GroundLayer");
             _unitLayer = CreateLayer("UnitLayer");
             _fxLayer = CreateLayer("FxLayer");
@@ -1136,6 +1397,7 @@ namespace GN3.Battle
                 monsterSprite.Init(kind);
                 tintables = new[] { image };
                 unit.AttackAnimSeconds = monsterSprite.AttackSeconds; // 공격 동작이 끝날 때까지 제자리
+                unit.AttackHitDelay = monsterSprite.AttackHitDelay;   // 해머 기절은 해머가 닿는 순간에(거목 엔트)
                 headLift = (s - MonsterSize) * MonsterHeadRatio;
             }
             else
@@ -1152,26 +1414,38 @@ namespace GN3.Battle
             }
             BattleShadow.AttachUnit(root, tintables, shadow.GetComponent<Image>()); // 마을과 같은 해 그림자(발밑 기준)
 
-            // 머리 위: 이름 · 체력 · 공격 대기
+            // 머리 위: 이름 · 체력 · 공격 대기. 보스는 머리 위 대신 화면 위쪽 가운데 큰 막대(칭호·이름 · 체력 · 공격 대기).
             bool boss = !unit.IsPlayerSide && tier >= 2;
-            string label = unit.IsLeader ? $"★{unit.Combatant.Name}"
-                : boss ? $"<color=#ff6a4a>보스</color> {unit.Combatant.Name}" // 보스는 이름 앞에 붉은 "보스"
-                : unit.Combatant.Name;
-            var name = CreateText(root, label, boss ? UITheme.BodySize : UITheme.SmallSize, TextAnchor.MiddleCenter,
-                unit.IsLeader ? LeaderColor : unit.IsPlayerSide ? UITheme.BodyText : boss ? new Color(1f, 0.82f, 0.35f) : new Color(0.92f, 0.66f, 0.6f));
-            name.font = boss ? UITheme.BoldFont : UITheme.Font;
-            name.supportRichText = true;
-            name.raycastTarget = false;
-            name.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, boss ? 1f : 0.8f);
-            PlaceAbove(name.rectTransform, 154f + headLift, boss ? 220f : 160f, boss ? 24f : 20f);
-            if (boss) BattleFx.CreateBossTag(root, 180f + headLift); // 이름 위 붉은 "BOSS" 꼬리표(숨 쉬듯 커졌다 작아짐)
+            CanvasGroup bossHud = boss ? CreateBossHud(unit.Combatant.Name) : null;
+            if (!boss)
+            {
+                string label = unit.IsLeader ? $"★{unit.Combatant.Name}" : unit.Combatant.Name;
+                var name = CreateText(root, label, UITheme.SmallSize, TextAnchor.MiddleCenter,
+                    unit.IsLeader ? LeaderColor : unit.IsPlayerSide ? UITheme.BodyText : EnemyNameColor(unit.Combatant.Name));
+                name.font = UITheme.Font;
+                name.supportRichText = true;
+                name.raycastTarget = false;
+                name.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+                PlaceAbove(name.rectTransform, 154f + headLift, 160f, 20f);
+            }
 
-            // 머리 위 막대 판(우리 UI와 같은 청동 베벨, 분대장은 금빛): 위 칸 = 체력(깎인 자국 → 체력, 위 광택·아래 그림자),
-            // 아래 칸 = 공격 대기(청동색으로 차오르고 다 차면 밝게). 보스는 더 넓게.
-            float barWidth = tier >= 2 ? 136f : 108f;
+            // 막대 판(우리 UI와 같은 청동 베벨, 분대장은 금빛): 위 칸 = 체력(깎인 자국 → 체력, 위 광택·아래 그림자),
+            // 아래 칸 = 공격 대기(청동색으로 차오르고 다 차면 밝게). 보스는 화면 위 큰 막대 안에 같은 판을 크게 만든다.
+            float barWidth = boss ? BossBarWidth : 108f;
             var bars = new GameObject("Bars", typeof(RectTransform));
-            bars.transform.SetParent(root, false);
-            PlaceAbove((RectTransform)bars.transform, 120f + headLift, barWidth, BarPlateHeight);
+            if (boss)
+            {
+                bars.transform.SetParent(bossHud.transform, false);
+                var barsRect = (RectTransform)bars.transform;
+                barsRect.anchorMin = barsRect.anchorMax = barsRect.pivot = new Vector2(0.5f, 0f);
+                barsRect.sizeDelta = new Vector2(BossBarWidth, BossBarPlateHeight);
+                barsRect.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                bars.transform.SetParent(root, false);
+                PlaceAbove((RectTransform)bars.transform, 120f + headLift, barWidth, BarPlateHeight);
+            }
 
             var frame = CreateImage(bars.transform, "BarPlate", Color.white);
             var frameImage = frame.GetComponent<Image>();
@@ -1183,7 +1457,8 @@ namespace GN3.Battle
             var hpBg = CreateImage(frame.transform, "HpBg", HpBack);
             var hpBgRect = (RectTransform)hpBg.transform;
             Inset(hpBgRect, plate);
-            hpBgRect.offsetMin = new Vector2(plate, plate + ReadyBarHeight + 1f); // 아래는 공격 대기 칸 + 1px 구분선
+            float readyHeight = boss ? BossReadyBarHeight : ReadyBarHeight;
+            hpBgRect.offsetMin = new Vector2(plate, plate + readyHeight + 1f); // 아래는 공격 대기 칸 + 1px 구분선
             var trail = CreateBarFill(hpBg.transform, HpTrailColor);
             var hpFill = CreateBarFill(hpBg.transform, HpHigh);
             var gloss = CreateImage(hpFill.transform, "Gloss", new Color(1f, 1f, 1f, 0.1f));
@@ -1201,9 +1476,9 @@ namespace GN3.Battle
             shade.GetComponent<Image>().raycastTarget = false;
 
             Text hpText = null;
-            if (unit.IsPlayerSide)
+            if (unit.IsPlayerSide || boss)
             {
-                hpText = CreateText(hpBg.transform, "", 11, TextAnchor.MiddleCenter, UITheme.BodyText);
+                hpText = CreateText(hpBg.transform, "", boss ? 16 : 11, TextAnchor.MiddleCenter, UITheme.BodyText);
                 hpText.font = UITheme.BoldFont;
                 hpText.raycastTarget = false;
                 hpText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -1218,7 +1493,7 @@ namespace GN3.Battle
             readyRect.anchorMin = Vector2.zero;
             readyRect.anchorMax = new Vector2(1f, 0f);
             readyRect.offsetMin = new Vector2(plate, plate);
-            readyRect.offsetMax = new Vector2(-plate, plate + ReadyBarHeight);
+            readyRect.offsetMax = new Vector2(-plate, plate + readyHeight);
             readyBg.GetComponent<Image>().raycastTarget = false;
             var readyFill = CreateBarFill(readyBg.transform, ReadyCharging);
 
@@ -1250,6 +1525,8 @@ namespace GN3.Battle
                 Tintables = tintables,
                 BaseColors = tintables.Select(i => i.color).ToArray(),
                 Bars = bars,
+                BossHud = bossHud,
+                StunStars = unit.IsPlayerSide ? BattleFx.CreateStunStars(root, 176f + headLift) : null, // 이름 바로 위
                 HpFill = (RectTransform)hpFill.transform,
                 HpFillImage = hpFill,
                 HpTrail = (RectTransform)trail.transform,
@@ -1261,10 +1538,48 @@ namespace GN3.Battle
                 Animator = animator,
                 Monster = monsterSprite,
                 HopPhase = UnityEngine.Random.Range(0f, Mathf.PI * 2f),
-                PoisonTag = BattleFx.CreatePoisonTag(root, new Vector2(-barWidth * 0.5f - 4f, 122f + headLift)), // 체력 막대 왼쪽
+                PoisonTag = BattleFx.CreatePoisonTag(root, new Vector2(-(boss ? 108f : barWidth) * 0.5f - 4f, 122f + headLift)), // 체력 막대 왼쪽(보스는 머리 위 같은 자리)
             };
             UpdateUnitView(view);
             return view;
+        }
+
+        /// <summary>
+        /// 보스 큰 막대 자리(화면 위쪽 가운데): 붉은 BOSS 꼬리표 · 칭호(금빛) + 이름, 그 아래에 CreateUnitView가 체력·공격 대기 판을 크게 넣는다.
+        /// 빛 막보다 위(캔버스 맨 앞)라 밤·비에도 어두워지지 않는다. 처음엔 투명 — UpdateBars가 위에서 내려오며 나타나게 한다.
+        /// </summary>
+        private CanvasGroup CreateBossHud(string bossName)
+        {
+            var go = new GameObject("BossHud", typeof(RectTransform), typeof(CanvasGroup));
+            go.transform.SetParent(_canvas.transform, false);
+            go.transform.SetAsLastSibling();
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 1f);
+            rect.sizeDelta = new Vector2(BossBarWidth, BossHudHeight);
+            rect.anchoredPosition = new Vector2(0f, BossHudY + BossHudSlide);
+            var group = go.GetComponent<CanvasGroup>();
+            group.alpha = 0f;
+            group.blocksRaycasts = false;
+            group.interactable = false;
+
+            string title = GN3.World.RegionInfo.BossTitle(bossName); // "은월의 숲의 주인"
+            var label = CreateText(go.transform, title != null ? $"<size=17><color=#e8c27a>{title}</color></size>   {bossName}" : bossName,
+                26, TextAnchor.MiddleCenter, new Color(1f, 0.88f, 0.7f));
+            label.font = UITheme.BoldFont;
+            label.supportRichText = true;
+            label.raycastTarget = false;
+            label.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.95f);
+            var labelRect = label.rectTransform;
+            labelRect.anchorMin = new Vector2(0f, 1f);
+            labelRect.anchorMax = Vector2.one;
+            labelRect.pivot = new Vector2(0.5f, 1f);
+            labelRect.sizeDelta = new Vector2(0f, BossHudHeight - BossBarPlateHeight - 2f);
+            labelRect.anchoredPosition = Vector2.zero;
+
+            BattleFx.CreateBossTag(go.transform, 0f); // 막대 왼쪽 위 붉은 "BOSS"(숨 쉬듯)
+            var tag = (RectTransform)go.transform.Find("BossTag");
+            tag.anchoredPosition = new Vector2(-BossBarWidth * 0.5f + 36f, BossBarPlateHeight + 6f);
+            return group;
         }
 
         private static void PlaceAtFeet(GameObject go, float width, float height)
@@ -1421,7 +1736,11 @@ namespace GN3.Battle
             overlay.transform.SetAsLastSibling();
 
             int rows = report.Members.Count;
-            float membersTop = -196f;
+            // 전리품 줄(승리 때만): 한 줄에 LootPerLine칸씩, 줄 수만큼 구분선·대원 목록을 아래로 민다
+            var loot = victory ? report.Loot : new List<(LootItem item, int count)>();
+            int lootLines = (loot.Count + LootPerLine - 1) / LootPerLine;
+            float lootExtra = lootLines > 0 ? lootLines * LootLineHeight + 4f : 0f;
+            float membersTop = -196f - lootExtra;
             float height = -membersTop + ResultRowHeight * rows + 124f;
             var panel = CreateImage(overlay.transform, "ResultPanel", Color.white);
             panel.AddComponent<CanvasGroup>();
@@ -1476,9 +1795,24 @@ namespace GN3.Battle
                 (report.Reputation >= 0 ? $"+{report.Reputation}" : report.Reputation.ToString()) + " 명성",
                 report.Reputation >= 0 ? RepColor : DefeatColor);
 
+            // 전리품: 아이콘 ×개수(마우스를 올리면 이름·팔 때 값). 길드 창고에서 판다.
+            for (int line = 0; line < lootLines; line++)
+            {
+                var lootRow = new GameObject("Loot", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+                lootRow.transform.SetParent(panel.transform, false);
+                PlaceTop((RectTransform)lootRow.transform, -172f - line * LootLineHeight, LootLineHeight, ResultPad);
+                var lootLayout = lootRow.GetComponent<HorizontalLayoutGroup>();
+                lootLayout.childAlignment = TextAnchor.MiddleCenter;
+                lootLayout.spacing = 6f;
+                lootLayout.childControlWidth = lootLayout.childControlHeight = true;
+                lootLayout.childForceExpandWidth = lootLayout.childForceExpandHeight = false;
+                foreach (var (item, count) in loot.Skip(line * LootPerLine).Take(LootPerLine))
+                    AddLootChip(lootRow.transform, item, count);
+            }
+
             // 구분선
             var divider = CreateImage(panel.transform, "Divider", DividerColor);
-            PlaceTop((RectTransform)divider.transform, -180f, 1f, ResultPad);
+            PlaceTop((RectTransform)divider.transform, -180f - lootExtra, 1f, ResultPad);
             divider.GetComponent<Image>().raycastTarget = false;
 
             // 대원
@@ -1550,6 +1884,50 @@ namespace GN3.Battle
             return text;
         }
 
+        /// <summary>적 이름표 색: 개체 등급(이름 앞말)이 강한·우두머리면 눈에 띄게, 약한은 흐리게.</summary>
+        private static Color EnemyNameColor(string name) => MonsterIV.RankOf(name) switch
+        {
+            MonsterRank.Weak => new Color(0.7f, 0.66f, 0.64f),
+            MonsterRank.Strong => new Color(1f, 0.65f, 0.29f),
+            MonsterRank.Alpha => new Color(1f, 0.42f, 0.35f),
+            _ => new Color(0.92f, 0.66f, 0.6f),
+        };
+
+        private const int LootPerLine = 6;
+        private const float LootLineHeight = 44f;
+        private const float LootIconSize = 38f;
+        private static readonly Color LootRareColor = new Color(0.78f, 0.62f, 1f);
+
+        /// <summary>전리품 한 칸: 아이콘 + "×n"(드문 것은 보랏빛). 마우스를 올리면 이름·팔 때 값.</summary>
+        private void AddLootChip(Transform parent, LootItem item, int count)
+        {
+            var chip = new GameObject("LootChip", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup));
+            chip.transform.SetParent(parent, false);
+            chip.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.001f); // 툴팁용 레이캐스트(보이지 않음)
+            var chipLayout = chip.GetComponent<HorizontalLayoutGroup>();
+            chipLayout.childAlignment = TextAnchor.MiddleLeft;
+            chipLayout.spacing = 2f;
+            chipLayout.padding = new RectOffset(4, 8, 0, 0);
+            chipLayout.childControlWidth = chipLayout.childControlHeight = true;
+            chipLayout.childForceExpandWidth = chipLayout.childForceExpandHeight = false;
+
+            var iconGO = CreateImage(chip.transform, "Icon", Color.white);
+            var iconImage = iconGO.GetComponent<Image>();
+            iconImage.sprite = item.Icon;
+            iconImage.preserveAspect = true;
+            iconImage.raycastTarget = false;
+            var iconLayout = iconGO.AddComponent<LayoutElement>();
+            iconLayout.preferredWidth = iconLayout.preferredHeight = LootIconSize;
+
+            var text = CreateText(chip.transform, $"×{count}", 18, TextAnchor.MiddleLeft, item.Rare ? LootRareColor : UITheme.BodyText);
+            text.fontStyle = FontStyle.Bold;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            text.raycastTarget = false;
+            text.gameObject.AddComponent<LayoutElement>().minWidth = 30f;
+
+            chip.AddComponent<TooltipTrigger>().Text = $"<b>{item.Name}</b>" + (item.Rare ? " (드묾)" : "") + $"\n팔면 개당 {item.Price}G · 길드 창고에서 판다";
+        }
+
         private static void AddRewardGap(Transform parent, float width)
         {
             var gap = new GameObject("Gap", typeof(RectTransform), typeof(LayoutElement));
@@ -1573,7 +1951,7 @@ namespace GN3.Battle
             pr.anchoredPosition = Vector2.zero;
             pr.sizeDelta = new Vector2(36f, 36f);
 
-            bool leader = m.Merc == _leaderMerc;
+            bool leader = _leaderMercs.Contains(m.Merc);
             var name = CreateText(row.transform, leader ? $"★ {m.Merc.Name}" : m.Merc.Name, 17, TextAnchor.MiddleLeft,
                 leader ? LeaderColor : UITheme.BodyText);
             name.fontStyle = FontStyle.Bold;

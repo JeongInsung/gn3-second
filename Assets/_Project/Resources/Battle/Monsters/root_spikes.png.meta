@@ -1,0 +1,1703 @@
+fileFormatVersion: 2
+guid: 0b0fd71281f572b4dadcd57ef98bcded
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 9074769935822638331
+    second: root_spikes_0
+  - first:
+      213: 1865933284500944760
+    second: root_spikes_1
+  - first:
+      213: -1261503550603656331
+    second: root_spikes_2
+  - first:
+      213: -5566940408833959269
+    second: root_spikes_3
+  - first:
+      213: -7716335542156623145
+    second: root_spikes_4
+  - first:
+      213: 4592517388845579129
+    second: root_spikes_5
+  - first:
+      213: 1219672437481341931
+    second: root_spikes_6
+  - first:
+      213: -2976498815753012411
+    second: root_spikes_7
+  - first:
+      213: -2656182872464664278
+    second: root_spikes_8
+  - first:
+      213: -6639692290874873440
+    second: root_spikes_9
+  - first:
+      213: -2009713367662309247
+    second: root_spikes_10
+  - first:
+      213: -7899443060419725426
+    second: root_spikes_11
+  - first:
+      213: 5106281053772557675
+    second: root_spikes_12
+  - first:
+      213: 4202258600099138055
+    second: root_spikes_13
+  - first:
+      213: -3231203115402626706
+    second: root_spikes_14
+  - first:
+      213: -1913675920338239501
+    second: root_spikes_15
+  - first:
+      213: 8965255514966767307
+    second: root_spikes_16
+  - first:
+      213: 4715357227304669030
+    second: root_spikes_17
+  - first:
+      213: 1588653118992800070
+    second: root_spikes_18
+  - first:
+      213: -2380201834229971890
+    second: root_spikes_19
+  - first:
+      213: 8967243823166629994
+    second: root_spikes_20
+  - first:
+      213: 7868928279553590932
+    second: root_spikes_21
+  - first:
+      213: 442960822069019938
+    second: root_spikes_22
+  - first:
+      213: 8573327795859125040
+    second: root_spikes_23
+  - first:
+      213: 1243502988344472008
+    second: root_spikes_24
+  - first:
+      213: 6910311353247148893
+    second: root_spikes_25
+  - first:
+      213: -6283754838760899776
+    second: root_spikes_26
+  - first:
+      213: -4678992904851680828
+    second: root_spikes_27
+  - first:
+      213: 4373527878625864132
+    second: root_spikes_28
+  - first:
+      213: -5188987533135550074
+    second: root_spikes_29
+  - first:
+      213: -2006713965448753334
+    second: root_spikes_30
+  - first:
+      213: 3865907052503081923
+    second: root_spikes_31
+  - first:
+      213: 8587049498309764325
+    second: root_spikes_32
+  - first:
+      213: 5127595221299371000
+    second: root_spikes_33
+  - first:
+      213: 9216012090808438075
+    second: root_spikes_34
+  - first:
+      213: 3706660029327738407
+    second: root_spikes_35
+  - first:
+      213: -4261959839621541286
+    second: root_spikes_36
+  - first:
+      213: -2821820613389527933
+    second: root_spikes_37
+  - first:
+      213: 887686587685752856
+    second: root_spikes_38
+  - first:
+      213: 8093469442870714641
+    second: root_spikes_39
+  - first:
+      213: 527292776750174401
+    second: root_spikes_40
+  - first:
+      213: 421728307050258120
+    second: root_spikes_41
+  - first:
+      213: -2217660017513230487
+    second: root_spikes_42
+  - first:
+      213: -4890737579414163590
+    second: root_spikes_43
+  - first:
+      213: -6088501250364691668
+    second: root_spikes_44
+  - first:
+      213: -4144828638484186418
+    second: root_spikes_45
+  - first:
+      213: 5081450336869426451
+    second: root_spikes_46
+  - first:
+      213: 5928950198906827981
+    second: root_spikes_47
+  - first:
+      213: -2257483317469127581
+    second: root_spikes_48
+  - first:
+      213: 3269829766270354290
+    second: root_spikes_49
+  - first:
+      213: -5124294383864964880
+    second: root_spikes_50
+  - first:
+      213: -2811217289647298977
+    second: root_spikes_51
+  - first:
+      213: -4785177922565287957
+    second: root_spikes_52
+  - first:
+      213: -2723706037396735635
+    second: root_spikes_53
+  - first:
+      213: 7296644828586181059
+    second: root_spikes_54
+  - first:
+      213: -3486776627852998470
+    second: root_spikes_55
+  - first:
+      213: 9017961881819004629
+    second: root_spikes_56
+  - first:
+      213: 6874886638333266086
+    second: root_spikes_57
+  - first:
+      213: -8835802555626299889
+    second: root_spikes_58
+  - first:
+      213: 848623747964520096
+    second: root_spikes_59
+  - first:
+      213: -6689379586950438096
+    second: root_spikes_60
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 1
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 4096
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 0
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: root_spikes_0
+      rect:
+        serializedVersion: 2
+        x: 754
+        y: 825
+        width: 223
+        height: 213
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bfc4a1b2d2f00fd70800000000000000
+      internalID: 9074769935822638331
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_1
+      rect:
+        serializedVersion: 2
+        x: 1110
+        y: 851
+        width: 192
+        height: 207
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 877b145af6025e910800000000000000
+      internalID: 1865933284500944760
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_2
+      rect:
+        serializedVersion: 2
+        x: 1329
+        y: 974
+        width: 40
+        height: 58
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5730067543d3e7ee0800000000000000
+      internalID: -1261503550603656331
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_3
+      rect:
+        serializedVersion: 2
+        x: 1370
+        y: 887
+        width: 188
+        height: 163
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b9a1fad61314eb2b0800000000000000
+      internalID: -5566940408833959269
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_4
+      rect:
+        serializedVersion: 2
+        x: 1656
+        y: 1015
+        width: 34
+        height: 29
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 7d2880215b11ae490800000000000000
+      internalID: -7716335542156623145
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_5
+      rect:
+        serializedVersion: 2
+        x: 1664
+        y: 580
+        width: 420
+        height: 487
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 97bf1f2ab36ebbf30800000000000000
+      internalID: 4592517388845579129
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_6
+      rect:
+        serializedVersion: 2
+        x: 1826
+        y: 1032
+        width: 9
+        height: 18
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: be3096aae952de010800000000000000
+      internalID: 1219672437481341931
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_7
+      rect:
+        serializedVersion: 2
+        x: 122
+        y: 772
+        width: 213
+        height: 254
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 54bbba4e81a51b6d0800000000000000
+      internalID: -2976498815753012411
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_8
+      rect:
+        serializedVersion: 2
+        x: 580
+        y: 805
+        width: 141
+        height: 209
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a29544420c7532bd0800000000000000
+      internalID: -2656182872464664278
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_9
+      rect:
+        serializedVersion: 2
+        x: 1307
+        y: 966
+        width: 30
+        height: 29
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0a9e0804a031bd3a0800000000000000
+      internalID: -6639692290874873440
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_10
+      rect:
+        serializedVersion: 2
+        x: 1329
+        y: 973
+        width: 8
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 180522c07501c14e0800000000000000
+      internalID: -2009713367662309247
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_11
+      rect:
+        serializedVersion: 2
+        x: 1452
+        y: 974
+        width: 10
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e87f14cb36a8f5290800000000000000
+      internalID: -7899443060419725426
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_12
+      rect:
+        serializedVersion: 2
+        x: 1442
+        y: 950
+        width: 12
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b6dab6d60972dd640800000000000000
+      internalID: 5106281053772557675
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_13
+      rect:
+        serializedVersion: 2
+        x: 1450
+        y: 924
+        width: 56
+        height: 40
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 70a4d39aeeb615a30800000000000000
+      internalID: 4202258600099138055
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_14
+      rect:
+        serializedVersion: 2
+        x: 1434
+        y: 926
+        width: 9
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e697a4dd2e57823d0800000000000000
+      internalID: -3231203115402626706
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_15
+      rect:
+        serializedVersion: 2
+        x: 1442
+        y: 925
+        width: 8
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3ff3509b3e14175e0800000000000000
+      internalID: -1913675920338239501
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_16
+      rect:
+        serializedVersion: 2
+        x: 1458
+        y: 932
+        width: 10
+        height: 12
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bc6b432146cfa6c70800000000000000
+      internalID: 8965255514966767307
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_17
+      rect:
+        serializedVersion: 2
+        x: 1505
+        y: 926
+        width: 15
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 66fc09a4a60507140800000000000000
+      internalID: 4715357227304669030
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_18
+      rect:
+        serializedVersion: 2
+        x: 241
+        y: 838
+        width: 18
+        height: 18
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 649d1ec38970c0610800000000000000
+      internalID: 1588653118992800070
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_19
+      rect:
+        serializedVersion: 2
+        x: 247
+        y: 826
+        width: 10
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: e444df8ea03d7fed0800000000000000
+      internalID: -2380201834229971890
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_20
+      rect:
+        serializedVersion: 2
+        x: 260
+        y: 826
+        width: 7
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a68a9262fbc027c70800000000000000
+      internalID: 8967243823166629994
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_21
+      rect:
+        serializedVersion: 2
+        x: 338
+        y: 794
+        width: 36
+        height: 33
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 49641d1349c043d60800000000000000
+      internalID: 7868928279553590932
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_22
+      rect:
+        serializedVersion: 2
+        x: 385
+        y: 709
+        width: 100
+        height: 183
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 225c6d05586b52600800000000000000
+      internalID: 442960822069019938
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_23
+      rect:
+        serializedVersion: 2
+        x: 899
+        y: 826
+        width: 9
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0337a27f4349af670800000000000000
+      internalID: 8573327795859125040
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_24
+      rect:
+        serializedVersion: 2
+        x: 967
+        y: 821
+        width: 22
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8c1b869216fc14110800000000000000
+      internalID: 1243502988344472008
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_25
+      rect:
+        serializedVersion: 2
+        x: 985
+        y: 821
+        width: 26
+        height: 48
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d5b25a9309b56ef50800000000000000
+      internalID: 6910311353247148893
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_26
+      rect:
+        serializedVersion: 2
+        x: 1126
+        y: 803
+        width: 21
+        height: 25
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 04bb304544e9bc8a0800000000000000
+      internalID: -6283754838760899776
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_27
+      rect:
+        serializedVersion: 2
+        x: 1138
+        y: 579
+        width: 432
+        height: 287
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4c11ebf4eb0e01fb0800000000000000
+      internalID: -4678992904851680828
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_28
+      rect:
+        serializedVersion: 2
+        x: 370
+        y: 784
+        width: 22
+        height: 28
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4c923c40f64e1bc30800000000000000
+      internalID: 4373527878625864132
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_29
+      rect:
+        serializedVersion: 2
+        x: 597
+        y: 587
+        width: 442
+        height: 221
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 689668fb4530df7b0800000000000000
+      internalID: -5188987533135550074
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_30
+      rect:
+        serializedVersion: 2
+        x: 413
+        y: 755
+        width: 7
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a4f8c9bc748b624e0800000000000000
+      internalID: -2006713965448753334
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_31
+      rect:
+        serializedVersion: 2
+        x: 970
+        y: 756
+        width: 9
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3c3af175bf576a530800000000000000
+      internalID: 3865907052503081923
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_32
+      rect:
+        serializedVersion: 2
+        x: 979
+        y: 756
+        width: 8
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5e42377c5045b2770800000000000000
+      internalID: 8587049498309764325
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_33
+      rect:
+        serializedVersion: 2
+        x: 49
+        y: 576
+        width: 367
+        height: 167
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8fb1a85cfa0e82740800000000000000
+      internalID: 5127595221299371000
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_34
+      rect:
+        serializedVersion: 2
+        x: 465
+        y: 729
+        width: 11
+        height: 18
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b3d87560b2ad5ef70800000000000000
+      internalID: 9216012090808438075
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_35
+      rect:
+        serializedVersion: 2
+        x: 465
+        y: 715
+        width: 22
+        height: 31
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 726083f68a3b07330800000000000000
+      internalID: 3706660029327738407
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_36
+      rect:
+        serializedVersion: 2
+        x: 469
+        y: 695
+        width: 20
+        height: 29
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a5290605b1a7ad4c0800000000000000
+      internalID: -4261959839621541286
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_37
+      rect:
+        serializedVersion: 2
+        x: 415
+        y: 584
+        width: 78
+        height: 98
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 384da0f4a11e6d8d0800000000000000
+      internalID: -2821820613389527933
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_38
+      rect:
+        serializedVersion: 2
+        x: 591
+        y: 672
+        width: 7
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 81053e29f32b15c00800000000000000
+      internalID: 887686587685752856
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_39
+      rect:
+        serializedVersion: 2
+        x: 589
+        y: 644
+        width: 13
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 111a9c6c397c15070800000000000000
+      internalID: 8093469442870714641
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_40
+      rect:
+        serializedVersion: 2
+        x: 594
+        y: 622
+        width: 16
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 1c0d2da9cf1515700800000000000000
+      internalID: 527292776750174401
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_41
+      rect:
+        serializedVersion: 2
+        x: 594
+        y: 589
+        width: 8
+        height: 7
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8ce157d29a74ad500800000000000000
+      internalID: 421728307050258120
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_42
+      rect:
+        serializedVersion: 2
+        x: 2082
+        y: 580
+        width: 31
+        height: 21
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 96f8987b6f94931e0800000000000000
+      internalID: -2217660017513230487
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_43
+      rect:
+        serializedVersion: 2
+        x: 2022
+        y: 463
+        width: 10
+        height: 9
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a7f6d51751c902cb0800000000000000
+      internalID: -4890737579414163590
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_44
+      rect:
+        serializedVersion: 2
+        x: 88
+        y: 60
+        width: 394
+        height: 378
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c2bad7dfe5c418ba0800000000000000
+      internalID: -6088501250364691668
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_45
+      rect:
+        serializedVersion: 2
+        x: 479
+        y: 324
+        width: 30
+        height: 18
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ecab844405c9a76c0800000000000000
+      internalID: -4144828638484186418
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_46
+      rect:
+        serializedVersion: 2
+        x: 617
+        y: 54
+        width: 435
+        height: 370
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 31524e0a820f48640800000000000000
+      internalID: 5081450336869426451
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_47
+      rect:
+        serializedVersion: 2
+        x: 998
+        y: 330
+        width: 59
+        height: 60
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: dc4b2d00bccd74250800000000000000
+      internalID: 5928950198906827981
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_48
+      rect:
+        serializedVersion: 2
+        x: 1426
+        y: 339
+        width: 36
+        height: 24
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 36cd1e722eecba0e0800000000000000
+      internalID: -2257483317469127581
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_49
+      rect:
+        serializedVersion: 2
+        x: 1452
+        y: 332
+        width: 48
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2730b8e19d4c06d20800000000000000
+      internalID: 3269829766270354290
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_50
+      rect:
+        serializedVersion: 2
+        x: 1549
+        y: 289
+        width: 78
+        height: 63
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0f813355869d2e8b0800000000000000
+      internalID: -5124294383864964880
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_51
+      rect:
+        serializedVersion: 2
+        x: 1850
+        y: 288
+        width: 100
+        height: 42
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f56e22005cc8cf8d0800000000000000
+      internalID: -2811217289647298977
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_52
+      rect:
+        serializedVersion: 2
+        x: 1973
+        y: 248
+        width: 84
+        height: 164
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: bef447a4802a79db0800000000000000
+      internalID: -4785177922565287957
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_53
+      rect:
+        serializedVersion: 2
+        x: 1152
+        y: 35
+        width: 431
+        height: 270
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d6971603ac3733ad0800000000000000
+      internalID: -2723706037396735635
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_54
+      rect:
+        serializedVersion: 2
+        x: 1215
+        y: 301
+        width: 15
+        height: 19
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3c10214ffc3e24560800000000000000
+      internalID: 7296644828586181059
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_55
+      rect:
+        serializedVersion: 2
+        x: 1721
+        y: 304
+        width: 37
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: ab800b5712b7c9fc0800000000000000
+      internalID: -3486776627852998470
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_56
+      rect:
+        serializedVersion: 2
+        x: 1794
+        y: 305
+        width: 11
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5deb5d36d8c362d70800000000000000
+      internalID: 9017961881819004629
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_57
+      rect:
+        serializedVersion: 2
+        x: 1799
+        y: 278
+        width: 14
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6a80fec09f0886f50800000000000000
+      internalID: 6874886638333266086
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_58
+      rect:
+        serializedVersion: 2
+        x: 485
+        y: 104
+        width: 10
+        height: 16
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f0ed766c36ce06580800000000000000
+      internalID: -8835802555626299889
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_59
+      rect:
+        serializedVersion: 2
+        x: 489
+        y: 113
+        width: 10
+        height: 11
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0a6c2657dcae6cb00800000000000000
+      internalID: 848623747964520096
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: root_spikes_60
+      rect:
+        serializedVersion: 2
+        x: 1699
+        y: 49
+        width: 388
+        height: 202
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 033e11025bc8a23a0800000000000000
+      internalID: -6689379586950438096
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      root_spikes_0: 9074769935822638331
+      root_spikes_1: 1865933284500944760
+      root_spikes_10: -2009713367662309247
+      root_spikes_11: -7899443060419725426
+      root_spikes_12: 5106281053772557675
+      root_spikes_13: 4202258600099138055
+      root_spikes_14: -3231203115402626706
+      root_spikes_15: -1913675920338239501
+      root_spikes_16: 8965255514966767307
+      root_spikes_17: 4715357227304669030
+      root_spikes_18: 1588653118992800070
+      root_spikes_19: -2380201834229971890
+      root_spikes_2: -1261503550603656331
+      root_spikes_20: 8967243823166629994
+      root_spikes_21: 7868928279553590932
+      root_spikes_22: 442960822069019938
+      root_spikes_23: 8573327795859125040
+      root_spikes_24: 1243502988344472008
+      root_spikes_25: 6910311353247148893
+      root_spikes_26: -6283754838760899776
+      root_spikes_27: -4678992904851680828
+      root_spikes_28: 4373527878625864132
+      root_spikes_29: -5188987533135550074
+      root_spikes_3: -5566940408833959269
+      root_spikes_30: -2006713965448753334
+      root_spikes_31: 3865907052503081923
+      root_spikes_32: 8587049498309764325
+      root_spikes_33: 5127595221299371000
+      root_spikes_34: 9216012090808438075
+      root_spikes_35: 3706660029327738407
+      root_spikes_36: -4261959839621541286
+      root_spikes_37: -2821820613389527933
+      root_spikes_38: 887686587685752856
+      root_spikes_39: 8093469442870714641
+      root_spikes_4: -7716335542156623145
+      root_spikes_40: 527292776750174401
+      root_spikes_41: 421728307050258120
+      root_spikes_42: -2217660017513230487
+      root_spikes_43: -4890737579414163590
+      root_spikes_44: -6088501250364691668
+      root_spikes_45: -4144828638484186418
+      root_spikes_46: 5081450336869426451
+      root_spikes_47: 5928950198906827981
+      root_spikes_48: -2257483317469127581
+      root_spikes_49: 3269829766270354290
+      root_spikes_5: 4592517388845579129
+      root_spikes_50: -5124294383864964880
+      root_spikes_51: -2811217289647298977
+      root_spikes_52: -4785177922565287957
+      root_spikes_53: -2723706037396735635
+      root_spikes_54: 7296644828586181059
+      root_spikes_55: -3486776627852998470
+      root_spikes_56: 9017961881819004629
+      root_spikes_57: 6874886638333266086
+      root_spikes_58: -8835802555626299889
+      root_spikes_59: 848623747964520096
+      root_spikes_6: 1219672437481341931
+      root_spikes_60: -6689379586950438096
+      root_spikes_7: -2976498815753012411
+      root_spikes_8: -2656182872464664278
+      root_spikes_9: -6639692290874873440
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
