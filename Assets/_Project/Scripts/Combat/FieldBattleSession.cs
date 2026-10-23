@@ -5,6 +5,9 @@ using System.Numerics;
 
 namespace GN3.Combat
 {
+    /// <summary>분대장이 분대 전체에 내리는 명령(FieldBattleSession.OrderRally 등). 순서 = 화면 단축키 1~4.</summary>
+    public enum SquadOrder { Rally, Retreat, Advance, Focus }
+
     /// <summary>필드 전투에 선 유닛 하나(위치·이동·공격 대기·스킬 쿨타임). 상태는 FieldBattleSession만 바꾼다.</summary>
     public class FieldUnit
     {
@@ -50,6 +53,11 @@ namespace GN3.Combat
         public Vector2? MoveGoal { get; internal set; }
         /// <summary>쓰기로 정한 스킬의 대상 - 사거리 밖이면 다가간 뒤 쓴다.</summary>
         public FieldUnit SkillTarget { get; internal set; }
+        /// <summary>플레이어가 끌어서 자리를 정해 준 대원(분대장 말고): 그 자리로 걸어간 뒤 지키며 사거리 안의 적만 때린다.
+        /// 적 위에 끌어 놓아 공격을 시키면 풀린다.</summary>
+        public bool HoldPosition { get; internal set; }
+        /// <summary>플레이어가 찍어 준 공격 대상: 더 가까운 적이 생겨도 바꾸지 않는다(분대장 말고 대원용).</summary>
+        internal bool TargetOrdered;
 
         public bool IsAlive => Combatant.IsAlive;
         public float AttackRange => IsMelee ? FieldBattleSession.MeleeRange : FieldBattleSession.RangedRange;
@@ -74,8 +82,8 @@ namespace GN3.Combat
 
     /// <summary>
     /// 직접 진행 전투(필드형 실시간). 아군은 왼쪽, 적은 오른쪽에서 시작해 서로 다가가 싸운다.
-    /// 분대장 한 명만 플레이어 명령(이동·공격·스킬)으로 움직이고, 나머지 아군과 적은 AI가 대상을 골라 쫓아가
-    /// 때리며, 아군 AI는 스킬도 알아서 쓴다. 피해·회피·패시브는 자동 전투와 같은 CombatResolver를 쓴다.
+    /// 분대장은 플레이어 명령(이동·공격·스킬)으로 움직이고, 나머지 아군과 적은 AI가 대상을 골라 쫓아가
+    /// 때리며, 아군 AI는 스킬도 알아서 쓴다. 다른 대원도 끌어 놓아 자리(OrderUnitMove)나 공격 대상(OrderUnitAttack)을 정해 줄 수 있다. 피해·회피·패시브는 자동 전투와 같은 CombatResolver를 쓴다.
     /// Unity 타입에 의존하지 않는 순수 C# - BattleUIController가 매 프레임 Tick을 부르고 Position을 화면에 옮긴다.
     /// </summary>
     public class FieldBattleSession
@@ -279,6 +287,7 @@ namespace GN3.Combat
             foreach (var u in Units)
             {
                 u.Target = null;
+                u.TargetOrdered = false;
                 u.SkillTarget = null;
             }
             _orderedTarget = null;
@@ -378,6 +387,120 @@ namespace GN3.Combat
             Leader.SkillTarget = null;
         }
 
+        // ---------- 대원 명령(끌어 놓기) ----------
+
+        private bool CanOrder(FieldUnit unit) =>
+            HasStarted && !IsOver && unit != null && unit.IsPlayerSide && unit.IsAlive;
+
+        /// <summary>대원을 그 지점으로 걸어가게 한다(가는 동안 적을 쫓지 않음). 분대장이면 OrderMove와 같고,
+        /// 다른 대원은 도착한 뒤 그 자리를 지킨다(HoldPosition). 명령이 먹혔으면 true.</summary>
+        public bool OrderUnitMove(FieldUnit unit, Vector2 point)
+        {
+            if (!CanOrder(unit)) return false;
+            if (unit == Leader) { OrderMove(point); return true; }
+            unit.MoveGoal = ClampToField(point);
+            unit.Target = null;
+            unit.TargetOrdered = false;
+            unit.SkillTarget = null;
+            unit.HoldPosition = true;
+            return true;
+        }
+
+        /// <summary>대원에게 이 적을 공격시킨다. 분대장이면 OrderAttack과 같고, 다른 대원은 자리 지키기를 풀고 그 적부터 쫓는다
+        /// (그 뒤엔 다시 알아서 싸운다).</summary>
+        public bool OrderUnitAttack(FieldUnit unit, FieldUnit enemy)
+        {
+            if (!CanOrder(unit) || enemy == null || enemy.IsPlayerSide || !enemy.IsAlive) return false;
+            if (unit == Leader) { OrderAttack(enemy); return true; }
+            unit.HoldPosition = false;
+            unit.MoveGoal = null;
+            unit.SkillTarget = null;
+            unit.Target = enemy;
+            unit.TargetOrdered = true;
+            return true;
+        }
+
+        // ---------- 분대 명령(일시정지 중 분대장이 내린다) ----------
+        // 지금 조종 중인 분대장의 분대에만 먹힌다(두 분대 전투면 다른 분대는 그대로). 명령마다 쿨타임(전투 시간).
+
+        public const float RallyCooldown = 10f;
+        public const float RetreatCooldown = 12f;
+        public const float AdvanceCooldown = 8f;
+        public const float FocusCooldown = 12f;
+        /// <summary>후퇴: 지금 자리에서 왼쪽(아군 쪽)으로 이만큼 물러난다.</summary>
+        public const float RetreatDistance = 320f;
+        private const float RallySpacing = 70f;
+
+        private readonly float[] _squadCooldowns = new float[4];
+
+        public float SquadOrderCooldown(SquadOrder order) => _squadCooldowns[(int)order];
+        public bool SquadOrderReady(SquadOrder order) => LeaderCanAct && _squadCooldowns[(int)order] <= 0f;
+
+        /// <summary>조종 중인 분대장의 분대에서 살아 있는 대원(분대장 빼고).</summary>
+        private List<FieldUnit> SquadMembers() => Units
+            .Where(u => u.IsPlayerSide && u.IsAlive && u != Leader && u.Squad == Leader.Squad)
+            .ToList();
+
+        /// <summary>집결: 대원들이 분대장 둘레(뒤쪽부터)로 모여 그 자리를 지킨다.</summary>
+        public bool OrderRally()
+        {
+            if (!SquadOrderReady(SquadOrder.Rally)) return false;
+            var members = SquadMembers();
+            for (int i = 0; i < members.Count; i++)
+                OrderUnitMove(members[i], Leader.Position + RallyOffset(i));
+            _squadCooldowns[(int)SquadOrder.Rally] = RallyCooldown;
+            return true;
+        }
+
+        /// <summary>분대장 둘레 자리: 뒤 → 위아래 → 뒤 대각선 → 두 줄 뒤 … (분대장 자리와 겹치지 않게).</summary>
+        private static Vector2 RallyOffset(int i)
+        {
+            Vector2[] ring =
+            {
+                new Vector2(-1f, 0f), new Vector2(0f, 1f), new Vector2(0f, -1f), new Vector2(-1f, 1f),
+                new Vector2(-1f, -1f), new Vector2(-2f, 0f), new Vector2(-2f, 1f), new Vector2(-2f, -1f),
+            };
+            var o = ring[i % ring.Length] + new Vector2(-2f * (i / ring.Length), 0f);
+            return o * RallySpacing;
+        }
+
+        /// <summary>후퇴: 분대장과 대원 모두 왼쪽으로 물러나고(적을 쫓지 않음), 대원은 물러난 자리를 지킨다.</summary>
+        public bool OrderRetreat()
+        {
+            if (!SquadOrderReady(SquadOrder.Retreat)) return false;
+            foreach (var u in SquadMembers())
+                OrderUnitMove(u, u.Position - new Vector2(RetreatDistance, 0f));
+            OrderMove(Leader.Position - new Vector2(RetreatDistance, 0f));
+            _squadCooldowns[(int)SquadOrder.Retreat] = RetreatCooldown;
+            return true;
+        }
+
+        /// <summary>전진: 대원들의 자리 지키기·이동·지정 대상을 모두 풀어 가장 가까운 적에게 달려들게 한다(분대장은 그대로).</summary>
+        public bool OrderAdvance()
+        {
+            if (!SquadOrderReady(SquadOrder.Advance)) return false;
+            foreach (var u in SquadMembers())
+            {
+                u.HoldPosition = false;
+                u.MoveGoal = null;
+                u.Target = null;
+                u.TargetOrdered = false;
+                u.SkillTarget = null;
+            }
+            _squadCooldowns[(int)SquadOrder.Advance] = AdvanceCooldown;
+            return true;
+        }
+
+        /// <summary>집중 공격: 분대장과 대원 모두 이 적 하나를 노린다(쓰러지면 다시 각자 싸운다).</summary>
+        public bool OrderFocus(FieldUnit enemy)
+        {
+            if (!SquadOrderReady(SquadOrder.Focus) || enemy == null || enemy.IsPlayerSide || !enemy.IsAlive) return false;
+            foreach (var u in SquadMembers()) OrderUnitAttack(u, enemy);
+            OrderAttack(enemy);
+            _squadCooldowns[(int)SquadOrder.Focus] = FocusCooldown;
+            return true;
+        }
+
         /// <summary>분대장 스킬이 지금 쓸 수 있는 상태인지(쿨타임·생존).</summary>
         public bool LeaderSkillReady => LeaderCanAct && Leader.Skill != null && Leader.Cooldown <= 0f;
 
@@ -420,6 +543,8 @@ namespace GN3.Combat
             var events = new List<BattleEvent>();
             if (!HasStarted || IsOver) return events;
             Elapsed += dt;
+            for (int i = 0; i < _squadCooldowns.Length; i++)
+                if (_squadCooldowns[i] > 0f) _squadCooldowns[i] = Math.Max(0f, _squadCooldowns[i] - dt);
             if (Leader != null && !Leader.IsAlive) SwitchLeader(); // 조종 중인 분대장이 쓰러지면 다른 분대장에게
 
             foreach (var u in Units)
@@ -511,16 +636,29 @@ namespace GN3.Combat
             }
         }
 
-        /// <summary>아군 AI: 가장 가까운 적에게 붙어 싸우고(때리는 중이면 그 대상 유지), 스킬은 쿨타임이 돌면 알아서.</summary>
+        /// <summary>아군 AI: 가장 가까운 적에게 붙어 싸우고(때리는 중이면 그 대상 유지), 스킬은 쿨타임이 돌면 알아서.
+        /// 끌어서 자리를 정해 준 대원은 그 자리로 가는 동안 싸우지 않고, 도착한 뒤엔 자리를 지키며 사거리 안의 적만 때린다.</summary>
         private void ThinkAlly(FieldUnit u)
         {
-            RetargetNearest(u);
+            if (u.Target != null && !u.Target.IsAlive) { u.Target = null; u.TargetOrdered = false; }
             if (u.SkillTarget != null && !u.SkillTarget.IsAlive) u.SkillTarget = null;
+            if (u.HoldPosition)
+            {
+                if (u.MoveGoal.HasValue) return; // 걸어가는 중: 적을 쫓지도, 스킬을 쓰지도 않는다
+                if (u.Target != null && !InReach(u, u.Target)) u.Target = null;
+                if (u.Target == null)
+                {
+                    var near = Nearest(u, Enemies(u));
+                    if (near != null && InReach(u, near)) u.Target = near;
+                }
+            }
+            else if (!u.TargetOrdered) RetargetNearest(u);
             if (u.Skill == null || u.Cooldown > 0f || u.SkillTarget != null) return;
 
-            // 자동 전투와 같은 판단(SkillAI). 공격 스킬은 사거리 안의 적만, 치유는 어디 있든(다가가서 쓴다).
+            // 자동 전투와 같은 판단(SkillAI). 공격 스킬은 사거리 안의 적만, 치유는 어디 있든(다가가서 쓴다 — 자리를 지키는 중이면 닿는 아군만).
             var inRange = Enemies(u).Where(e => InReach(u, e)).Select(e => e.Combatant);
-            u.SkillTarget = UnitOf(SkillAI.ChooseTarget(u.Skill, PlayerTeam, inRange, u.Target?.Combatant));
+            var allies = u.HoldPosition ? PlayerTeam.Where(c => { var a = UnitOf(c); return a != null && InReach(u, a); }).ToList() : PlayerTeam;
+            u.SkillTarget = UnitOf(SkillAI.ChooseTarget(u.Skill, allies, inRange, u.Target?.Combatant));
         }
 
         /// <summary>적 AI: 도발 중인 아군이 있으면 그쪽, 아니면 가장 가까운 아군.</summary>

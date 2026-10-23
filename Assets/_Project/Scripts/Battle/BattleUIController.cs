@@ -69,6 +69,7 @@ namespace GN3.Battle
         private readonly Dictionary<FieldUnit, UnitView> _views = new Dictionary<FieldUnit, UnitView>();
         private readonly List<UnitView> _drawOrder = new List<UnitView>();
         private bool _picking;      // 스킬 대상 고르는 중
+        private bool _focusPicking; // 분대 명령 '집중 공격'의 대상 고르는 중(일시정지 중)
         private bool _resultShown;
         private float _overSince = -1f;
         private AudioSource _music;     // 전투 브금(설정 창의 음악 볼륨을 따른다) // 전투가 끝난(한쪽이 다 쓰러진) 시각 — ResultDelaySeconds 뒤 결과창
@@ -353,11 +354,12 @@ namespace GN3.Battle
             RefreshPanel();
         }
 
-        /// <summary>배치 중 마우스를 올린(또는 끌고 있는) 아군에게만 마을 건물처럼 흰 테두리가 반짝인다.</summary>
+        /// <summary>마우스를 올린(또는 끌고 있는) 아군에게만 마을 건물처럼 흰 테두리가 반짝인다 — 배치 중에도, 전투 중(끌어서 명령)에도.</summary>
         private void UpdateDeployOutlines()
         {
+            bool canDrag = _deploying || (_session.HasStarted && !_session.IsOver && !_resultShown);
             foreach (var v in _views.Values)
-                v.Animator?.SetOutline(_deploying && (v.Unit == _hoverUnit || v.Unit == _dragUnit));
+                v.Animator?.SetOutline(canDrag && v.Unit.IsAlive && (v.Unit == _hoverUnit || v.Unit == _dragUnit));
         }
 
         private void ResetFormation()
@@ -381,7 +383,12 @@ namespace GN3.Battle
 
         private void OnDragBegin(FieldUnit unit, PointerEventData e)
         {
-            if (!_deploying || !TryFieldPoint(e, out var local)) return;
+            if (!TryFieldPoint(e, out var local)) return;
+            if (!_deploying)
+            {
+                BeginOrderDrag(unit, local);
+                return;
+            }
             _dragUnit = unit;
             _dragStart = unit.Position;
             _dragOffset = new Vector2(unit.Position.X, unit.Position.Y) - local;
@@ -389,7 +396,12 @@ namespace GN3.Battle
 
         private void OnDragMove(FieldUnit unit, PointerEventData e)
         {
-            if (!_deploying || _dragUnit != unit || !TryFieldPoint(e, out var local)) return;
+            if (_dragUnit != unit || !TryFieldPoint(e, out var local)) return;
+            if (!_deploying)
+            {
+                UpdateOrderDrag(local + _dragOffset);
+                return;
+            }
             var p = local + _dragOffset;
             _session.PlaceForDeploy(unit, new System.Numerics.Vector2(p.x, p.y));
         }
@@ -397,7 +409,12 @@ namespace GN3.Battle
         /// <summary>놓은 자리에 다른 대원이 있으면 둘의 자리를 바꾼다(겹쳐 서지 않게).</summary>
         private void OnDragEnd(FieldUnit unit, PointerEventData e)
         {
-            if (!_deploying || _dragUnit != unit) return;
+            if (_dragUnit != unit) return;
+            if (!_deploying)
+            {
+                EndOrderDrag(unit, e);
+                return;
+            }
             _dragUnit = null;
             const float swapRadius = 60f;
             var other = _session.Units
@@ -405,6 +422,120 @@ namespace GN3.Battle
                 .OrderBy(o => System.Numerics.Vector2.Distance(o.Position, unit.Position))
                 .FirstOrDefault();
             if (other != null) _session.PlaceForDeploy(other, _dragStart);
+        }
+
+        // ---------- 전투 중 대원 끌어 놓기 ----------
+        // 아군을 끌어 땅에 놓으면 그 자리로 걸어가 지키고(분대장은 땅 클릭 이동과 같음), 적 위에 놓으면 그 적을 공격한다.
+        // 끄는 동안 대원에서 놓을 곳까지 점선과 고리가 따라다닌다(공격이면 붉게). 일시정지 중에도 된다.
+
+        private const float DropOnEnemyRadius = 70f; // 놓은 곳에서 이만큼 안에 적 발이 있으면 '그 적 공격'
+        private static readonly Color OrderMoveColor = new Color(0.5f, 1f, 0.6f, 0.9f);
+        private static readonly Color OrderAttackColor = new Color(1f, 0.4f, 0.35f, 0.95f);
+        private RectTransform _orderLine;
+        private Image _orderLineImage;
+        private RectTransform _orderRing;
+        private Image _orderRingImage;
+        private Vector2 _orderDragPoint; // 마지막으로 가리킨 땅(마우스가 멈춰도 대원이 움직이면 점선을 다시 그린다)
+
+        private bool CanOrderDrag(FieldUnit unit) =>
+            _session.HasStarted && !_session.IsOver && !_resultShown && !_cutIn && unit.IsAlive;
+
+        private void BeginOrderDrag(FieldUnit unit, Vector2 local)
+        {
+            if (!CanOrderDrag(unit)) return;
+            _picking = false;
+            _dragUnit = unit;
+            _dragOffset = Vector2.zero; // 놓을 곳 = 마우스가 가리키는 땅
+            EnsureOrderPreview();
+            UpdateDeployOutlines();
+            _orderLine.gameObject.SetActive(true);
+            _orderRing.gameObject.SetActive(true);
+            UpdateOrderDrag(local);
+        }
+
+        private void UpdateOrderDrag(Vector2 point)
+        {
+            if (_dragUnit == null || _orderLine == null) return;
+            if (!CanOrderDrag(_dragUnit))
+            {
+                // 끄는 사이 쓰러졌거나 전투가 끝났다
+                _dragUnit = null;
+                HideOrderPreview();
+                UpdateDeployOutlines();
+                return;
+            }
+            _orderDragPoint = point;
+            var clamped = FieldBattleSession.ClampToField(new System.Numerics.Vector2(point.x, point.y));
+            var to = new Vector2(clamped.X, clamped.Y);
+            var from = new Vector2(_dragUnit.Position.X, _dragUnit.Position.Y);
+            var enemy = EnemyAtDrop(to);
+            if (enemy != null) to = new Vector2(enemy.Position.X, enemy.Position.Y);
+            var color = enemy != null ? OrderAttackColor : OrderMoveColor;
+
+            var dir = to - from;
+            _orderLine.anchoredPosition = from;
+            _orderLine.sizeDelta = new Vector2(dir.magnitude, 4f);
+            _orderLine.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg);
+            _orderLineImage.color = new Color(color.r, color.g, color.b, 0.55f);
+            _orderRing.anchoredPosition = to;
+            float pulse = 1f + 0.12f * Mathf.Sin(Time.unscaledTime * 8f);
+            _orderRing.sizeDelta = new Vector2(56f, 26f) * (enemy != null ? 1.4f : 1f) * pulse;
+            _orderRingImage.color = color;
+        }
+
+        private void EndOrderDrag(FieldUnit unit, PointerEventData e)
+        {
+            _dragUnit = null;
+            HideOrderPreview();
+            UpdateDeployOutlines();
+            if (!CanOrderDrag(unit) || !TryFieldPoint(e, out var local)) return;
+            var clamped = FieldBattleSession.ClampToField(new System.Numerics.Vector2(local.x, local.y));
+            var enemy = EnemyAtDrop(new Vector2(clamped.X, clamped.Y));
+            string name = unit.Combatant.Name;
+            if (enemy != null)
+            {
+                if (_session.OrderUnitAttack(unit, enemy))
+                    AppendLog($"<color=#ff8a7a>{Josa.EulReul(name)} {enemy.Combatant.Name} 공격 지시</color>");
+                return;
+            }
+            if (!_session.OrderUnitMove(unit, clamped)) return;
+            StartCoroutine(MoveMarker(new Vector2(clamped.X, clamped.Y)));
+            if (unit != _session.Leader) AppendLog($"<color=#8affa0>{Josa.IGa(name)} 이동 — 도착하면 그 자리를 지킵니다</color>");
+        }
+
+        /// <summary>놓은 곳 가까이에 서 있는 살아 있는 적(가장 가까운 하나).</summary>
+        private FieldUnit EnemyAtDrop(Vector2 point) => _session.Units
+            .Where(u => !u.IsPlayerSide && u.IsAlive)
+            .Select(u => (u, d: Vector2.Distance(point, new Vector2(u.Position.X, u.Position.Y)) - u.BodyRadius))
+            .Where(x => x.d < DropOnEnemyRadius)
+            .OrderBy(x => x.d)
+            .Select(x => x.u)
+            .FirstOrDefault();
+
+        private void EnsureOrderPreview()
+        {
+            if (_orderLine != null) return;
+            var lineGO = new GameObject("OrderLine", typeof(RectTransform), typeof(Image));
+            lineGO.transform.SetParent(_groundLayer, false);
+            _orderLine = (RectTransform)lineGO.transform;
+            _orderLine.anchorMin = _orderLine.anchorMax = Vector2.zero;
+            _orderLine.pivot = new Vector2(0f, 0.5f);
+            _orderLineImage = lineGO.GetComponent<Image>();
+            _orderLineImage.raycastTarget = false;
+
+            var ringGO = new GameObject("OrderRing", typeof(RectTransform), typeof(Image));
+            ringGO.transform.SetParent(_groundLayer, false);
+            _orderRing = (RectTransform)ringGO.transform;
+            _orderRing.anchorMin = _orderRing.anchorMax = Vector2.zero;
+            _orderRingImage = ringGO.GetComponent<Image>();
+            _orderRingImage.sprite = BattlePlaceholderSprites.Ring;
+            _orderRingImage.raycastTarget = false;
+        }
+
+        private void HideOrderPreview()
+        {
+            if (_orderLine != null) _orderLine.gameObject.SetActive(false);
+            if (_orderRing != null) _orderRing.gameObject.SetActive(false);
         }
 
         /// <summary>필드 왼쪽의 밝은 배치 구역(옅어지는 바탕·흐르는 점선 경계·글자, BattleFx). 클릭은 막지 않는다.</summary>
@@ -476,6 +607,9 @@ namespace GN3.Battle
 
             foreach (var v in _views.Values) UpdateUnitView(v);
             SortByDepth();
+            if (_dragUnit != null) UpdateOrderDrag(_orderDragPoint);
+            UpdateDeployOutlines();
+            RefreshSquadOrderBar();
 
             if (_session.IsOver)
             {
@@ -492,7 +626,14 @@ namespace GN3.Battle
             var kb = Keyboard.current;
             if (kb == null) return;
             if (kb.qKey.wasPressedThisFrame) PressSkill();
-            if (kb.escapeKey.wasPressedThisFrame) _picking = false;
+            if (kb.escapeKey.wasPressedThisFrame) { _picking = false; _focusPicking = false; }
+            if (_paused)
+            {
+                if (kb.digit1Key.wasPressedThisFrame || kb.numpad1Key.wasPressedThisFrame) PressSquadOrder(SquadOrder.Rally);
+                if (kb.digit2Key.wasPressedThisFrame || kb.numpad2Key.wasPressedThisFrame) PressSquadOrder(SquadOrder.Retreat);
+                if (kb.digit3Key.wasPressedThisFrame || kb.numpad3Key.wasPressedThisFrame) PressSquadOrder(SquadOrder.Advance);
+                if (kb.digit4Key.wasPressedThisFrame || kb.numpad4Key.wasPressedThisFrame) PressSquadOrder(SquadOrder.Focus);
+            }
             if (kb.spaceKey.wasPressedThisFrame) SetPaused(!_paused);
             if (kb.tabKey.wasPressedThisFrame) SwitchSquad();
         }
@@ -513,6 +654,7 @@ namespace GN3.Battle
         private void SetPaused(bool paused)
         {
             _paused = paused && !_resultShown;
+            if (!_paused) _focusPicking = false;
             Time.timeScale = _paused ? 0f : BattleSpeed;
             _pauseOverlay.SetActive(_paused);
         }
@@ -551,6 +693,11 @@ namespace GN3.Battle
         private void OnGroundClicked(PointerEventData e)
         {
             if (_deploying) return;
+            if (_focusPicking)
+            {
+                _focusPicking = false; // 빈 땅을 누르면 집중 공격 대상 고르기 취소
+                return;
+            }
             if (_picking && e.button == PointerEventData.InputButton.Left)
             {
                 _picking = false; // 빈 땅을 누르면 대상 고르기 취소
@@ -567,6 +714,15 @@ namespace GN3.Battle
         {
             if (_deploying) return;
             if (!unit.IsAlive) return;
+            if (_focusPicking)
+            {
+                if (!unit.IsPlayerSide && _session.OrderFocus(unit))
+                {
+                    _focusPicking = false;
+                    AppendLog($"<color=#ffd34a>분대 명령: 집중 공격 — 모두 {unit.Combatant.Name}에게</color>");
+                }
+                return;
+            }
             if (_picking)
             {
                 if (_session.OrderSkill(unit)) _picking = false;
@@ -627,11 +783,14 @@ namespace GN3.Battle
                 _skillButtonText.text = _picking ? $"{skill.Name} — 대상 선택" : $"[Q] {skill.Name}";
             }
 
-            _hintLabel.text = _picking
+            _hintLabel.text = _focusPicking
+                ? "집중 공격할 적을 클릭 (Esc·빈 땅: 취소)"
+                : _picking
                 ? (skill != null && skill.TargetType == SkillTargetType.Ally
                     ? "치료할 아군을 클릭 (Q: 자신 · Esc: 취소)"
                     : "스킬을 쓸 적을 클릭 (Esc: 취소)")
-                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지" + (_session.HasTwoSquads ? " · Tab: 분대 전환" : "");
+                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지" + (_session.HasTwoSquads ? " · Tab: 분대 전환" : "")
+                    + "\n대원을 끌어 땅에 놓으면 그 자리로 · 적 위에 놓으면 그 적 공격";
         }
 
         private void UpdateUnitView(UnitView v)
@@ -661,7 +820,7 @@ namespace GN3.Battle
 
             var leader = _session.Leader;
             bool targeted = alive && leader != null && leader.IsAlive && leader.Target == u;
-            v.TargetRing.enabled = targeted || (_picking && alive && IsPickable(u));
+            v.TargetRing.enabled = targeted || (_picking && alive && IsPickable(u)) || (_focusPicking && alive && !u.IsPlayerSide);
             v.TargetRing.color = targeted && !_picking ? new Color(1f, 0.35f, 0.3f, 0.9f) : new Color(PickingColor.r, PickingColor.g, PickingColor.b, 0.85f);
 
             // 바라보는 쪽(그림은 오른쪽을 본다). 죽으면 옆으로 눕힌다.
@@ -1323,7 +1482,7 @@ namespace GN3.Battle
             Stretch(rect);
             _pauseOverlay.GetComponent<Image>().raycastTarget = false;
 
-            var label = CreateText(_pauseOverlay.transform, "일시정지\n<size=18>Space: 계속 · 멈춘 동안에도 명령할 수 있습니다</size>", 40, TextAnchor.MiddleCenter, Color.white);
+            var label = CreateText(_pauseOverlay.transform, "일시정지\n<size=18>Space: 계속 · 멈춘 동안 명령하고 아래 분대 명령(1~4)을 내릴 수 있습니다</size>", 40, TextAnchor.MiddleCenter, Color.white);
             label.fontStyle = FontStyle.Bold;
             label.supportRichText = true;
             label.raycastTarget = false;
@@ -1332,7 +1491,84 @@ namespace GN3.Battle
             labelRect.anchorMin = labelRect.anchorMax = labelRect.pivot = new Vector2(0.5f, 1f);
             labelRect.anchoredPosition = new Vector2(0f, -40f);
             labelRect.sizeDelta = new Vector2(900f, 110f);
+            BuildSquadOrderBar(_pauseOverlay.transform);
             _pauseOverlay.SetActive(false);
+        }
+
+        // ---------- 분대 명령(일시정지 중) ----------
+        // 멈춘 화면 아래쪽 버튼 4개(단축키 1~4). 조종 중인 분대장의 분대에만 먹히고, 명령마다 쿨타임이 있다(FieldBattleSession).
+
+        private static readonly string[] SquadOrderNames = { "집결", "후퇴", "전진", "집중 공격" };
+        private static readonly string[] SquadOrderHelp = { "분대장 곁에 모여 지킴", "뒤로 물러나 지킴", "모두 적에게 돌격", "적 하나를 다 같이" };
+        private readonly Button[] _squadOrderButtons = new Button[4];
+        private readonly Text[] _squadOrderLabels = new Text[4];
+
+        private void BuildSquadOrderBar(Transform parent)
+        {
+            const float width = 180f, height = 64f, gap = 14f;
+            float left = -(width * 4 + gap * 3) / 2f + width / 2f;
+            for (int i = 0; i < 4; i++)
+            {
+                var order = (SquadOrder)i;
+                var button = CreateActionButton(parent, Vector2.zero, out var label);
+                var rect = (RectTransform)button.transform;
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
+                rect.anchoredPosition = new Vector2(left + i * (width + gap), 28f);
+                rect.sizeDelta = new Vector2(width, height);
+                label.supportRichText = true;
+                label.lineSpacing = 0.9f;
+                button.onClick.AddListener(() => PressSquadOrder(order));
+                _squadOrderButtons[i] = button;
+                _squadOrderLabels[i] = label;
+            }
+        }
+
+        private void PressSquadOrder(SquadOrder order)
+        {
+            EventSystem.current?.SetSelectedGameObject(null); // 버튼이 선택된 채 남아 Space에 다시 눌리지 않게
+            if (!_paused || !_session.SquadOrderReady(order)) return;
+            _picking = false;
+            switch (order)
+            {
+                case SquadOrder.Rally:
+                    if (_session.OrderRally()) OnSquadMoveOrdered("집결 — 분대장 곁으로 모여 지킨다");
+                    break;
+                case SquadOrder.Retreat:
+                    if (_session.OrderRetreat()) OnSquadMoveOrdered("후퇴 — 뒤로 물러나 지킨다");
+                    break;
+                case SquadOrder.Advance:
+                    if (_session.OrderAdvance()) AppendLog("<color=#ffd34a>분대 명령: 전진 — 모두 적에게 달려든다</color>");
+                    break;
+                case SquadOrder.Focus:
+                    _focusPicking = !_focusPicking; // 적을 누르면 내려진다(OnUnitClicked)
+                    break;
+            }
+        }
+
+        /// <summary>집결·후퇴: 기록을 남기고 대원마다 갈 곳에 이동 표시.</summary>
+        private void OnSquadMoveOrdered(string what)
+        {
+            AppendLog($"<color=#ffd34a>분대 명령: {what}</color>");
+            var leader = _session.Leader;
+            foreach (var u in _session.Units)
+                if (u.IsPlayerSide && u.IsAlive && u.Squad == leader.Squad && u.MoveGoal.HasValue)
+                    StartCoroutine(MoveMarker(new Vector2(u.MoveGoal.Value.X, u.MoveGoal.Value.Y)));
+        }
+
+        private void RefreshSquadOrderBar()
+        {
+            if (!_paused || _squadOrderButtons[0] == null) return;
+            for (int i = 0; i < 4; i++)
+            {
+                var order = (SquadOrder)i;
+                float cd = _session.SquadOrderCooldown(order);
+                bool ready = _session.SquadOrderReady(order);
+                _squadOrderButtons[i].interactable = ready;
+                string head = order == SquadOrder.Focus && _focusPicking
+                    ? "집중 공격 — 적 선택"
+                    : cd > 0f ? $"[{i + 1}] {SquadOrderNames[i]} ({Mathf.CeilToInt(cd)})" : $"[{i + 1}] {SquadOrderNames[i]}";
+                _squadOrderLabels[i].text = $"{head}\n<size=12>{SquadOrderHelp[i]}</size>";
+            }
         }
 
         private UnitView CreateUnitView(FieldUnit unit, ComposedCharacter appearance, int tier)
