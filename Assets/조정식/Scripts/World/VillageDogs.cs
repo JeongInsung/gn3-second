@@ -2,14 +2,13 @@ using System.Collections.Generic;
 using GN3.UI;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.Tilemaps;
 
 namespace GN3.World
 {
     /// <summary>
     /// 마을 잔디·길을 돌아다니는 강아지들. 에디터 메뉴(GN3/Village/강아지 만들기)가 걷기 프레임 8장과 그림자 재질을 넣어 두고,
     /// Play 때 이 컴포넌트가 강아지를 만든다(에디터에서는 아무것도 만들지 않는다).
-    /// 걷는 범위는 바깥 바닥(가장 넓은 Tilemap) 중 시작 화면 안쪽으로 줄이고(VillagePartyPresenter.ClampAreaToScreen과 같은 규칙),
+    /// 걷는 범위는 마을 바닥 전체(VillageBounds)에서 여백을 뺀 곳이고(용병 걷기 영역과 같은 규칙),
     /// 건물·장식은 VillageNavGrid로 피한다. 밤(NightLightFactor가 용병 숨김 기준을 넘으면)에는 들어가 잔다.
     /// </summary>
     public class VillageDogs : MonoBehaviour
@@ -62,8 +61,20 @@ namespace GN3.World
             foreach (var dog in _dogs) dog.gameObject.SetActive(!_hidden);
         }
 
-        private void OnEnable() => TimeAdvanceController.Midpoint += RespawnAll;
-        private void OnDisable() => TimeAdvanceController.Midpoint -= RespawnAll;
+        private void OnEnable()
+        {
+            TimeAdvanceController.Midpoint += RespawnAll;
+            VillageLayoutApplier.Rebuilt += RebuildGrid;
+        }
+
+        private void OnDisable()
+        {
+            TimeAdvanceController.Midpoint -= RespawnAll;
+            VillageLayoutApplier.Rebuilt -= RebuildGrid;
+        }
+
+        /// <summary>건물을 지었으면 같은 격자를 다시 막는다(강아지들이 이 격자를 들고 있다).</summary>
+        private void RebuildGrid() => _grid?.Rebuild(VillageNavGrid.CollectObstacles());
 
         private void Update()
         {
@@ -89,33 +100,14 @@ namespace GN3.World
 
         private static bool IsDaytime() => DayNightCycle.NightLightFactor <= HideNightLightFactor;
 
-        /// <summary>가장 넓은 Tilemap(바깥 바닥)에서 여백을 뺀 뒤 시작 화면과 겹치는 부분.</summary>
+        /// <summary>마을 바닥 전체(VillageBounds)에서 여백을 뺀 곳 — 용병 걷기 영역과 같은 기준.</summary>
         private static bool TryGetArea(out Rect area)
         {
             area = default;
-            Tilemap floor = null;
-            float floorArea = 0f;
-            foreach (var tilemap in FindObjectsByType<Tilemap>(FindObjectsSortMode.None))
-            {
-                tilemap.CompressBounds();
-                var size = tilemap.localBounds.size;
-                if (size.x * size.y > floorArea) { floor = tilemap; floorArea = size.x * size.y; }
-            }
-            if (floor == null) return false;
-
-            var local = floor.localBounds;
-            Vector3 min = floor.transform.TransformPoint(local.min), max = floor.transform.TransformPoint(local.max);
-            area = Rect.MinMaxRect(min.x + AreaMargin, min.y + AreaMargin, max.x - AreaMargin, max.y - AreaMargin);
-
-            var cam = Camera.main;
-            if (cam == null || !cam.orthographic) return true;
-            float halfHeight = cam.orthographicSize, halfWidth = halfHeight * cam.aspect;
-            Vector3 center = cam.transform.position;
-            float xMin = Mathf.Max(area.xMin, center.x - halfWidth + ScreenMarginSide);
-            float xMax = Mathf.Min(area.xMax, center.x + halfWidth - ScreenMarginSide);
-            float yMin = Mathf.Max(area.yMin, center.y - halfHeight + ScreenMarginBottom);
-            float yMax = Mathf.Min(area.yMax, center.y + halfHeight - ScreenMarginTop);
-            if (xMin < xMax && yMin < yMax) area = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+            if (!VillageBounds.Exists) return false;
+            var world = VillageBounds.World;
+            area = Rect.MinMaxRect(world.xMin + AreaMargin + ScreenMarginSide, world.yMin + AreaMargin + ScreenMarginBottom,
+                                   world.xMax - AreaMargin - ScreenMarginSide, world.yMax - AreaMargin - ScreenMarginTop);
             return true;
         }
     }

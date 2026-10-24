@@ -25,8 +25,9 @@ namespace GN3.World
         [SerializeField] private int sortingOrder = 90; // 건물·캐릭터(1) 위, 꽃잎(95) 아래
 
         private readonly List<SpriteRenderer> _clouds = new List<SpriteRenderer>();
-        private Rect _view;
+        private Rect _view;   // 지금 보이는 화면(마을이 넓어 카메라를 따라 매 프레임 다시 잰다)
         private float _dot;
+        private Camera _camera;
 
         public void Configure(Material unlit) => material = unlit;
 
@@ -38,6 +39,7 @@ namespace GN3.World
                 enabled = false;
                 return;
             }
+            _camera = cam;
             _view = PixelSprites.ViewRect(cam);
             _dot = PixelSprites.ScreenPixel(cam) * dotPixels;
 
@@ -63,12 +65,16 @@ namespace GN3.World
             tint.a = opacity * (1f - DayNightCycle.NightLightFactor);
             if (Application.isPlaying) tint.a *= 1f - Weather.Overcast; // 하늘이 덮이면 개별 구름 그림자는 없다
 
+            if (_camera != null) _view = PixelSprites.ViewRect(_camera);
             foreach (var cloud in _clouds)
             {
                 cloud.transform.position += step;
                 cloud.color = tint;
                 var bounds = cloud.bounds;
-                if (bounds.min.x > _view.xMax || bounds.min.y > _view.yMax) Respawn(cloud);
+                // 바람에 밀려 화면을 지나갔거나, 둘러보느라 화면이 멀리 떠나 안 보이게 됐으면 바람이 불어오는 쪽에서 다시 들어온다
+                var around = Rect.MinMaxRect(_view.xMin - bounds.size.x * 2f, _view.yMin - bounds.size.y * 2f, _view.xMax + bounds.size.x, _view.yMax + bounds.size.y);
+                bool passed = bounds.min.x > _view.xMax || bounds.min.y > _view.yMax;
+                if (passed || !around.Overlaps(Rect.MinMaxRect(bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y))) Respawn(cloud);
             }
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using GN3.Mercenaries;
+using GN3.World;
 using UnityEngine;
 
 namespace GN3.Economy
@@ -13,13 +14,13 @@ namespace GN3.Economy
     ///  훈련소: 정원 +1 · 훈련 성장 +20%씩 / 병원: 정원 +1 · 치료 속도 +25%씩 / 온천: 정원 +1 · 피로 회복 +25%씩
     ///  숙소: 파티 정원 +1씩(Guild.ApplyPartySize) / 창고: 칸 +5씩(GuildStorage.Capacity)
     /// 효과는 TrainingHall·Hospital·RestVenues.HotSpring이 여기 값을 읽는다.
-    /// 지금은 꺼 두었다(Enabled = false, 2026-10-20 — 나중에 비용을 다시 정해 켠다): 버튼이 숨고 단계가 있어도 효과가 없다.
+    /// 2026-10-23 다시 켬: 그 시설 건물을 마을에 지어 둬야 증축할 수 있다(RequiredBuilding, 숙소 = 여관). 창고는 길드(길드 천막·길드 홀)라 늘 된다.
     /// </summary>
     public static class GuildFacilities
     {
         public const int MaxLevel = 3;
         /// <summary>시설 기능을 켜는 스위치. false면 길드 창 [시설] 버튼이 숨고 모든 효과가 0단계와 같다(저장된 단계는 그대로 둔다).</summary>
-        public const bool Enabled = false;
+        public const bool Enabled = true;
 
         public static readonly Facility[] All = { Facility.Training, Facility.Hospital, Facility.HotSpring, Facility.Dormitory, Facility.Storage };
 
@@ -78,9 +79,22 @@ namespace GN3.Economy
             return string.Join(" · ", parts);
         }
 
+        /// <summary>증축하려면 마을에 있어야 하는 건물(BuildingCatalog id). null이면 늘 된다.</summary>
+        public static string RequiredBuilding(Facility f) => f switch
+        {
+            Facility.Training => "training",
+            Facility.Hospital => "hospital",
+            Facility.HotSpring => "hotspring",
+            Facility.Dormitory => "inn",
+            _ => null,
+        };
+
         /// <summary>올릴 수 없으면 이유, 되면 null.</summary>
         public static string Block(Facility f)
         {
+            string building = RequiredBuilding(f);
+            if (building != null && !VillageLayout.HasBuilding(building) && !(building == "training" && VillageLayout.HasBuilding("barracks"))) // 간이 훈련소도 훈련소로 친다
+                return $"마을에 {Josa.IGa(BuildingCatalog.Get(building).Name)} 있어야 증축할 수 있습니다.";
             int next = Level(f) + 1;
             if (next > MaxLevel) return "이미 최고 단계입니다.";
             var (gold, stones) = CostFor(next);

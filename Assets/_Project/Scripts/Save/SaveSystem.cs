@@ -135,10 +135,13 @@ namespace GN3.Save
         {
             var data = Read(path);
             if (data == null) return "";
-            int rank = 0;
-            for (int i = 0; i < Guild.Ranks.Length; i++)
-                if (data.reputation >= Guild.Ranks[i].Required) rank = i;
-            return $"{GameCalendar.Format(data.day)} · {Guild.Ranks[rank].Name} · 용병 {data.party.Count}명 · {data.gold}G" +
+            // 길드 홀이 없으면 "… 용병단"이고 동빛까지만 오른다(Guild.RankName). 건물 목록이 없던 예전 저장(버전 9 이하)은 길드 홀이 있던 마을이다.
+            var hall = BuildingCatalog.Get("guildhall");
+            bool isGuild = data.version < 10 || (data.buildings != null && data.buildings.Any(b => hall != null && hall.Matches(b)));
+            int rank = Guild.RankFor(data.reputation);
+            if (!isGuild) rank = Mathf.Min(rank, Guild.MercenaryBandMaxRank);
+            string rankName = Guild.Ranks[rank].Title + (isGuild ? " 길드" : " 용병단");
+            return $"{GameCalendar.Format(data.day)} · {rankName} · 용병 {data.party.Count}명 · {data.gold}G" +
                    (string.IsNullOrEmpty(data.savedAt) ? "" : $"\n저장: {data.savedAt}");
         }
 
@@ -280,6 +283,7 @@ namespace GN3.Save
             data.bestiaryKills = Bestiary.SaveEntries();
             data.bestiaryBest = Bestiary.SaveBest();
             data.facilities = GuildFacilities.SaveEntries();
+            data.buildings = VillageLayout.SaveEntries();
             CaptureRivals(data);
         }
 
@@ -531,8 +535,10 @@ namespace GN3.Save
             Contracts.Restore(data.contracts);
             GuildStorage.Restore(data.storageWeapons, data.storageItems);
             LootBag.Restore(data.loot);
+            if (data.version < 11) LootBag.Add(BuildMaterials.StartingKit); // 재료가 생기기 전 저장: 길드 천막 한 채 분
             Bestiary.Restore(data.bestiaryKills, data.bestiaryBest);
             GuildFacilities.Restore(data.facilities);
+            VillageLayout.Restore(data.buildings, data.version < 10);
             RestoreRivals(data, classes);
         }
 

@@ -38,6 +38,9 @@ namespace GN3.UI
 
         private static void Bootstrap()
         {
+            // 지은 건물만 켜고 고른 자리로 옮긴다. 길찾기 격자·앞뒤 정렬·문 위치·건물 클릭이 모두 이 모습을 보고 만들어지므로 맨 먼저.
+            VillageLayoutApplier.Apply();
+
             var marketPanel = GameObject.Find("MarketPanel");
             var partyPanel = GameObject.Find("PartyPanel");
             var questPanel = GameObject.Find("QuestPanel");
@@ -71,7 +74,14 @@ namespace GN3.UI
             new GameObject("VillageParty", typeof(VillagePartyPresenter)); // 파티 용병들이 마을을 돌아다닌다
             new GameObject("WeatherEffects", typeof(WeatherEffects));     // 오늘 날씨(서울 평년값): 비·눈 파티클, 흐린 날 조명
             VillageMusic.Create();                                        // 마을 브금(섞어서 돌아가며, 비 오는 날은 비 브금)
+            _buildingCanvas = canvas.transform;
+            _partyPanel = partyPanel;
+            _questPanel = questPanel;
+            _buildingPanel = null; // 씬마다 새로(ConnectBuildings가 만든다)
             ConnectBuildings(canvas.transform, partyPanel, questPanel);
+            BuildMenuPanel.Create(canvas.transform);              // 왼쪽 위 "건설" 버튼 → 지을 건물 목록
+            BuildingMover.Create(hud);                            // [건설] 창 "옮기기" → 지은 건물 옮기기 모드(완료·옮기기 취소)
+            PlaceConfirmPanel.Create(hud);                        // 건물을 놓으려고 클릭하면 "여기에 짓겠습니까?" 확인 창
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
             new GameObject("GuildStorageUI", typeof(GuildStorageUI)); // 길드 창 "창고" → 건물 패널에 창고 목록
@@ -115,18 +125,28 @@ namespace GN3.UI
                 Guild.OnChanged += rankUp =>
                 {
                     if (!rankUp) return;
-                    string line = $"길드 등급 상승! {Guild.Current.Name} — {Guild.UnlockText(Guild.Current)}";
+                    string line = $"길드 등급 상승! {Guild.CurrentName} — {Guild.UnlockText(Guild.Current)}";
                     ToastLog.Show(line, false);
                     DailyLog.Add(line);
-                    Mailbox.Post(MailKind.Alert, $"길드 등급 상승! {Guild.Current.Name}", Guild.UnlockText(Guild.Current), important: true);
+                    Mailbox.Post(MailKind.Alert, $"길드 등급 상승! {Guild.CurrentName}", Guild.UnlockText(Guild.Current), important: true);
                 };
 
-                // 불러오면 시계·낮밤·시장·게시판을 새 상태에 맞춘다.
+                // 불러오면 시계·낮밤·시장·게시판을 새 상태에 맞춘다. 마을 건물이 달라졌으면 씬을 다시 불러 새 마을로 맞춘다.
                 SaveSystem.OnLoaded += () =>
                 {
+                    if (VillageLayout.Stamp != VillageLayoutApplier.AppliedStamp)
+                    {
+                        SceneManager.LoadScene(TargetSceneName);
+                        return;
+                    }
                     Object.FindFirstObjectByType<TimeAdvanceController>()?.SyncToClock();
                     Object.FindFirstObjectByType<MercenaryMarketUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
                     Object.FindFirstObjectByType<QuestBoardUI>(FindObjectsInactive.Include)?.RefreshFromOutside();
+                };
+                // 건물을 지으면(씬을 다시 부르지 않음) 새 건물도 누를 수 있게 다시 연결한다.
+                VillageLayoutApplier.Rebuilt += () =>
+                {
+                    if (_buildingCanvas != null && _partyPanel != null && _questPanel != null) ConnectBuildings(_buildingCanvas, _partyPanel, _questPanel);
                 };
                 TitleScreen.Create(); // 켤 때 한 번: 메인화면(이어하기 · 게임 불러오기 · 새로 시작하기 · 설정)
             }
@@ -172,11 +192,24 @@ namespace GN3.UI
         private const string QuestBoardSpritePrefix = "오크 퀘스트 게시판";
         private const string BlacksmithSpritePrefix = "대장간 연기"; // 대장간 애니메이션 프레임 "대장간 연기_N"
         private const string GuildHallSpritePrefix = "쇠락한 모험가 길드 홀"; // 구운 "…@285x285" 포함
+        private const string TentSpritePrefix = BuildingCatalog.TentPrefix; // 길드 홀을 짓기 전 임시 길드(같은 길드 창·창고)
         private const string TrainingHallSpritePrefix = "중세 마을 훈련소 건물";
         private const string HospitalSpritePrefix = "십자가가 돋보이는 중세 픽셀 병원";
 
+        // 건물을 눌러 연 창의 [옮기기] 자리(각 창 X 버튼 왼쪽)
+        private static readonly Vector2 PanelMoveButtonOffset = new Vector2(-48f, -7f);
+        private static readonly Vector2 QuestMoveButtonOffset = new Vector2(12f, -7f);
+        private static readonly Vector2 GuildMoveButtonOffset = new Vector2(-44f, -5f);
+        private static readonly Vector2 BuildingPanelMoveButtonOffset = new Vector2(-64f, -17f);
+
+        // 지금 씬의 건물 클릭 연결 대상(건물을 지으면 ConnectBuildings를 다시 부른다)
+        private static Transform _buildingCanvas;
+        private static GameObject _partyPanel;
+        private static GameObject _questPanel;
+        private static BuildingPanel _buildingPanel;
+
         /// <summary>
-        /// 마을 건물 클릭 연결(클릭 기능이 없는 물체는 실행 중에 붙인다).
+        /// 마을 건물 클릭 연결(클릭 기능이 없는 물체는 실행 중에 붙인다). 여러 번 불러도 된다(건물마다 연결을 지우고 다시 단다).
         /// 여관 → "파티 구성"과 같은 파티 패널, 퀘스트 게시판 → "퀘스트"와 같은 퀘스트 패널, 나머지 건물 → 건물 패널.
         /// </summary>
         private static void ConnectBuildings(Transform canvasTransform, GameObject partyPanel, GameObject questPanel)
@@ -185,7 +218,7 @@ namespace GN3.UI
             if (inn != null) VillageInn.EnsureClickable(inn);
             var board = VillageProps.FindRenderer(QuestBoardSpritePrefix);
             if (board != null) VillageProps.EnsureClickable(board);
-            var guildHall = VillageProps.FindRenderer(GuildHallSpritePrefix);
+            var guildHall = VillageProps.FindRenderer(GuildHallSpritePrefix) ?? VillageProps.FindRenderer(TentSpritePrefix);
             SelectableBuilding guildBuilding = null;
             if (guildHall != null)
             {
@@ -201,12 +234,16 @@ namespace GN3.UI
                 smithy.SetInfo("대장간", "무기를 사서 용병에게 쥐여 줍니다. 맞는 직업이 들면 공격 보너스 ×1.5.");
             }
             var trainingHall = VillageProps.FindRenderer(TrainingHallSpritePrefix);
-            if (trainingHall != null)
+            var barracks = trainingHall == null ? VillageProps.FindRenderer(BuildingCatalog.BarracksPrefix) : null;
+            if (trainingHall != null || barracks != null)
             {
-                // 훈련소 → 건물 패널(TrainingHallUI가 "훈련소" 이름을 보고 목록을 채운다)
-                VillageProps.EnsureClickable(trainingHall)
-                    .SetInfo("훈련소", $"훈련할수록 능력치가 오릅니다. 직접 보내거나 스스로 찾아옵니다. (최대 {TrainingHall.Capacity}명)");
+                // 훈련소(없으면 간이 훈련소 군영 천막) → 건물 패널(TrainingHallUI가 이름에 "훈련소"가 들었는지 보고 목록을 채운다)
+                VillageProps.EnsureClickable(trainingHall ?? barracks)
+                    .SetInfo(trainingHall != null ? "훈련소" : "간이 훈련소", $"훈련할수록 능력치가 오릅니다. 직접 보내거나 스스로 찾아옵니다. (최대 {TrainingHall.Capacity}명)");
             }
+            var lodge = VillageProps.FindRenderer(BuildingCatalog.CampPrefix);
+            if (lodge != null)
+                VillageProps.EnsureClickable(lodge).SetInfo("용병 숙소", "여관이 생기기 전 용병들이 묵는 가죽 천막. 밤마다 야영보다 체력을 더 회복합니다.");
             var hospital = VillageProps.FindRenderer(HospitalSpritePrefix);
             Hospital.Available = hospital != null; // 병원 건물이 있어야 입원한다
             if (hospital != null)
@@ -224,13 +261,35 @@ namespace GN3.UI
                 if (renderer != null) VillageProps.EnsureClickable(renderer).SetInfo(venue.Name, venue.Description);
             }
 
-            var buildingPanel = BuildingPanel.Create(canvasTransform);
+            if (_buildingPanel == null) _buildingPanel = BuildingPanel.Create(canvasTransform);
+            var buildingPanel = _buildingPanel;
             foreach (var building in Object.FindObjectsByType<SelectableBuilding>(FindObjectsSortMode.None))
             {
-                if (VillageInn.IsInn(building)) building.onClicked.AddListener(_ => OpenPanel(partyPanel));
-                else if (VillageProps.IsProp(building, QuestBoardSpritePrefix)) building.onClicked.AddListener(_ => OpenPanel(questPanel));
-                else if (VillageProps.IsProp(building, GuildHallSpritePrefix)) building.onClicked.AddListener(_ => GuildPanel.ShowGlobal());
-                else building.onClicked.AddListener(buildingPanel.Open);
+                building.onClicked.RemoveAllListeners();
+                // 건물을 눌러 연 창에만 오른쪽 위 [옮기기](BuildingMoveButton — 메뉴로 연 같은 창엔 없다)
+                if (VillageInn.IsInn(building)) building.onClicked.AddListener(b =>
+                {
+                    OpenPanel(partyPanel);
+                    BuildingMoveButton.ShowOn(partyPanel, partyPanel.transform, PanelMoveButtonOffset, () => partyPanel.SetActive(false), b);
+                });
+                else if (VillageProps.IsProp(building, QuestBoardSpritePrefix)) building.onClicked.AddListener(b =>
+                {
+                    OpenPanel(questPanel);
+                    // 오른쪽 위엔 "새 의뢰까지 N일"이 있어 왼쪽 위에
+                    BuildingMoveButton.ShowOn(questPanel, questPanel.transform, QuestMoveButtonOffset, () => questPanel.SetActive(false), b, new Vector2(0f, 1f));
+                });
+                else if (VillageProps.IsProp(building, GuildHallSpritePrefix) || VillageProps.IsProp(building, TentSpritePrefix))
+                    building.onClicked.AddListener(b =>
+                    {
+                        GuildPanel.ShowGlobal();
+                        var guild = GuildPanel.Instance; // ConnectBuildings보다 늦게 만들어져 누를 때 찾는다
+                        if (guild != null) BuildingMoveButton.ShowOn(guild.PanelRoot, guild.PanelRoot.transform, GuildMoveButtonOffset, guild.Hide, b);
+                    });
+                else building.onClicked.AddListener(b =>
+                {
+                    buildingPanel.Open(b);
+                    BuildingMoveButton.ShowOn(buildingPanel.gameObject, buildingPanel.transform.Find("Box"), BuildingPanelMoveButtonOffset, buildingPanel.Close, b);
+                });
             }
             if (guildBuilding != null) GuildPanel.SetStorageOpener(() => buildingPanel.Open(guildBuilding));
             else GuildPanel.SetStorageOpener(null);
@@ -401,7 +460,7 @@ namespace GN3.UI
             };
         }
 
-        /// <summary>"견습 길드 · 명성 40". 마우스를 올리면 지금 해금 내용과 다음 단계 조건이 툴팁으로 뜬다.</summary>
+        /// <summary>"견습 용병단 · 명성 40". 마우스를 올리면 지금 해금 내용과 다음 단계 조건이 툴팁으로 뜬다.</summary>
         private static void CreateGuildText(Transform parent)
         {
             var go = new GameObject("GuildText", typeof(RectTransform), typeof(Text), typeof(LayoutElement), typeof(Shadow), typeof(TooltipTrigger), typeof(Button));
@@ -422,7 +481,7 @@ namespace GN3.UI
             void Refresh()
             {
                 if (text == null) return;
-                text.text = $"{Guild.Current.Name} · 명성 {Guild.Reputation}";
+                text.text = $"{Guild.CurrentName} · 명성 {Guild.Reputation}";
                 tip.Text = Guild.Tooltip();
             }
             Refresh();
@@ -442,10 +501,10 @@ namespace GN3.UI
 
         // 좌상단 메뉴 버튼바. 날짜·골드·명성 줄(DayControlBar)이 이 값으로 [퀘스트] 버튼 오른쪽 자리를 계산한다.
         private const float MenuBarMargin = 16f;
-        private const float MenuButtonWidth = 120f;
+        private const float MenuButtonWidth = 100f; // 버튼 6개(건설 추가)가 날짜 줄·오른쪽 배속 버튼과 겹치지 않게(120 → 100)
         private const float MenuButtonHeight = 40f;
         private const float MenuSpacing = 8f;
-        private const int MenuButtonCount = 5;
+        private const int MenuButtonCount = 6;
 
         private static void CreateMenuBar(Transform canvasTransform, GameObject marketPanel, GameObject partyPanel, GameObject questPanel)
         {
@@ -470,6 +529,7 @@ namespace GN3.UI
             CreateMenuButton(barGO.transform, "퀘스트", () => OpenPanel(questPanel));
             CreateMenuButton(barGO.transform, "도감", BestiaryPanel.ShowGlobal); // 몬스터 도감 창
             CreateMenuButton(barGO.transform, "근처 길드", RivalGuildsPanel.ShowGlobal); // 근처 길드 순위·관계·거래 창
+            CreateMenuButton(barGO.transform, "건설", BuildMenuPanel.ShowGlobal); // 마을에 건물 짓기(BuildPlacement)
         }
 
         private static void OpenPanel(GameObject panel) => PanelActivator.Open(panel);

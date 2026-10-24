@@ -125,8 +125,8 @@ namespace GN3.UI
                 if (g == null)
                 {
                     back.color = OurRow;
-                    label.text = $"<b>{i + 1}. {name}</b>\n<color={Muted}>{rank.Name} · 명성 {reputation} · 용병 {PlayerParty.Instance.Members.Count}명</color>";
-                    tip.Text = $"<b>우리 길드</b> — {Guild.Current.Name}\n임무에 성공해 명성을 올리면 순위가 오른다.\n근처 길드도 매일 의뢰를 맡아 명성이 오르내린다.";
+                    label.text = $"<b>{i + 1}. {name}</b>\n<color={Muted}>{Guild.CurrentName} · 명성 {reputation} · 용병 {PlayerParty.Instance.Members.Count}명</color>";
+                    tip.Text = $"<b>우리 길드</b> — {Guild.CurrentName}\n임무에 성공해 명성을 올리면 순위가 오른다.\n근처 길드도 매일 의뢰를 맡아 명성이 오르내린다.";
                     continue;
                 }
                 back.color = g == selected ? RowSelected : RowColor;

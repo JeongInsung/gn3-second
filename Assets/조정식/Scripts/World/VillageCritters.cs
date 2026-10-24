@@ -5,7 +5,7 @@ using UnityEngine;
 namespace GN3.World
 {
     /// <summary>
-    /// 마을의 작은 생물: 가끔 화면을 가로질러 날아가는 새 무리와, 꽃 주위를 맴도는 나비. 낮에만 보인다.
+    /// 마을의 작은 생물: 가끔 지금 보이는 화면을 가로질러 날아가는 새 무리와, 꽃 주위를 맴도는 나비. 낮에만 보인다.
     /// 새는 높이 나는 느낌이 나게 아래쪽으로 떨어진 그림자를 같이 끌고 간다(ProjectedShadow처럼 땅에 비친 그림자).
     /// 나비는 이름에 flowerKeywords가 든 물체(꽃화분·야생화)를 찾아 그 위를 맴돌다 가끔 다른 꽃으로 옮겨 간다.
     /// </summary>
@@ -65,7 +65,8 @@ namespace GN3.World
         private readonly List<Vector2> _flowers = new List<Vector2>();
         private Sprite[] _birdFrames;
         private Sprite[] _butterflyFrames;
-        private Rect _view;
+        private Rect _view; // 지금 보이는 화면(마을이 넓어 카메라를 따라 매 프레임 다시 잰다)
+        private Camera _camera;
         private float _nextFlock;
         private bool _wasSkipping;
 
@@ -79,6 +80,7 @@ namespace GN3.World
                 enabled = false;
                 return;
             }
+            _camera = cam;
             _view = PixelSprites.ViewRect(cam);
             float dot = PixelSprites.ArtDot(cam);
 
@@ -106,6 +108,7 @@ namespace GN3.World
 
         private void Update()
         {
+            if (_camera != null) _view = PixelSprites.ViewRect(_camera); // 새 무리는 지금 보이는 화면을 가로지른다
             // 하루·4일·일주일 건너뛰기 중: 새·나비를 숨기고(새 무리는 지움), 끝나면 나비를 무작위 꽃에 다시 둔다
             bool skipping = TimeAdvanceController.IsSkippingDays;
             if (skipping)

@@ -107,6 +107,7 @@ namespace GN3.UI
             }
 
             ShowLoot();
+            ShowMaterials();
             ShopListUI.EndList(_panel);
         }
 
@@ -135,7 +136,7 @@ namespace GN3.UI
                 return;
             }
 
-            foreach (var (loot, count) in LootBag.Entries.ToList())
+            foreach (var (loot, count) in LootBag.Entries.Where(e => !e.item.Material).ToList())
             {
                 var row = ShopListUI.CreateRow(_panel, "Loot_" + loot.Name);
                 ShopListUI.CreateIcon(row.transform, loot.Icon);
@@ -143,6 +144,25 @@ namespace GN3.UI
                     $"개당 {loot.Price}G · 모두 {loot.Price * count}G");
                 ShopListUI.CreateButton(row.transform, "1개 팔기", () => Sell(loot, 1), 90f);
                 ShopListUI.CreateButton(row.transform, "모두", () => Sell(loot, LootBag.Count(loot)), 70f);
+            }
+        }
+
+        /// <summary>건설 재료(전리품 가방에 같이 쌓이지만 "모두 팔기"에는 안 섞인다): 종류마다 1개 팔기.</summary>
+        private void ShowMaterials()
+        {
+            var materials = LootBag.Entries.Where(e => e.item.Material).ToList();
+            if (materials.Count == 0) return;
+            var header = ShopListUI.CreateRow(_panel, "MaterialHeader");
+            var title = ShopListUI.CreateText(header.transform, $"건설 재료 ({materials.Count}종 · [건설]에 씁니다)", 16, TextAnchor.MiddleLeft, UITheme.BodyText);
+            title.fontStyle = FontStyle.Bold;
+            title.gameObject.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
+
+            foreach (var (item, count) in materials)
+            {
+                var row = ShopListUI.CreateRow(_panel, "Material_" + item.Name);
+                ShopListUI.CreateIcon(row.transform, item.Icon);
+                ShopListUI.CreateTwoLineLabel(row.transform, $"{item.Name} ×{count}", $"개당 {item.Price}G에 팝니다");
+                ShopListUI.CreateButton(row.transform, "1개 팔기", () => Sell(item, 1), 90f);
             }
         }
 

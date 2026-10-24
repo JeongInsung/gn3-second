@@ -66,6 +66,13 @@ namespace GN3.EditorTools
             Debug.Log($"[ShadowBuilder] 그림자 {built}개를 만들었습니다.");
         }
 
+        /// <summary>그림 하나에 그림자를 만든다(장식 원본 — DecorTemplateBuilder). 종류별 기본값은 ApplyDefaults.</summary>
+        internal static void BuildFor(SpriteRenderer owner)
+        {
+            var material = EnsureMaterial();
+            if (material != null) BuildShadow(owner, owner.transform.Find(ShadowChildName), material);
+        }
+
         private static void BuildShadow(SpriteRenderer owner, Transform existing, Material material)
         {
             GameObject shadowObject;

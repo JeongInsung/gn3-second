@@ -6,7 +6,6 @@ using GN3.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
-using UnityEngine.Tilemaps;
 using UnityEngine.UI;
 
 namespace GN3.World
@@ -25,7 +24,7 @@ namespace GN3.World
     public class VillagePartyPresenter : MonoBehaviour
     {
         private const float AreaMargin = 0.4f;
-        // 화면 가장자리에서 발 위치까지의 여백(유닛). 위쪽은 몸(약 0.6) + 이름표만큼 넉넉히.
+        // 마을 바닥 끝에서 발 위치까지의 여백(유닛, AreaMargin에 더함). 위쪽은 몸(약 0.6) + 이름표만큼 넉넉히.
         private const float ScreenMarginSide = 0.3f;
         private const float ScreenMarginBottom = 0.15f;
         private const float ScreenMarginTop = 0.8f;
@@ -115,28 +114,20 @@ namespace GN3.World
         private readonly Dictionary<string, float> _groupEndsAt = new Dictionary<string, float>();
         private readonly Dictionary<string, float> _nextCompanionRoll = new Dictionary<string, float>();
 
+        /// <summary>지금 씬의 마을 길찾기 격자(건설 미리보기가 빈 땅인지 볼 때 쓴다). 씬마다 다시 만든다.</summary>
+        public static VillageNavGrid Grid { get; private set; }
+        /// <summary>파견대가 드나드는 마을 출구. 건물로 막으면 안 된다.</summary>
+        public static Vector2 VillageExit { get; private set; }
+
         private void Start()
         {
-            // 바닥은 바깥 바닥·광장·흙길(칠하기 층) 여러 장이라, 가장 넓은 것(바깥 바닥)을 걷기 영역으로 쓴다.
-            Tilemap floor = null;
-            float floorArea = 0f;
-            foreach (var tilemap in FindObjectsByType<Tilemap>(FindObjectsSortMode.None))
-            {
-                tilemap.CompressBounds();
-                var size = tilemap.localBounds.size;
-                if (size.x * size.y > floorArea) { floor = tilemap; floorArea = size.x * size.y; }
-            }
-            if (floor == null)
+            // 걷기 영역 = 마을 바닥 전체(3×3으로 넓힌 VillageBounds)에서 안쪽 여백을 뺀 곳
+            if (!VillageBounds.Exists)
             {
                 Debug.LogWarning("[VillagePartyPresenter] 마을 바닥 Tilemap을 찾지 못해 용병을 마을에 내보내지 않습니다. (Village 프리팹이 씬에 있는지 확인)");
                 return;
             }
-
-            var local = floor.localBounds;
-            Vector3 min = floor.transform.TransformPoint(local.min);
-            Vector3 max = floor.transform.TransformPoint(local.max);
-            _area = Rect.MinMaxRect(min.x + AreaMargin, min.y + AreaMargin, max.x - AreaMargin, max.y - AreaMargin);
-            ClampAreaToScreen();
+            _area = WalkArea(VillageBounds.World);
 
             // 그림자 머티리얼은 Resources 밖에 있어 마을 건물에 이미 붙은 그림자의 것을 같이 쓴다.
             var anyShadow = FindFirstObjectByType<ProjectedShadow>();
@@ -144,8 +135,11 @@ namespace GN3.World
             _hidden = IsBedtime();
             var obstacles = VillageNavGrid.CollectObstacles();
             _grid = VillageNavGrid.Build(_area, obstacles); // 건물·장식 바닥을 막아 그 사이로만 걷게 한다
+            Grid = _grid;
             _villageExit = _grid.NearestWalkable(new Vector2(_area.center.x, _area.yMin));
+            VillageExit = _villageExit;
             VillageDepthSorter.Apply(obstacles);            // 건물·장식과 캐릭터의 앞뒤를 발밑 높이로 정한다
+            CullOffscreenAnimators();
             _tagLayer = CreateNameTagLayer();
             FindInnDoor();
             FindTrainingHallDoor();
@@ -153,6 +147,7 @@ namespace GN3.World
             FindVenueDoors();
             VillageSkipVisits.SetBuildings(_venueDoors.Keys, _hasTrainingHall); // '진행'으로 건너뛸 때도 같은 건물에만 간다
             _infoPanel = MercenaryInfoPanel.Create(transform);
+            VillageLayoutApplier.Rebuilt += OnVillageRebuilt;
 
             PlayerParty.Instance.OnChanged += Refresh;
             ExpeditionLog.Instance.OnChanged += Refresh;
@@ -165,22 +160,12 @@ namespace GN3.World
         }
 
         /// <summary>
-        /// 바닥 타일은 화면보다 넓게 깔려 있어 그대로 쓰면 용병이 화면 밖으로 걸어 나갔다. 시작 화면(= CameraZoom이 가두는
-        /// 가장 넓은 화면)과 겹치는 부분으로 줄이고, 몸·이름표가 잘리지 않게 발 위치 기준으로 안쪽 여백을 둔다.
+        /// 마을 바닥(= CameraZoom이 둘러볼 수 있는 끝)에서 몸·이름표가 바닥 끝 밖으로 나가지 않게 발 위치 기준 안쪽 여백을 뺀다.
         /// 목적지·경로·마을 출구가 모두 이 영역에서 정해지므로 여기만 줄이면 된다.
         /// </summary>
-        private void ClampAreaToScreen()
-        {
-            var cam = Camera.main;
-            if (cam == null || !cam.orthographic) return;
-            float halfHeight = cam.orthographicSize, halfWidth = halfHeight * cam.aspect;
-            Vector3 center = cam.transform.position;
-            float xMin = Mathf.Max(_area.xMin, center.x - halfWidth + ScreenMarginSide);
-            float xMax = Mathf.Min(_area.xMax, center.x + halfWidth - ScreenMarginSide);
-            float yMin = Mathf.Max(_area.yMin, center.y - halfHeight + ScreenMarginBottom);
-            float yMax = Mathf.Min(_area.yMax, center.y + halfHeight - ScreenMarginTop);
-            if (xMin < xMax && yMin < yMax) _area = Rect.MinMaxRect(xMin, yMin, xMax, yMax);
-        }
+        private static Rect WalkArea(Rect world) => Rect.MinMaxRect(
+            world.xMin + AreaMargin + ScreenMarginSide, world.yMin + AreaMargin + ScreenMarginBottom,
+            world.xMax - AreaMargin - ScreenMarginSide, world.yMax - AreaMargin - ScreenMarginTop);
 
         /// <summary>
         /// 이름표 전용 화면 UI. 월드 위에 그려져 건물·나무에 가려지지 않고, sortingOrder -1이라
@@ -275,7 +260,7 @@ namespace GN3.World
         /// <summary>훈련소 그림의 아래 가운데(발밑)를 문으로, 그 아래 처음 걸을 수 있는 지점을 문 앞으로 정한다. 없으면 훈련 드나들기 연출 없음.</summary>
         private void FindTrainingHallDoor()
         {
-            var renderer = VillageProps.FindRenderer(TrainingHallSpritePrefix);
+            var renderer = VillageProps.FindRenderer(TrainingHallSpritePrefix) ?? VillageProps.FindRenderer(BuildingCatalog.BarracksPrefix); // 간이 훈련소
             if (renderer == null) return;
             var bounds = renderer.bounds;
             _trainingDoor = new Vector2(bounds.center.x, bounds.min.y + bounds.size.y * 0.08f);
@@ -616,7 +601,7 @@ namespace GN3.World
                 if (_hovered != null) _hovered.SetHighlighted(true);
             }
 
-            if (_hovered != null && mouse.leftButton.wasPressedThisFrame
+            if (_hovered != null && mouse.leftButton.wasPressedThisFrame && !BuildPlacement.Active && !BuildingMover.Active
                 && _hovered.OwnerId != null && _mercById.TryGetValue(_hovered.OwnerId, out var merc))
                 _infoPanel.Show(merc, fromVillage: true);
         }
@@ -643,8 +628,44 @@ namespace GN3.World
             Gizmos.DrawWireCube(_area.center, new Vector3(_area.width, _area.height, 0.01f));
         }
 
+        /// <summary>
+        /// 건물을 지었다(씬을 다시 부르지 않음 — VillageLayoutApplier.ApplyLive). 같은 격자를 새 장애물로 다시 막고(걷는 용병이 들고 있는 격자),
+        /// 새 건물만 앞뒤 정렬하고(이미 정렬된 물체는 건너뜀), 문 위치를 다시 찾는다.
+        /// </summary>
+        private void OnVillageRebuilt()
+        {
+            if (_grid == null) return;
+            var obstacles = VillageNavGrid.CollectObstacles();
+            _grid.Rebuild(obstacles);
+            _villageExit = _grid.NearestWalkable(new Vector2(_area.center.x, _area.yMin));
+            VillageExit = _villageExit;
+            VillageDepthSorter.Apply(obstacles);
+            CullOffscreenAnimators();
+            _hasInn = _hasTrainingHall = _hasHospital = false;
+            _venueDoors.Clear();
+            FindInnDoor();
+            FindTrainingHallDoor();
+            FindHospitalDoor();
+            FindVenueDoors();
+            VillageSkipVisits.SetBuildings(_venueDoors.Keys, _hasTrainingHall);
+            Refresh();
+        }
+
+        /// <summary>
+        /// 마을이 3×3으로 넓어 흔들리는 나무 Animator가 수백 개다. 화면에 안 보이는 그림은 애니메이션을 멈춘다(보이면 다시 움직임).
+        /// 멈춘 나무는 그림자(ProjectedShadow)도 바뀐 게 없어 계산을 건너뛴다. 놓은 장식·새 건물도 맞추게 Rebuilt 때도 부른다.
+        /// </summary>
+        private static void CullOffscreenAnimators()
+        {
+            var village = GameObject.Find("Village");
+            if (village == null) return;
+            foreach (var animator in village.GetComponentsInChildren<Animator>(true))
+                if (animator.cullingMode != AnimatorCullingMode.CullCompletely) animator.cullingMode = AnimatorCullingMode.CullCompletely;
+        }
+
         private void OnDestroy()
         {
+            VillageLayoutApplier.Rebuilt -= OnVillageRebuilt;
             if (!_subscribed) return;
             PlayerParty.Instance.OnChanged -= Refresh;
             ExpeditionLog.Instance.OnChanged -= Refresh;

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace GN3.World
@@ -5,7 +6,8 @@ namespace GN3.World
     /// <summary>
     /// 부모 물체의 그림을 그대로 받아 "GN3/ProjectedShadow" 셰이더로 바닥에 눕혀 그리는 그림자.
     /// 길이·방향·진하기는 DayNightCycle이 전역으로 정하고, 여기서는 물체 발밑 높이(_BaseY)만 넣는다.
-    /// 부모 그림이 애니메이션으로 바뀌어도(분수) 매 프레임 따라간다.
+    /// 부모 그림이 애니메이션으로 바뀌어도(분수) 따라간다. 마을이 넓어져 그림자가 수백 개라, 원본 그림·위치·크기·뒤집기가
+    /// 지난 프레임과 같으면 아무것도 하지 않는다(가만히 있는 건물·나무·바위는 매 프레임 거의 공짜). 보이는 맨 아래 정점은 그림마다 한 번만 잰다.
     /// </summary>
     [ExecuteAlways]
     [RequireComponent(typeof(SpriteRenderer))]
@@ -41,13 +43,26 @@ namespace GN3.World
         private const string FillChildName = "Shadow Fill";
         private const float FillSpacing = 0.05f;     // 월드 유닛. 울타리 기둥 굵기보다 좁게
         private const float FillMaxLengthRatio = 0.8f; // DayNightCycle.maxShadowLengthRatio(가장 길게 밀릴 때)
-        private readonly System.Collections.Generic.List<SpriteRenderer> _fills = new System.Collections.Generic.List<SpriteRenderer>();
+        private readonly List<SpriteRenderer> _fills = new List<SpriteRenderer>();
         private Sprite _fillSprite;
         private bool _fillEnabled;
+
+        // 지난 LateUpdate의 원본 상태 — 같으면 건너뛴다
+        private bool _snapValid;
+        private Sprite _snapSprite;
+        private bool _snapFlipX, _snapFlipY, _snapEnabled;
+        private Vector3 _snapPosition, _snapScale;
+        private Quaternion _snapRotation;
+        private float _snapAnchorY, _snapHeightScale, _snapLift;
+
+        // 그림마다 정점(sprite.vertices는 부를 때마다 새 배열을 만든다)과 로컬 y 범위(최저, 최고)
+        private static readonly Dictionary<Sprite, Vector2[]> SpriteVertices = new Dictionary<Sprite, Vector2[]>();
+        private static readonly Dictionary<Sprite, Vector2> SpriteYRange = new Dictionary<Sprite, Vector2>();
 
         private void OnEnable()
         {
             _lastBaseY = float.NaN;
+            _snapValid = false;
             Sync();
         }
 
@@ -115,10 +130,42 @@ namespace GN3.World
         {
             _source = null;
             _lastBaseY = float.NaN;
+            _snapValid = false;
             Sync();
         }
 
-        private void LateUpdate() => Sync(true);
+        private void LateUpdate()
+        {
+            if (!Unchanged()) Sync(true);
+        }
+
+        /// <summary>원본 그림·뒤집기·켜짐·위치·회전·크기·기준선·값이 지난번과 같은가(같으면 다시 맞출 게 없다). 다르면 지금 상태를 적어 둔다.</summary>
+        private bool Unchanged()
+        {
+            var source = sourceOverride != null ? sourceOverride : _source;
+            if (source == null || _shadow == null) { _snapValid = false; return false; }
+            var t = source.transform;
+            Vector3 position = t.position, scale = t.lossyScale;
+            Quaternion rotation = t.rotation;
+            float anchorY = groundAnchor != null ? groundAnchor.position.y : 0f;
+            bool same = _snapValid && _snapSprite == source.sprite && _snapFlipX == source.flipX && _snapFlipY == source.flipY
+                        && _snapEnabled == source.enabled && _snapPosition == position && _snapRotation == rotation && _snapScale == scale
+                        && _snapAnchorY == anchorY && _snapHeightScale == heightScale && _snapLift == liftHeight
+                        && _fills.Count == FillCount();
+            if (same) return true;
+            _snapValid = true;
+            _snapSprite = source.sprite;
+            _snapFlipX = source.flipX;
+            _snapFlipY = source.flipY;
+            _snapEnabled = source.enabled;
+            _snapPosition = position;
+            _snapRotation = rotation;
+            _snapScale = scale;
+            _snapAnchorY = anchorY;
+            _snapHeightScale = heightScale;
+            _snapLift = liftHeight;
+            return false;
+        }
 
         private void Sync(bool canBuildFills = false)
         {
@@ -168,11 +215,31 @@ namespace GN3.World
         /// </summary>
         private static float VisibleBottomY(SpriteRenderer renderer)
         {
-            var vertices = renderer.sprite.vertices;
+            var sprite = renderer.sprite;
+            if (!SpriteVertices.TryGetValue(sprite, out var vertices))
+            {
+                vertices = sprite.vertices;
+                SpriteVertices[sprite] = vertices;
+            }
+            if (vertices.Length == 0) return renderer.bounds.min.y;
+
+            var t = renderer.transform;
+            if (t.rotation == Quaternion.identity)
+            {
+                // 돌지 않은 그림(거의 전부): 월드 y = 위치 + 로컬 y × 크기. 크기가 음수면 로컬 최고점이 맨 아래가 된다.
+                if (!SpriteYRange.TryGetValue(sprite, out var range))
+                {
+                    range = new Vector2(float.MaxValue, float.MinValue);
+                    foreach (var v in vertices) range = new Vector2(Mathf.Min(range.x, v.y), Mathf.Max(range.y, v.y));
+                    SpriteYRange[sprite] = range;
+                }
+                float scaleY = t.lossyScale.y;
+                return t.position.y + (scaleY >= 0f ? range.x : range.y) * scaleY;
+            }
             float minY = float.MaxValue;
             foreach (var v in vertices)
-                minY = Mathf.Min(minY, renderer.transform.TransformPoint(v).y);
-            return vertices.Length > 0 ? minY : renderer.bounds.min.y;
+                minY = Mathf.Min(minY, t.TransformPoint(v).y);
+            return minY;
         }
     }
 }

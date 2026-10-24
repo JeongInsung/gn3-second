@@ -152,6 +152,18 @@ namespace GN3.UI
             UIThemeApplier.ApplyNow(transform);
         }
 
+        /// <summary>건물 없이 제목·설명만 정해 연다(건설 목록 등). Opened는 부르지 않으니 내용은 연 쪽이 채운다.</summary>
+        public void Show(string title, string description)
+        {
+            Current = null;
+            Title.text = title;
+            Description.text = description;
+            if (Portrait != null) Portrait.gameObject.SetActive(false);
+            gameObject.SetActive(true);
+            LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)transform);
+            UIThemeApplier.ApplyNow(transform);
+        }
+
         public void Close()
         {
             Current = null;

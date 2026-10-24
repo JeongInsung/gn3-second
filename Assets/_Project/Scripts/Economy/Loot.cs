@@ -14,6 +14,8 @@ namespace GN3.Economy
         public int IconIndex { get; }
         /// <summary>드문 전리품(가끔만 나오고 비싸다).</summary>
         public bool Rare { get; }
+        /// <summary>건설 재료(BuildMaterials). 전리품 "모두 팔기"에 섞이지 않는다.</summary>
+        public bool Material { get; }
 
         public string IconPath => $"Loot/loot_{IconIndex:00}";
         public Sprite Icon
@@ -32,12 +34,13 @@ namespace GN3.Economy
         }
         private Sprite _icon;
 
-        public LootItem(string name, int price, int iconIndex, bool rare = false)
+        public LootItem(string name, int price, int iconIndex, bool rare = false, bool material = false)
         {
             Name = name;
             Price = price;
             IconIndex = iconIndex;
             Rare = rare;
+            Material = material;
         }
     }
 
@@ -45,6 +48,7 @@ namespace GN3.Economy
     /// 전리품 목록과 몬스터 종류별 떨어뜨리는 표. 표마다 흔한 것 3개 + 드문 것 1개(아이콘 시트 한 줄과 같은 순서).
     /// 쓰러뜨린 적 하나마다 DropChance로 1개, 그중 RareChance는 드문 것(개체 등급이 높으면 더 잘 — ChancesFor). 앤트킹은 엔트 전리품 여럿 + 엔트킹의 심장 확정.
     /// 그와 따로 한 마리마다 다섯 빛깔 마정석을 한 번 굴린다(푸른 20% ~ 붉은 1%, 개체 등급과 상관없이 — RollManaStone).
+    /// 건설 재료도 한 마리마다 MaterialChance로 몬스터별 재료표에서 하나(앤트킹은 통나무·말뚝 여럿 확정).
     /// </summary>
     public static class LootCatalog
     {
@@ -98,12 +102,29 @@ namespace GN3.Economy
         public static readonly LootItem[] MushroomMana = ManaSet("독버섯", 1.1f);
         public static readonly LootItem[] EntMana = ManaSet("앤트킹", 3f);
 
+        // 건설 재료(아이콘 29~40 — tools/bake_material_icons.py). 건물을 짓는 데 든다(BuildingCatalog).
+        public const float MaterialChance = 0.3f;
+        public static readonly LootItem Cloth = new LootItem("천", 6, 29, material: true);
+        public static readonly LootItem Log = new LootItem("통나무", 5, 30, material: true);
+        public static readonly LootItem Rope = new LootItem("밧줄", 4, 31, material: true);
+        public static readonly LootItem Leather = new LootItem("무두질한 가죽", 10, 32, material: true);
+        public static readonly LootItem Nail = new LootItem("쇠못", 3, 33, material: true);
+        public static readonly LootItem IronRing = new LootItem("쇠고리", 6, 34, material: true);
+        public static readonly LootItem Stake = new LootItem("나무 말뚝", 2, 35, material: true);
+        public static readonly LootItem Thread = new LootItem("실타래", 4, 36, material: true);
+        public static readonly LootItem Needle = new LootItem("바늘", 5, 37, material: true);
+        public static readonly LootItem Strap = new LootItem("가죽끈", 5, 38, material: true);
+        public static readonly LootItem Wax = new LootItem("밀랍", 8, 39, material: true);
+        public static readonly LootItem Dye = new LootItem("푸른 염료", 12, 40, material: true);
+
+        public static readonly LootItem[] Materials = { Cloth, Log, Rope, Leather, Nail, IronRing, Stake, Thread, Needle, Strap, Wax, Dye };
+
         public static readonly LootItem[] All = new[]
         {
             RiderDagger, CoinPouch, RiderArrows, WolfBridle, Fang, Claw, Pelt, ManaFang,
             MushroomCap, SporeSac, Venom, MyceliumCrystal, LifeSeed, MossyBark, RootThorn, EntKingHeart,
             OldSword, WoodenShield, LeatherBracer, RedSash, ShortBow, ArcherArrows, Quiver, ShootingGlove,
-        }.Concat(GoblinMana).Concat(ArcherMana).Concat(RiderMana).Concat(WolfMana).Concat(MushroomMana).Concat(EntMana).ToArray();
+        }.Concat(GoblinMana).Concat(ArcherMana).Concat(RiderMana).Concat(WolfMana).Concat(MushroomMana).Concat(EntMana).Concat(Materials).ToArray();
 
         private static readonly LootItem[] Rider = { RiderDagger, CoinPouch, RiderArrows, WolfBridle };
         private static readonly LootItem[] Wolf = { Fang, Claw, Pelt, ManaFang };
@@ -111,6 +132,17 @@ namespace GN3.Economy
         private static readonly LootItem[] Ent = { LifeSeed, MossyBark, RootThorn, EntKingHeart };
         private static readonly LootItem[] Warrior = { OldSword, WoodenShield, LeatherBracer, RedSash };
         private static readonly LootItem[] Archer = { ShortBow, ArcherArrows, Quiver, ShootingGlove };
+
+        // 몬스터별 건설 재료표(고블린은 쇠붙이, 궁수는 바느질감, 늑대는 가죽, 버섯 숲은 염료·밀랍)
+        private static readonly LootItem[] WarriorMaterials = { Nail, IronRing, Rope };
+        private static readonly LootItem[] ArcherMaterials = { Thread, Needle, Cloth };
+        private static readonly LootItem[] RiderMaterials = { Rope, Strap, IronRing };
+        private static readonly LootItem[] WolfMaterials = { Leather, Strap, Stake };
+        private static readonly LootItem[] MushroomMaterials = { Dye, Wax, Log };
+
+        private static LootItem[] MaterialsFor(LootItem[] table) =>
+            table == Rider ? RiderMaterials : table == Wolf ? WolfMaterials : table == Mushroom ? MushroomMaterials
+            : table == Archer ? ArcherMaterials : WarriorMaterials;
 
         public static LootItem Find(string name) => All.FirstOrDefault(i => i.Name == name);
 
@@ -171,7 +203,14 @@ namespace GN3.Economy
                     int n = rng.Next(2, 4);
                     for (int i = 0; i < n; i++) drops.Add(table[rng.Next(3)]);
                     drops.Add(EntKingHeart);
+                    int logs = rng.Next(3, 6); // 쓰러진 숲의 주인에게서 목재
+                    for (int i = 0; i < logs; i++) drops.Add(rng.NextDouble() < 0.6 ? Log : Stake);
                     continue;
+                }
+                if (rng.NextDouble() < MaterialChance)
+                {
+                    var materials = MaterialsFor(table);
+                    drops.Add(materials[rng.Next(materials.Length)]);
                 }
                 // 개체 등급(이름 앞말)이 높을수록 잘 떨어뜨리고 드문 것도 잘 나온다
                 var (dropChance, rareChance) = ChancesFor(GN3.Combat.MonsterIV.RankOf(name));
@@ -210,7 +249,8 @@ namespace GN3.Economy
             LootCatalog.All.Where(i => Count(i) > 0).Select(i => (i, Count(i)));
 
         public static int Count(LootItem item) => _counts.TryGetValue(item, out int n) ? n : 0;
-        public static int KindCount => _counts.Count(kv => kv.Value > 0);
+        /// <summary>전리품 종류 수(건설 재료는 뺀다 — 창고 화면에서 따로 보인다).</summary>
+        public static int KindCount => _counts.Count(kv => kv.Value > 0 && !kv.Key.Material);
 
         /// <summary>이 색 마정석이 몬스터 상관없이 모두 몇 개(마정 무기 제작 재료 — Crafting).</summary>
         public static int CountManaColor(int color) =>
@@ -243,7 +283,8 @@ namespace GN3.Economy
             OnChanged?.Invoke();
             return true;
         }
-        public static int TotalValue => _counts.Sum(kv => kv.Key.Price * kv.Value);
+        /// <summary>전리품을 모두 팔면 받는 골드(건설 재료는 뺀다).</summary>
+        public static int TotalValue => _counts.Where(kv => !kv.Key.Material).Sum(kv => kv.Key.Price * kv.Value);
 
         public static void Add(IEnumerable<(LootItem item, int count)> loot)
         {
@@ -274,7 +315,7 @@ namespace GN3.Economy
         {
             int gold = TotalValue;
             if (gold <= 0) return 0;
-            _counts.Clear();
+            foreach (var item in _counts.Keys.Where(i => !i.Material).ToList()) _counts.Remove(item); // 건설 재료는 남긴다
             Wallet.Add(gold);
             OnChanged?.Invoke();
             return gold;
@@ -298,11 +339,13 @@ namespace GN3.Economy
             OnChanged?.Invoke();
         }
 
-        // Domain Reload가 꺼져 있어 Play마다 비운다(QuestClearHistory와 같은 사정).
+        // Domain Reload가 꺼져 있어 Play마다 비운다(QuestClearHistory와 같은 사정). 새 게임은 길드 천막 한 채 분 재료를 들고 시작한다
+        // (저장을 불러오면 Restore가 덮는다).
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForPlaySession()
         {
             _counts.Clear();
+            foreach (var (item, count) in BuildMaterials.StartingKit) _counts[item] = count;
             OnChanged = null;
         }
     }

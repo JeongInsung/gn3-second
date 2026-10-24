@@ -22,16 +22,63 @@ namespace GN3.World
         /// </summary>
         public static SpriteRenderer FindRenderer(string spritePrefix)
         {
-            foreach (var renderer in Object.FindObjectsByType<SpriteRenderer>(FindObjectsSortMode.None))
-                if (Matches(renderer, spritePrefix)) return renderer;
+            foreach (var renderer in Renderers())
+            {
+                if (renderer == null || !renderer.gameObject.activeInHierarchy) continue;
+                var sprite = renderer.sprite;
+                if (sprite == null || !SpriteName(sprite).StartsWith(spritePrefix, System.StringComparison.Ordinal)) continue;
+                if (IsCandidate(renderer)) return renderer; // 그림자·창문 불빛·외곽선 확인은 이름이 맞을 때만(GetComponent가 비싸다)
+            }
             return null;
+        }
+
+        // 마을이 넓어 그림이 2천 개가 넘는다. 건물 클릭 연결(MainMenuBootstrapper.ConnectBuildings)·문 찾기가 한 번에 열 번 넘게 부르므로
+        // 그 프레임 안에서는 한 번 모은 그림 목록을 다시 쓰고, 그림 이름(부를 때마다 새 문자열)은 그림마다 한 번만 읽는다.
+        // 마을을 고치면(VillageLayoutApplier.NotifyRebuilt) 목록을 비운다.
+        private static SpriteRenderer[] _renderers;
+        private static int _renderersFrame = -1;
+        private static readonly System.Collections.Generic.Dictionary<Sprite, string> SpriteNames = new System.Collections.Generic.Dictionary<Sprite, string>();
+
+        private static SpriteRenderer[] Renderers()
+        {
+            if (_renderers == null || _renderersFrame != Time.frameCount)
+            {
+                _renderers = Object.FindObjectsByType<SpriteRenderer>(FindObjectsSortMode.None);
+                _renderersFrame = Time.frameCount;
+            }
+            return _renderers;
+        }
+
+        private static string SpriteName(Sprite sprite)
+        {
+            if (!SpriteNames.TryGetValue(sprite, out var name))
+            {
+                name = sprite.name;
+                SpriteNames[sprite] = name;
+            }
+            return name;
+        }
+
+        /// <summary>그림 목록을 버린다(물체를 켜고 끄거나 옮긴 뒤).</summary>
+        public static void InvalidateCache() => _renderersFrame = -1;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlaySession()
+        {
+            _renderers = null;
+            _renderersFrame = -1;
+            SpriteNames.Clear();
         }
 
         public static bool IsProp(SelectableBuilding building, string spritePrefix) =>
             building != null && Matches(building.GetComponent<SpriteRenderer>(), spritePrefix);
 
         private static bool Matches(SpriteRenderer renderer, string spritePrefix) =>
-            renderer != null && renderer.sprite != null && renderer.sprite.name.StartsWith(spritePrefix)
+            renderer != null && renderer.sprite != null && SpriteName(renderer.sprite).StartsWith(spritePrefix, System.StringComparison.Ordinal)
+            && IsCandidate(renderer);
+
+        private static bool IsCandidate(SpriteRenderer renderer) =>
+            renderer != null && renderer.sprite != null
             && renderer.GetComponent<WindowGlow>() == null && renderer.GetComponent<ProjectedShadow>() == null
             && renderer.GetComponent<ForgeFire>() == null
             && renderer.name != "Outline" && (renderer.transform.parent == null || renderer.transform.parent.name != "Outline");

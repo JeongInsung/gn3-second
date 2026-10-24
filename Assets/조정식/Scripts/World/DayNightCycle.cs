@@ -448,15 +448,28 @@ namespace GN3.World
         /// 가로등을 복사해 늘리면 그 안의 Lamp Light/Lamp Glow가 목록에 없어 밤에도 꺼져 있었다.
         /// 이름으로 찾아 목록에 더한다(이미 있으면 그대로, 지워진 항목은 뺀다).
         /// </summary>
-        private void CollectLampLights()
+        private List<Light2D> CollectLampLights()
         {
+            var added = new List<Light2D>();
             lampLights.RemoveAll(light => light == null);
             lampGlows.RemoveAll(light => light == null);
             foreach (var light in FindObjectsByType<Light2D>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
                 var list = light.name == "Lamp Light" ? lampLights : light.name == "Lamp Glow" ? lampGlows : null;
-                if (list != null && !list.Contains(light)) list.Add(light);
+                if (list == null || list.Contains(light)) continue;
+                list.Add(light);
+                added.Add(light);
             }
+            return added;
+        }
+
+        /// <summary>
+        /// 실행 중에 생긴 등불(놓은 장식 — VillageLayoutApplier)도 밤에 켜지게 목록에 더하고 빛 메시를 만든 뒤 지금 시각으로 맞춘다.
+        /// </summary>
+        public void RefreshLamps()
+        {
+            foreach (var light in CollectLampLights()) RebuildLightMesh(light);
+            Apply();
         }
 
         private static void SetLampIntensity(List<Light2D> lights, float intensity)

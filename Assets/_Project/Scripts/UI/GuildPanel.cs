@@ -86,6 +86,9 @@ namespace GN3.UI
             _openStorage?.Invoke();
         }
 
+        /// <summary>창 판(옮기기 버튼을 붙일 곳 — BuildingMoveButton).</summary>
+        public GameObject PanelRoot => _panel;
+
         public static void ShowGlobal()
         {
             if (Instance != null) Instance.Show();
@@ -113,7 +116,7 @@ namespace GN3.UI
             int rank = Guild.Rank;
             var current = Guild.Current;
 
-            _title.text = $"모험가 길드 — <color={Gold}>{current.Name}</color>";
+            _title.text = $"모험가 길드 — <color={Gold}>{Guild.CurrentName}</color>";
 
             string pips = new string('●', rank + 1) + new string('○', ranks.Length - rank - 1);
             _tier.text = $"길드 티어 <color={Gold}><b>{rank + 1}</b></color> / {ranks.Length}단계   <color={Gold}>{pips}</color>";
@@ -150,7 +153,7 @@ namespace GN3.UI
 
             // 3. 지금 혜택
             SetRow(2, $"<b>지금 혜택</b>   정원 {current.PartySize}명 · 창고 {current.StorageSlots}칸",
-                $"<b>{current.Name}</b>\n{UnlockLines(current)}");
+                $"<b>{Guild.CurrentName}</b>\n{UnlockLines(current)}");
 
             // 4. 다음 단계
             if (Guild.IsMaxRank)
@@ -158,8 +161,12 @@ namespace GN3.UI
             else
             {
                 var next = ranks[rank + 1];
-                SetRow(3, $"<b>다음 단계</b>   {next.Name} — 명성 {next.Required} (앞으로 {next.Required - Guild.Reputation})",
-                    $"<b>{next.Name}</b>이 되면\n{UnlockLines(next)}");
+                string nextName = Guild.RankName(rank + 1);
+                // 길드 홀이 없으면 동빛 용병단 위로는 못 오른다(Guild.MercenaryBandMaxRank)
+                string condition = Guild.IsCapped ? "길드 홀 필요 (명성은 충분)"
+                    : $"명성 {next.Required} (앞으로 {next.Required - Guild.Reputation})" + (!Guild.IsGuild && rank + 1 > Guild.MercenaryBandMaxRank ? " · 길드 홀 필요" : "");
+                SetRow(3, $"<b>다음 단계</b>   {nextName} — {condition}",
+                    $"<b>{nextName}</b>{Josa.IGa(nextName).Substring(nextName.Length)} 되면\n{UnlockLines(next)}");
             }
 
             // 5. 전체 단계
@@ -167,7 +174,7 @@ namespace GN3.UI
             for (int i = 0; i < ranks.Length; i++)
             {
                 var r = ranks[i];
-                string line = $"{i + 1}. {r.Name} · 명성 {r.Required} · 정원 {r.PartySize}명";
+                string line = $"{i + 1}. {Guild.RankName(i)} · 명성 {r.Required} · 정원 {r.PartySize}명";
                 if (i == rank) line = $"<color={Gold}>{line}  ◀ 현재</color>";
                 else if (i > rank) line = $"<color={Dim}>{line}</color>";
                 table.Append('\n').Append(line);

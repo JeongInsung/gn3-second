@@ -15,8 +15,10 @@ namespace GN3.Save
         //    마법사 growthAttack·monthAttack은 이제 마력(값은 그대로).
         // 7: 용병 계약(contracts: 주급·만료일·성공 보너스). 6 이하는 불러올 때 기본 계약(예전 주급 공식, 60일)을 받는다.
         // 8: 근처 길드(rivals 등). 7 이하는 불러올 때 길드를 새로 만든다.
-        // 9: 길드 시설 단계(facilities, 지금은 꺼 둠 — GuildFacilities.Enabled). 예전 저장은 0단계.
-        public const int CurrentVersion = 9;
+        // 9: 길드 시설 단계(facilities). 예전 저장은 0단계.
+        // 10: 지은 마을 건물과 자리(buildings). 9 이하는 건물이 다 있던 시절이라 프리팹 자리 그대로 전부 지은 마을이 된다.
+        // 11: 건설 재료(loot에 같이). 10 이하는 재료가 없던 시절이라 불러올 때 시작 재료(BuildMaterials.StartingKit)를 받는다.
+        public const int CurrentVersion = 11;
 
         public int version = CurrentVersion;
         public string savedAt;
@@ -57,8 +59,9 @@ namespace GN3.Save
         public List<int> freeAgentDays = new List<int>();                  // freeAgents와 같은 순서: 떠나는 날
         public List<string> rivalPromised = new List<string>();            // 재계약 맞제의로 약속한 "용병id|길드id"
         public List<string> marketOrigins = new List<string>();            // 시장 이적 매물 "용병id|길드id"
-        public List<LoanSave> loans = new List<LoanSave>();
-        public List<string> facilities = new List<string>();               // 길드 시설 "Training|2"(버전 9, 예전 저장엔 없어 전부 0단계)                // 근처 길드와 주고받은 용병(대여·연합 손님)
+        public List<LoanSave> loans = new List<LoanSave>();                // 근처 길드와 주고받은 용병(대여·연합 손님)
+        public List<string> facilities = new List<string>();               // 길드 시설 "Training|2"(버전 9, 예전 저장엔 없어 전부 0단계)
+        public List<string> buildings = new List<string>();                // 지은 마을 건물 "이름#번째|x|y"(버전 10, VillageLayout)
         public int rivalTargetIndex = -1;                                  // 근처 길드가 노리는 게시판 의뢰(questBoard 몇 번째)
         public string rivalTargetGuild;
     }

@@ -48,8 +48,20 @@ namespace GN3.World
         private readonly int _rows;
         private readonly bool[] _blocked;
         private readonly List<Rect> _blockedRects = new List<Rect>();
+        private const string SortAnchorName = "SortAnchor"; // VillageDepthSorter가 물체를 옮겨 넣는 정렬 묶음
+        private const int PullLookahead = 80; // 경유점 줄이기에서 한 번에 내다보는 칸 수(긴 길에서 시선 검사가 제곱으로 늘지 않게)
+
+        // 길찾기 버퍼(격자마다 하나, 길 찾을 때마다 다시 씀)
+        private float[] _gScore;
+        private int[] _cameFrom;
+        private int[] _visitedStamp;
+        private int[] _closedStamp;
+        private int _searchStamp;
+        private readonly MinHeap _open = new MinHeap();
 
         public IReadOnlyList<Rect> BlockedRects => _blockedRects;
+        /// <summary>걷기 영역(마을 바닥 전체에서 안쪽 여백을 뺀 것 — VillageBounds).</summary>
+        public Rect Area => _area;
 
         private VillageNavGrid(Rect area)
         {
@@ -70,27 +82,39 @@ namespace GN3.World
         /// <summary>
         /// 그림자(ProjectedShadow)가 붙은 마을 물체를 모아 바닥 점유 영역을 계산한다. 용병 자신의 그림자는 뺀다.
         /// 그림자 없이 Village 바로 아래 놓인 그림(새로 놓고 그림자 메뉴를 아직 안 누른 건물 등)도 크기로 종류를 정해 넣는다.
+        /// 이미 앞뒤 정렬된 물체(그림자가 sourceOverride로 따라감)도 다시 모은다 — 마을에 건물을 지은 뒤 격자를 새로 맞출 때(Rebuild).
         /// </summary>
         public static List<Obstacle> CollectObstacles()
         {
             var obstacles = new List<Obstacle>();
             var owners = new HashSet<SpriteRenderer>();
+            var village = GameObject.Find(VillageRootName);
             foreach (var shadow in Object.FindObjectsByType<ProjectedShadow>(FindObjectsSortMode.None))
             {
-                if (shadow.sourceOverride != null) continue;
-                var owner = shadow.transform.parent != null ? shadow.transform.parent.GetComponent<SpriteRenderer>() : null;
+                SpriteRenderer owner;
+                if (shadow.sourceOverride != null)
+                {
+                    // 앞뒤 정렬된 마을 물체(SortAnchor 아래)의 그림자만 — 용병·강아지 자신의 그림자도 sourceOverride를 쓴다
+                    owner = shadow.sourceOverride;
+                    var anchor = owner.transform.parent;
+                    if (anchor == null || anchor.name != SortAnchorName || !owner.gameObject.activeInHierarchy) continue;
+                }
+                else owner = shadow.transform.parent != null ? shadow.transform.parent.GetComponent<SpriteRenderer>() : null;
                 if (owner == null || owner.sprite == null) continue;
                 owners.Add(owner);
                 obstacles.Add(new Obstacle { Renderer = owner, Shadow = shadow, Footprint = Footprint(owner, shadow.heightScale) });
             }
 
-            var village = GameObject.Find(VillageRootName);
             if (village != null)
             {
-                foreach (Transform child in village.transform)
+                foreach (Transform top in village.transform)
                 {
+                    // 정렬된 물체는 SortAnchor 아래로 옮겨져 있다
+                    var child = top.name == SortAnchorName && top.childCount > 0 ? top.GetChild(0) : top;
                     var renderer = child.GetComponent<SpriteRenderer>();
-                    if (renderer == null || renderer.sprite == null || owners.Contains(renderer)) continue;
+                    // 꺼 둔 물체(아직 안 지은 건물 — VillageLayoutApplier)는 바닥을 막지 않는다.
+                    if (!child.gameObject.activeInHierarchy || renderer == null || renderer.sprite == null || owners.Contains(renderer)) continue;
+                    if (child.GetComponent<ProjectedShadow>() != null) continue; // 정렬 때 SortAnchor 밖(Village 바로 아래)으로 빠진 그림자
                     float heightScale = VisibleRect(renderer).width >= UnshadowedBuildingMinWidth ? BuildingHeightScale : PropHeightScale;
                     obstacles.Add(new Obstacle { Renderer = renderer, Shadow = null, Footprint = Footprint(renderer, heightScale) });
                 }
@@ -101,6 +125,24 @@ namespace GN3.World
         public static VillageNavGrid Build(Rect area, IEnumerable<Obstacle> obstacles)
         {
             var grid = new VillageNavGrid(area);
+            grid.BlockAll(obstacles);
+            return grid;
+        }
+
+        /// <summary>
+        /// 같은 격자를 새 장애물로 다시 막는다(마을에 건물을 지었을 때 — VillageLayoutApplier.Rebuilt). 걷는 용병·강아지가
+        /// 이 격자를 그대로 들고 있어 새로 만들지 않고 고친다.
+        /// </summary>
+        public void Rebuild(IEnumerable<Obstacle> obstacles)
+        {
+            System.Array.Clear(_blocked, 0, _blocked.Length);
+            _blockedRects.Clear();
+            BlockAll(obstacles);
+        }
+
+        private void BlockAll(IEnumerable<Obstacle> obstacles)
+        {
+            var grid = this;
             foreach (var obstacle in obstacles)
             {
                 grid.Block(obstacle.Footprint);
@@ -115,8 +157,10 @@ namespace GN3.World
             // 울타리로 둘러싼 땅(가축 우리)처럼 그림자로는 알 수 없는 막힌 바닥. 장애물 목록(앞뒤 정렬에도 쓰임)에는 넣지 않는다.
             foreach (var blocker in Object.FindObjectsByType<NavBlockArea>(FindObjectsSortMode.None))
                 grid.Block(blocker.Area);
-            return grid;
         }
+
+        /// <summary>그 그림이 지금 자리에서 차지할 바닥(건설 미리보기·꽃 가리기용, 장애물 계산과 같은 식).</summary>
+        public static Rect FootprintOf(SpriteRenderer owner, float heightScale) => Footprint(owner, heightScale);
 
         private static Rect Footprint(SpriteRenderer owner, float heightScale)
         {
@@ -255,30 +299,29 @@ namespace GN3.World
                 return true;
             }
 
-            int count = _cols * _rows;
-            var gScore = new float[count];
-            var cameFrom = new int[count];
-            var closed = new bool[count];
-            for (int i = 0; i < count; i++) { gScore[i] = float.MaxValue; cameFrom[i] = -1; }
+            // 마을이 3×3으로 넓어져(약 16만 칸) 칸 배열을 길 찾을 때마다 새로 만들지 않고 세대 번호로 비운 셈 친다.
+            EnsureSearchBuffers();
+            if (++_searchStamp == int.MaxValue)
+            {
+                System.Array.Clear(_visitedStamp, 0, _visitedStamp.Length);
+                System.Array.Clear(_closedStamp, 0, _closedStamp.Length);
+                _searchStamp = 1;
+            }
+            int stamp = _searchStamp;
 
             int startIndex = start.y * _cols + start.x;
             int goalIndex = goal.y * _cols + goal.x;
-            gScore[startIndex] = 0f;
-            var open = new List<(int index, float f)> { (startIndex, Heuristic(start, goal)) };
+            Visit(startIndex, 0f, -1, stamp);
+            _open.Clear();
+            _open.Push(startIndex, Heuristic(start, goal));
 
             bool found = false;
-            while (open.Count > 0)
+            while (_open.Count > 0)
             {
-                int bestSlot = 0;
-                for (int i = 1; i < open.Count; i++)
-                    if (open[i].f < open[bestSlot].f) bestSlot = i;
-                int current = open[bestSlot].index;
-                open[bestSlot] = open[open.Count - 1];
-                open.RemoveAt(open.Count - 1);
-
-                if (closed[current]) continue;
+                int current = _open.Pop();
+                if (_closedStamp[current] == stamp) continue;
                 if (current == goalIndex) { found = true; break; }
-                closed[current] = true;
+                _closedStamp[current] = stamp;
 
                 int cx = current % _cols, cy = current / _cols;
                 foreach (var d in Directions)
@@ -287,35 +330,106 @@ namespace GN3.World
                     if (!Open(nx, ny)) continue;
                     if (d.x != 0 && d.y != 0 && (!Open(cx + d.x, cy) || !Open(cx, cy + d.y))) continue;
                     int next = ny * _cols + nx;
-                    if (closed[next]) continue;
-                    float g = gScore[current] + (d.x != 0 && d.y != 0 ? 1.41421f : 1f);
-                    if (g >= gScore[next]) continue;
-                    gScore[next] = g;
-                    cameFrom[next] = current;
-                    open.Add((next, g + Heuristic(new Vector2Int(nx, ny), goal)));
+                    if (_closedStamp[next] == stamp) continue;
+                    float g = _gScore[current] + (d.x != 0 && d.y != 0 ? 1.41421f : 1f);
+                    if (_visitedStamp[next] == stamp && g >= _gScore[next]) continue;
+                    Visit(next, g, current, stamp);
+                    _open.Push(next, g + Heuristic(new Vector2Int(nx, ny), goal));
                 }
             }
             if (!found) return false;
 
             var cells = new List<Vector2>();
-            for (int i = cameFrom[goalIndex]; i != -1 && i != startIndex; i = cameFrom[i])
+            for (int i = _cameFrom[goalIndex]; i != -1 && i != startIndex; i = _cameFrom[i])
                 cells.Add(ToWorld(new Vector2Int(i % _cols, i / _cols)));
             cells.Reverse();
             cells.Add(to);
 
-            // string pulling: 지금 위치에서 보이는 가장 먼 경유점으로 바로 간다.
+            // string pulling: 지금 위치에서 보이는 가장 먼 경유점으로 바로 간다(먼 길은 앞쪽 PullLookahead칸까지만 본다).
             Vector2 anchor = from;
             int k = 0;
             while (k < cells.Count)
             {
                 int farthest = k;
-                for (int j = cells.Count - 1; j > k; j--)
+                for (int j = Mathf.Min(cells.Count - 1, k + PullLookahead); j > k; j--)
                     if (LineWalkable(anchor, cells[j])) { farthest = j; break; }
                 path.Add(cells[farthest]);
                 anchor = cells[farthest];
                 k = farthest + 1;
             }
             return true;
+        }
+
+        private void EnsureSearchBuffers()
+        {
+            int count = _cols * _rows;
+            if (_gScore != null && _gScore.Length == count) return;
+            _gScore = new float[count];
+            _cameFrom = new int[count];
+            _visitedStamp = new int[count];
+            _closedStamp = new int[count];
+            _searchStamp = 0;
+        }
+
+        private void Visit(int index, float g, int from, int stamp)
+        {
+            _gScore[index] = g;
+            _cameFrom[index] = from;
+            _visitedStamp[index] = stamp;
+        }
+
+        /// <summary>A* 열린 목록: f가 가장 작은 칸을 꺼내는 이진 힙(같은 칸이 여러 번 들어가도 닫힌 칸은 꺼낼 때 버린다).</summary>
+        private class MinHeap
+        {
+            private int[] _items = new int[256];
+            private float[] _keys = new float[256];
+            public int Count { get; private set; }
+
+            public void Clear() => Count = 0;
+
+            public void Push(int item, float key)
+            {
+                if (Count == _items.Length)
+                {
+                    System.Array.Resize(ref _items, Count * 2);
+                    System.Array.Resize(ref _keys, Count * 2);
+                }
+                int i = Count++;
+                while (i > 0)
+                {
+                    int parent = (i - 1) / 2;
+                    if (_keys[parent] <= key) break;
+                    _items[i] = _items[parent];
+                    _keys[i] = _keys[parent];
+                    i = parent;
+                }
+                _items[i] = item;
+                _keys[i] = key;
+            }
+
+            public int Pop()
+            {
+                int top = _items[0];
+                int lastItem = _items[--Count];
+                float lastKey = _keys[Count];
+                int i = 0;
+                while (true)
+                {
+                    int child = i * 2 + 1;
+                    if (child >= Count) break;
+                    if (child + 1 < Count && _keys[child + 1] < _keys[child]) child++;
+                    if (_keys[child] >= lastKey) break;
+                    _items[i] = _items[child];
+                    _keys[i] = _keys[child];
+                    i = child;
+                }
+                if (Count > 0)
+                {
+                    _items[i] = lastItem;
+                    _keys[i] = lastKey;
+                }
+                return top;
+            }
         }
 
         private static float Heuristic(Vector2Int a, Vector2Int b)

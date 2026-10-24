@@ -4,7 +4,8 @@ namespace GN3.World
 {
     /// <summary>
     /// 마을 공중에 떠다니는 것들: 낮엔 바람 따라 흘러가는 꽃잎·잎, 밤엔 깜빡이는 반딧불.
-    /// 둘 다 화면 전체에 드문드문 나오고, DayNightCycle.NightLightFactor로 방출량을 낮/밤에 나눈다(해질녘엔 섞여 나온다).
+    /// 둘 다 지금 보이는 화면 전체에 드문드문 나오고(마을이 넓어 방출 상자가 카메라를 따라간다), DayNightCycle.NightLightFactor로
+    /// 방출량을 낮/밤에 나눈다(해질녘엔 섞여 나온다). 이미 나온 것은 월드에 남아 제자리에서 흘러간다.
     /// 파티클은 실행할 때 코드로 만든다. 재질만 에디터 메뉴 "GN3/World/마을 분위기(파티클·구름·새) 만들기"가 넣어 준다.
     /// </summary>
     public class AmbientParticles : MonoBehaviour
@@ -34,6 +35,7 @@ namespace GN3.World
 
         private ParticleSystem _petals;
         private ParticleSystem _fireflies;
+        private Camera _camera;
 
         public void Configure(Material lit, Material unlit)
         {
@@ -49,6 +51,7 @@ namespace GN3.World
                 enabled = false;
                 return;
             }
+            _camera = cam;
             float dot = PixelSprites.ArtDot(cam);
             var view = PixelSprites.ViewRect(cam);
             _petals = CreatePetals(view, dot);
@@ -69,6 +72,21 @@ namespace GN3.World
 
             var fireflyEmission = _fireflies.emission;
             fireflyEmission.rateOverTime = firefliesPerSecond * night;
+
+            if (_camera != null)
+            {
+                var view = PixelSprites.ViewRect(_camera);
+                FitToView(_petals, view);
+                FitToView(_fireflies, view);
+            }
+        }
+
+        /// <summary>방출 상자를 지금 보이는 화면에 맞춘다(둘러보거나 확대·축소해도 화면 안에서 나온다).</summary>
+        private static void FitToView(ParticleSystem ps, Rect view)
+        {
+            ps.transform.position = new Vector3(view.center.x, view.center.y, 0f);
+            var shape = ps.shape;
+            shape.scale = new Vector3(view.width, view.height, 0f);
         }
 
         private ParticleSystem CreatePetals(Rect view, float dot)

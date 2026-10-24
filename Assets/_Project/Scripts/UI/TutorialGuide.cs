@@ -18,7 +18,7 @@ namespace GN3.UI
     {
         private const string PrefKey = "TutorialStep";
         private const int Done = 99;
-        private const int LastStep = 6;
+        private const int LastStep = 7;
         private const float BoxWidth = 820f, BoxHeight = 200f;
         private const float BoxMargin = 110f;     // 화면 아래·위에서 띄우는 거리(아래 오른쪽 건강·관계 버튼, 위 HUD 줄을 피한다)
         private const float FramePadding = 5f, FrameThickness = 4f;
@@ -66,8 +66,15 @@ namespace GN3.UI
             },
             new Step
             {
-                Title = "5. 이제 길드를 키워 보세요",
-                Body = "결과와 소식은 오른쪽 아래 우편함에 쌓입니다.\n마을 건물을 누르면 훈련소·병원·성당·온천 등을 쓸 수 있고, [건강]·[관계]로 용병 상태를 봅니다.\nESC 메뉴에 설정과 튜토리얼 다시 보기가 있습니다.",
+                Title = "5. 건물 짓기",
+                Body = "길드는 빈 숲에서 시작합니다. 왼쪽 위 [건설] → [짓기]를 누르고 빈 땅을 클릭하면 세워집니다(오른쪽 클릭·ESC는 취소).\n건물마다 금화와 재료가 듭니다. 들고 온 재료로 길드 천막부터 세우면 길드 창고·시설을, 게시판을 세우면 마을에서 바로 의뢰를 볼 수 있습니다.\n모자란 재료는 원정에서 몬스터가 떨어뜨립니다. 지은 건물은 그 건물을 눌러 뜬 창이나 [건설] 창의 [옮기기]로 옮길 수 있습니다(무료 · [옮기기 취소]로 되돌리기).\n돌빛 등급이 되면 여관을 지어 용병을 밤에 푹 쉬게 할 수 있습니다(그 전엔 용병 숙소). 길드 등급이 오르면 대장간·훈련소·병원도 열립니다(등급이 오르면 [건설] 창에 새 건물·장식품이 나타납니다).\n처음엔 견습 용병단입니다. 길드 홀을 지으면 정식 길드가 되고, 그래야 동빛 위 등급으로 오릅니다.\n[건설] 창의 [장식품]에서 소품·울타리·성벽을 놓을 수 있습니다(옮기기 모드에서 들고 [치우기]로 치움).",
+                Targets = new[] { "BuildMenuPanel", "건설Button" },
+                NeedsButton = true,
+            },
+            new Step
+            {
+                Title = "6. 이제 길드를 키워 보세요",
+                Body = "결과와 소식은 오른쪽 아래 우편함에 쌓입니다.\n지은 건물을 누르면 훈련소·병원·성당·온천 등을 쓸 수 있고, [건강]·[관계]로 용병 상태를 봅니다.\nESC 메뉴에 설정과 튜토리얼 다시 보기가 있습니다.",
                 Targets = new[] { "MailboxButton" },
                 NeedsButton = true,
             },
