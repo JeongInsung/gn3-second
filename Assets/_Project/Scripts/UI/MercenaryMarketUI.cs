@@ -102,6 +102,7 @@ namespace GN3.UI
                 _market.MinGrowth = rank.MarketMinGrowth;
                 _market.MaxGrowth = rank.MarketMaxGrowth;
                 _market.MaxGrade = rank.MaxMercGrade;
+                _market.QualityChance = GN3.World.VillageCharm.MarketQualityChance; // 마을 매력 단계만큼 좋은 용병
                 ContractNegotiationPanel.ForgetMarketBreakdowns(); // 새 목록이니 깨졌던 협상은 잊는다
                 MarketListings.Set(new List<Mercenary>(_market.Refresh()));
             }

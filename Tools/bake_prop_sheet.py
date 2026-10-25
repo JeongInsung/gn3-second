@@ -1,4 +1,4 @@
-"""정면형 소품 시트(3x2)를 칸별 장식 원본 그림으로 자른다.
+"""정면형 소품 시트(3x2)를 칸별 장식 원본 그림으로 자르고, 한 장짜리 소품(SINGLES — 허수아비)도 같이 다듬는다.
 
     python tools/bake_prop_sheet.py [정면형 픽셀 아트 소품 시트.png]
 
@@ -18,6 +18,8 @@ from bake_loot_icons import DOWNLOADS, ROOT, largest_parts  # noqa: E402
 DEFAULT_SHEET = os.path.join(DOWNLOADS, "정면형 픽셀 아트 소품 시트.png")
 OUT_DIR = os.path.join(ROOT, "Assets", "조정식", "Decorations", "소품")
 NAMES = [["나무 상자", "술통", "랜턴 기둥"], ["모닥불", "깃발", "자루"]]
+# 한 장짜리 소품 그림(다운로드 파일 이름 → 저장 이름)
+SINGLES = [("살짝 돌아선 픽셀 허수아비 표적.png", "허수아비")]
 ALPHA_MIN = 24
 
 
@@ -43,6 +45,14 @@ def main():
             img = cut(cell)
             img.save(os.path.join(OUT_DIR, NAMES[r][c] + ".png"))
             print(NAMES[r][c], img.size)
+    for src, name in SINGLES:
+        src_path = os.path.join(DOWNLOADS, src)
+        if not os.path.exists(src_path):
+            print("없음:", src)
+            continue
+        img = cut(np.array(Image.open(src_path).convert("RGBA")))
+        img.save(os.path.join(OUT_DIR, name + ".png"))
+        print(name, img.size)
 
 
 if __name__ == "__main__":

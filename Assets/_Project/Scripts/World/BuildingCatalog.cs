@@ -24,7 +24,19 @@ namespace GN3.World
             public bool House;         // 여러 채를 지을 수 있는 묶음
             public string Replaces;    // 지으면 사라지는 건물 id(길드 홀 → 길드 천막, 여관 → 용병 숙소, 훈련소 → 간이 훈련소)
             public bool Decor;         // 장식품(Decorations) — 원본을 복제해 몇 개든 놓고 치울 수 있다
-            public string Category;    // 장식품 분류([건설] 창 [장식품]의 머리줄)
+            public string Category;    // 장식품 분류([건설] 창 [장식품]의 정렬 순서)
+            public int Charm;          // 마을 매력 점수(VillageCharm — 같은 장식은 VillageCharm.MaxCountedPerKind개까지)
+            public int Seats;          // 쉼터 자리 수(벤치·모닥불·분수 — 용병이 와서 쉰다, DecorActivities). 0이면 쉼터 아님
+            public bool TrainingDummy; // 훈련 장식(허수아비 — 용병이 와서 친다, DecorActivities)
+
+            /// <summary>장식품 기능 값(매력·쉼터 자리·훈련)을 정해 그대로 돌려준다(목록 줄 끝에 이어 쓴다).</summary>
+            public Entry With(int charm, int seats = 0, bool trainingDummy = false)
+            {
+                Charm = charm;
+                Seats = seats;
+                TrainingDummy = trainingDummy;
+                return this;
+            }
 
             public bool Matches(string objectName) => Prefixes.Any(p => objectName.StartsWith(p, System.StringComparison.Ordinal));
         }
@@ -42,7 +54,7 @@ namespace GN3.World
         public static readonly Entry[] All =
         {
             // 새 게임은 빈 숲에서 시작한다(StartBuilt 건물 없음) — 시작 재료로 길드 천막부터 직접 세운다.
-            new Entry { Id = "tent", Name = "길드 천막", Description = "창고·시설 증축", Prefixes = new[] { TentPrefix },
+            new Entry { Id = "tent", Name = "길드 천막", Description = "창고·시설 · 3명 숙소", Prefixes = new[] { TentPrefix },
                 RequiredRank = 0, Cost = 0, Materials = M((LootCatalog.Cloth, 3), (LootCatalog.Rope, 2), (LootCatalog.Stake, 4)) },
             new Entry { Id = "board", Name = "퀘스트 게시판", Description = "의뢰 받기", Prefixes = new[] { "오크 퀘스트 게시판" },
                 RequiredRank = 0, Cost = 50, Materials = M((LootCatalog.Log, 2), (LootCatalog.Nail, 3)) },
@@ -67,7 +79,7 @@ namespace GN3.World
             new Entry { Id = "hospital", Name = "병원", Description = "입원 치료",
                 Prefixes = new[] { "십자가가 돋보이는 중세 픽셀 병원" }, RequiredRank = 2, Cost = 600,
                 Materials = M((LootCatalog.Log, 4), (LootCatalog.Cloth, 6), (LootCatalog.Thread, 3), (LootCatalog.Needle, 2)) },
-            new Entry { Id = "guildhall", Name = "길드 홀", Description = "정식 길드 승격",
+            new Entry { Id = "guildhall", Name = "길드 홀", Description = "정식 길드 · 3명 숙소",
                 Prefixes = new[] { "쇠락한 모험가 길드 홀" }, RequiredRank = 2, Cost = 800, Replaces = "tent",
                 Materials = M((LootCatalog.Log, 10), (LootCatalog.Nail, 10), (LootCatalog.IronRing, 4), (LootCatalog.Cloth, 4)) },
             new Entry { Id = "hotspring", Name = "온천", Description = "피로 회복",
@@ -112,17 +124,18 @@ namespace GN3.World
         /// <summary>[건설] 창 [장식품]. 건물(All)과 따로 두어 건물 판정(ForObject·HasBuilding)에 섞이지 않는다.</summary>
         public static readonly Entry[] Decorations =
         {
-            D("crate", "나무 상자", PropsCategory, 0, 20, (LootCatalog.Log, 1), (LootCatalog.Nail, 2)),
-            D("barrel", "술통", PropsCategory, 0, 30, (LootCatalog.Log, 2), (LootCatalog.IronRing, 1)),
-            D("lanternpost", "랜턴 기둥", PropsCategory, 1, 50, (LootCatalog.Log, 1), (LootCatalog.IronRing, 1), (LootCatalog.Wax, 1)),
-            D("campfire", "모닥불", PropsCategory, 0, 30, (LootCatalog.Log, 2)),
-            D("banner", "깃발", PropsCategory, 0, 40, (LootCatalog.Stake, 1), (LootCatalog.Cloth, 1), (LootCatalog.Dye, 1)),
-            D("sacks", "자루", PropsCategory, 0, 20, (LootCatalog.Cloth, 1), (LootCatalog.Rope, 1)),
+            D("crate", "나무 상자", PropsCategory, 0, 20, (LootCatalog.Log, 1), (LootCatalog.Nail, 2)).With(charm: 1),
+            D("barrel", "술통", PropsCategory, 0, 30, (LootCatalog.Log, 2), (LootCatalog.IronRing, 1)).With(charm: 1),
+            D("lanternpost", "랜턴 기둥", PropsCategory, 1, 50, (LootCatalog.Log, 1), (LootCatalog.IronRing, 1), (LootCatalog.Wax, 1)).With(charm: 2),
+            D("campfire", "모닥불", PropsCategory, 0, 30, (LootCatalog.Log, 2)).With(charm: 2, seats: 3),
+            D("banner", "깃발", PropsCategory, 0, 40, (LootCatalog.Stake, 1), (LootCatalog.Cloth, 1), (LootCatalog.Dye, 1)).With(charm: 2),
+            D("sacks", "자루", PropsCategory, 0, 20, (LootCatalog.Cloth, 1), (LootCatalog.Rope, 1)).With(charm: 1),
+            D("dummy", "허수아비", PropsCategory, 0, 40, (LootCatalog.Stake, 2), (LootCatalog.Rope, 1), (LootCatalog.Cloth, 1)).With(charm: 2, trainingDummy: true),
 
-            D("fountain", "분수", TownCategory, 3, 300, (LootCatalog.IronRing, 2), (LootCatalog.Nail, 4), (LootCatalog.Log, 2)),
-            D("lamp", "철등", TownCategory, 2, 60, (LootCatalog.IronRing, 2), (LootCatalog.Wax, 1)),
-            D("planter", "꽃 화분", TownCategory, 1, 30, (LootCatalog.Log, 1)),
-            D("bench", "벤치", TownCategory, 1, 40, (LootCatalog.Log, 2), (LootCatalog.Nail, 2)),
+            D("fountain", "분수", TownCategory, 3, 300, (LootCatalog.IronRing, 2), (LootCatalog.Nail, 4), (LootCatalog.Log, 2)).With(charm: 8, seats: 3),
+            D("lamp", "철등", TownCategory, 2, 60, (LootCatalog.IronRing, 2), (LootCatalog.Wax, 1)).With(charm: 3),
+            D("planter", "꽃 화분", TownCategory, 1, 30, (LootCatalog.Log, 1)).With(charm: 2),
+            D("bench", "벤치", TownCategory, 1, 40, (LootCatalog.Log, 2), (LootCatalog.Nail, 2)).With(charm: 2, seats: 2),
 
             D("fence", "울타리", FenceCategory, 0, 15, (LootCatalog.Stake, 1)),
             D("fence_moss", "이끼 낀 울타리", FenceCategory, 0, 15, (LootCatalog.Stake, 1)),
@@ -133,17 +146,17 @@ namespace GN3.World
             D("fence_v", "세로 울타리", FenceCategory, 0, 15, (LootCatalog.Stake, 1)),
             D("fence_v_moss", "이끼 낀 세로 울타리", FenceCategory, 0, 15, (LootCatalog.Stake, 1)),
             D("fence_v_broken", "부러진 세로 울타리", FenceCategory, 0, 15, (LootCatalog.Stake, 1)),
-            D("trough", "여물통", FenceCategory, 1, 25, (LootCatalog.Log, 1)),
-            D("hitchpost", "고삐 기둥", FenceCategory, 0, 15, (LootCatalog.Stake, 1), (LootCatalog.Rope, 1)),
+            D("trough", "여물통", FenceCategory, 1, 25, (LootCatalog.Log, 1)).With(charm: 1),
+            D("hitchpost", "고삐 기둥", FenceCategory, 0, 15, (LootCatalog.Stake, 1), (LootCatalog.Rope, 1)).With(charm: 1),
 
-            D("cow", "소", LivestockCategory, 1, 150, (LootCatalog.Rope, 1), (LootCatalog.Strap, 1)),
+            D("cow", "소", LivestockCategory, 1, 150, (LootCatalog.Rope, 1), (LootCatalog.Strap, 1)).With(charm: 4),
 
-            D("wall_h", "가로 성벽", WallCategory, 2, 120, (LootCatalog.Log, 2), (LootCatalog.Nail, 4), (LootCatalog.IronRing, 1)),
-            D("wall_v", "세로 성벽", WallCategory, 2, 80, (LootCatalog.Log, 2), (LootCatalog.Nail, 4), (LootCatalog.IronRing, 1)),
-            D("wall_corner_l", "왼쪽 성벽 모서리", WallCategory, 2, 100, (LootCatalog.Log, 2), (LootCatalog.Nail, 4), (LootCatalog.IronRing, 1)),
-            D("wall_corner_r", "오른쪽 성벽 모서리", WallCategory, 2, 100, (LootCatalog.Log, 2), (LootCatalog.Nail, 4), (LootCatalog.IronRing, 1)),
-            D("wall_tower", "성벽 탑", WallCategory, 3, 250, (LootCatalog.Log, 4), (LootCatalog.Nail, 6), (LootCatalog.IronRing, 2)),
-            D("wall_gate", "성문", WallCategory, 3, 300, (LootCatalog.Log, 4), (LootCatalog.Nail, 6), (LootCatalog.IronRing, 2)),
+            D("wall_h", "가로 성벽", WallCategory, 2, 120, (LootCatalog.Log, 2), (LootCatalog.Nail, 4), (LootCatalog.IronRing, 1)).With(charm: 1),
+            D("wall_v", "세로 성벽", WallCategory, 2, 80, (LootCatalog.Log, 2), (LootCatalog.Nail, 4), (LootCatalog.IronRing, 1)).With(charm: 1),
+            D("wall_corner_l", "왼쪽 성벽 모서리", WallCategory, 2, 100, (LootCatalog.Log, 2), (LootCatalog.Nail, 4), (LootCatalog.IronRing, 1)).With(charm: 1),
+            D("wall_corner_r", "오른쪽 성벽 모서리", WallCategory, 2, 100, (LootCatalog.Log, 2), (LootCatalog.Nail, 4), (LootCatalog.IronRing, 1)).With(charm: 1),
+            D("wall_tower", "성벽 탑", WallCategory, 3, 250, (LootCatalog.Log, 4), (LootCatalog.Nail, 6), (LootCatalog.IronRing, 2)).With(charm: 3),
+            D("wall_gate", "성문", WallCategory, 3, 300, (LootCatalog.Log, 4), (LootCatalog.Nail, 6), (LootCatalog.IronRing, 2)).With(charm: 4),
         };
 
         public static readonly string[] DecorCategories = { PropsCategory, TownCategory, FenceCategory, LivestockCategory, WallCategory };

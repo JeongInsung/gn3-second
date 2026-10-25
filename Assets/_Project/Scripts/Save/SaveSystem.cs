@@ -145,6 +145,20 @@ namespace GN3.Save
                    (string.IsNullOrEmpty(data.savedAt) ? "" : $"\n저장: {data.savedAt}");
         }
 
+        private static List<LootSave> SaveMaterials(Quest quest) =>
+            quest.MaterialReward.Select(m => new LootSave { name = m.item.Name, count = m.count }).ToList();
+
+        /// <summary>저장된 재료 보상을 의뢰에 되돌린다(예전 저장엔 없어 빈 목록).</summary>
+        private static void RestoreMaterials(Quest quest, List<LootSave> saved)
+        {
+            if (saved == null) return;
+            foreach (var m in saved)
+            {
+                var item = LootCatalog.Find(m.name);
+                if (item != null && m.count > 0) quest.MaterialReward.Add((item, m.count));
+            }
+        }
+
         private static SaveData Capture()
         {
             var data = new SaveData
@@ -174,6 +188,7 @@ namespace GN3.Save
                     };
                     foreach (var w in q.Waves)
                         b.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
+                    b.materialReward = SaveMaterials(q);
                     data.questBoard.Add(b);
                 }
             }
@@ -259,6 +274,7 @@ namespace GN3.Save
                     e.memberSquads.Add(expedition.SquadOf(m));
                 }
                 e.leaderId = expedition.Leader?.Id;
+                e.materialReward = SaveMaterials(q);
                 e.leaderId2 = expedition.Quest.SquadCount > 1 ? expedition.LeaderOf(1)?.Id : null;
                 e.allyGuildId = q.AllyGuildId;
                 e.allyCount = q.AllyCount;
@@ -284,6 +300,12 @@ namespace GN3.Save
             data.bestiaryBest = Bestiary.SaveBest();
             data.facilities = GuildFacilities.SaveEntries();
             data.buildings = VillageLayout.SaveEntries();
+            data.felledTrees = ForestLayout.SaveEntries();
+            data.fellsUsed = ForestLayout.SavedUsed;
+            data.fellsDay = ForestLayout.SavedDay;
+            data.merchantHereDay = TravelingMerchant.HereDay;
+            data.merchantNextDay = TravelingMerchant.SavedNextDay;
+            data.merchantStock = TravelingMerchant.SaveStock();
             CaptureRivals(data);
         }
 
@@ -295,7 +317,7 @@ namespace GN3.Save
                 var s = new RivalGuildSave
                 {
                     id = g.Id, name = g.Name, temper = (int)g.Temper, reputation = g.Reputation, gold = g.Gold,
-                    relation = g.Relation, lastGiftDay = g.LastGiftDay,
+                    relation = g.Relation, lastGiftDay = g.LastGiftDay, barterDay = g.BarterDay, barterCount = g.BarterCount,
                 };
                 foreach (var merc in g.Roster)
                 {
@@ -336,7 +358,7 @@ namespace GN3.Save
                 var g = new RivalGuild
                 {
                     Id = s.id, Name = s.name, Temper = (RivalTemper)s.temper, Reputation = s.reputation, Gold = s.gold,
-                    Relation = s.relation, LastGiftDay = s.lastGiftDay,
+                    Relation = s.relation, LastGiftDay = s.lastGiftDay, BarterDay = s.barterDay, BarterCount = s.barterCount,
                 };
                 for (int i = 0; i < s.roster.Count; i++)
                 {
@@ -496,6 +518,7 @@ namespace GN3.Save
                     : null; // 예전 저장: enemy × enemyCount 한 라운드
                 var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays, waves)
                     { AllyGuildId = e.allyGuildId, AllyCount = e.allyCount };
+                RestoreMaterials(quest, e.materialReward);
                 // 버전 1 저장은 일 단위뿐이라 × 24시간으로 읽는다.
                 bool hours = data.version >= 2;
                 quest.SetRemainingHours(hours ? e.remainingHours : e.remainingDays * Quest.HoursPerDay);
@@ -523,7 +546,8 @@ namespace GN3.Save
             if (data.hasQuestBoard)
                 board = data.questBoard.Select(b => new Quest(b.title, (Region)b.region, b.location, b.enemy, b.enemyCount, b.difficulty, b.durationDays,
                     b.waves != null && b.waves.Count > 0 ? b.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList() : null,
-                    b.requester, b.requestText) { IsChallenge = b.challenge, AllyGuildId = b.allyGuildId, AllyCount = b.allyCount }).ToList();
+                    b.requester, b.requestText) { IsChallenge = b.challenge, AllyGuildId = b.allyGuildId, AllyCount = b.allyCount })
+                    .Select((q, i) => { RestoreMaterials(q, data.questBoard[i].materialReward); return q; }).ToList();
             QuestBoardListings.Restore(board, data.questBoardNextDay);
             List<Mercenary> market = null;
             if (data.hasMarket)
@@ -538,6 +562,8 @@ namespace GN3.Save
             if (data.version < 11) LootBag.Add(BuildMaterials.StartingKit); // 재료가 생기기 전 저장: 길드 천막 한 채 분
             Bestiary.Restore(data.bestiaryKills, data.bestiaryBest);
             GuildFacilities.Restore(data.facilities);
+            ForestLayout.Restore(data.felledTrees, data.fellsUsed, data.fellsDay); // 씬을 다시 맞추기(VillageLayout → Apply) 전에
+            TravelingMerchant.Restore(data.merchantHereDay, data.merchantNextDay, data.merchantStock);
             VillageLayout.Restore(data.buildings, data.version < 10);
             RestoreRivals(data, classes);
         }

@@ -140,7 +140,8 @@ namespace GN3.UI
             string rounds = quest.WaveCount > 1 ? $"<color=#a3937c>{quest.WaveCount}라운드</color>  " : "";
             var rival = RivalGuilds.TargetOf(quest); // 내일 자정에 가져갈 근처 길드
             string targeted = rival != null ? $"  <color=#f0a54a>{Josa.IGa(rival.Name)} 노리는 중</color>" : "";
-            var rewardText = CreateText(row.transform, $"{rounds}보상 {Pricing.QuestReward(quest)}G{targeted}", 18, TextAnchor.MiddleLeft);
+            string materials = quest.MaterialReward.Count > 0 ? $" · {quest.MaterialRewardText}" : ""; // 부탁한 사람이 주는 건설 재료
+            var rewardText = CreateText(row.transform, $"{rounds}보상 {Pricing.QuestReward(quest)}G{materials}{targeted}", 18, TextAnchor.MiddleLeft);
             rewardText.supportRichText = true;
             rewardText.color = UITheme.TitleText;
             rewardText.horizontalOverflow = HorizontalWrapMode.Overflow;

@@ -21,7 +21,32 @@ namespace GN3.Quests
             int count = waves[waves.Count - 1].Count;
             string title = $"{request.Requester}의 부탁 — {enemyName} 토벌";
 
-            return new Quest(title, region, locationName, enemyName, count, level, durationDays, waves, request.Requester, request.Text);
+            var quest = new Quest(title, region, locationName, enemyName, count, level, durationDays, waves, request.Requester, request.Text);
+            AddMaterialReward(quest, rng);
+            return quest;
+        }
+
+        private const double MaterialRewardChance = 0.35;
+
+        /// <summary>
+        /// 일부 의뢰(MaterialRewardChance)는 부탁한 마을 사람이 금화와 함께 건설 재료를 준다: 그 의뢰 적이 떨어뜨리는 재료 중
+        /// 한두 가지를 레벨만큼(Lv1 2개 ~ Lv5 6개) 나눠서.
+        /// </summary>
+        private static void AddMaterialReward(Quest quest, Random rng)
+        {
+            if (rng.NextDouble() >= MaterialRewardChance) return;
+            var pool = new List<GN3.Economy.LootItem>(quest.DroppedMaterials);
+            if (pool.Count == 0) return;
+            int total = quest.Difficulty + 1;
+            int kinds = Math.Min(pool.Count, total >= 4 ? 2 : 1);
+            for (int k = 0; k < kinds; k++)
+            {
+                var item = pool[rng.Next(pool.Count)];
+                pool.Remove(item);
+                int count = k == kinds - 1 ? total : rng.Next(1, total);
+                total -= count;
+                quest.MaterialReward.Add((item, count));
+            }
         }
 
         /// <summary>대표 적(마지막 라운드)의 계층: Lv1 약탈 세력, Lv2 약탈 세력 또는 지형 동물, Lv3·4 지형 동물, Lv5 보스.</summary>

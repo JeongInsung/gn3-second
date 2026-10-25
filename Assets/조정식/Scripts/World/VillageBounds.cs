@@ -30,6 +30,16 @@ namespace GN3.World
 
         public static bool Exists => World.width > 0f;
 
+        /// <summary>3×3 바닥의 가운데 칸(처음 화면). 용병·강아지는 이 안에서만 걷는다(카메라·건설은 World 전체).</summary>
+        public static Rect Center
+        {
+            get
+            {
+                var world = World;
+                return new Rect(world.x + world.width / 3f, world.y + world.height / 3f, world.width / 3f, world.height / 3f);
+            }
+        }
+
         // 바닥은 바깥 바닥·광장·흙길(칠하기 층) 여러 장일 수 있어 가장 넓은 것(바깥 바닥)을 쓴다.
         private static Rect Measure()
         {

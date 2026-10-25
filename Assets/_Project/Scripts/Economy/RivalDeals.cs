@@ -9,7 +9,8 @@ using UnityEngine;
 namespace GN3.Economy
 {
     /// <summary>
-    /// 근처 길드와의 거래(근처 길드 창): 영입(이적료 + 계약 협상), 판매, 1:1 맞교환, 연합 의뢰 보상 나누기.
+    /// 근처 길드와의 거래(근처 길드 창): 영입(이적료 + 계약 협상), 판매, 1:1 맞교환, 연합 의뢰 보상 나누기,
+    /// 교역(남는 전리품 → 그 길드가 주는 건설 재료, 하루 BartersPerDay번).
     /// 값은 시세(Pricing.HireCost)에 관계·성향을 곱한다. 대여는 Loans.
     /// </summary>
     public static class RivalDeals
@@ -186,6 +187,69 @@ namespace GN3.Economy
         {
             var g = quest.IsJoint ? RivalGuilds.Get(quest.AllyGuildId) : null;
             return g == null ? null : $"{g.Name} 연합 — 그 길드 용병 {quest.AllyCount}명이 함께 간다. 보상의 {Mathf.RoundToInt(JointShare * 100)}%는 그 길드 몫.";
+        }
+
+        // ---------- 교역(전리품 → 건설 재료) ----------
+
+        public const int BartersPerDay = 3;
+        public const int BarterRelation = 1;
+        private const float BarterMarkup = 1.5f;       // 재료 값의 1.5배어치 전리품을 내야 재료 하나
+        private const float FriendlyBarterBonus = 1.2f; // 우호면 20% 더 준다
+
+        // 성향별로 주는 재료(공격적: 가죽붙이 · 신중: 쇠붙이·말뚝 · 부유: 천·염료·밀랍 · 교활: 바느질감·밧줄)
+        private static readonly LootItem[][] TemperMaterials =
+        {
+            new[] { LootCatalog.Leather, LootCatalog.Strap, LootCatalog.IronRing },
+            new[] { LootCatalog.Nail, LootCatalog.IronRing, LootCatalog.Stake },
+            new[] { LootCatalog.Cloth, LootCatalog.Dye, LootCatalog.Wax },
+            new[] { LootCatalog.Thread, LootCatalog.Needle, LootCatalog.Rope },
+        };
+
+        /// <summary>그 길드가 오늘 교역으로 내주는 재료(성향 목록 중 날짜·길드마다 하나로 정해진다).</summary>
+        public static LootItem BarterMaterial(RivalGuild g)
+        {
+            var list = TemperMaterials[(int)g.Temper];
+            int seed = GameClock.CurrentDay;
+            foreach (char c in g.Id) seed += c;
+            return list[seed % list.Length];
+        }
+
+        public static int BartersLeft(RivalGuild g) => g.BarterDay == GameClock.CurrentDay ? Mathf.Max(0, BartersPerDay - g.BarterCount) : BartersPerDay;
+
+        /// <summary>전리품 하나를 내면 받는 재료 개수(전리품 판값 ÷ (재료 값 × 1.5), 최소 1, 우호면 ×1.2).</summary>
+        public static int BarterAmount(RivalGuild g, LootItem item)
+        {
+            var material = BarterMaterial(g);
+            float value = item.Price * (RivalGuilds.IsFriendly(g) ? FriendlyBarterBonus : 1f);
+            return Mathf.Max(1, Mathf.FloorToInt(value / (material.Price * BarterMarkup)));
+        }
+
+        /// <summary>교역할 수 없으면 이유(적대·오늘 다 함·그 전리품이 없음), 되면 null.</summary>
+        public static string BarterBlock(RivalGuild g, LootItem item = null)
+        {
+            if (RivalGuilds.IsHostile(g)) return "적대 관계라 거래하지 않는다.";
+            if (BartersLeft(g) <= 0) return $"오늘은 더 바꾸지 않는다(하루 {BartersPerDay}번).";
+            if (item != null && (item.Material || LootBag.Count(item) <= 0)) return "바꿀 전리품이 없다.";
+            return null;
+        }
+
+        /// <summary>전리품 하나를 그 길드의 재료로 바꾼다(관계 +BarterRelation).</summary>
+        public static bool Barter(RivalGuild g, LootItem item)
+        {
+            if (BarterBlock(g, item) != null) return false;
+            var material = BarterMaterial(g);
+            int amount = BarterAmount(g, item);
+            if (!LootBag.Consume(item, 1)) return false;
+            LootBag.Add(new[] { (material, amount) });
+            if (g.BarterDay != GameClock.CurrentDay)
+            {
+                g.BarterDay = GameClock.CurrentDay;
+                g.BarterCount = 0;
+            }
+            g.BarterCount++;
+            RivalGuilds.AddRelation(g, BarterRelation);
+            ToastLog.Show($"{Josa.WaGwa(g.Name)} 교역: {item.Name} → {material.Name} {amount}개", false);
+            return true;
         }
     }
 }

@@ -24,10 +24,16 @@ namespace GN3.Quests
             public int WaveCount = 1;
             /// <summary>직접 전투: 고블린 궁수가 이름("고블린 궁수")으로 구분돼 온다. 자동 전투는 false라 전리품·도감이 셋 중 하나를 궁수로 친다.</summary>
             public bool NamedArchers;
+            /// <summary>직접 전투: 시체를 뒤져 챙긴 전리품(BattleUIController). 있으면 처치 목록으로 굴리지 않고 이것만 받는다(지든 이기든).
+            /// 자동 전투는 null(처치한 적마다 굴림).</summary>
+            public List<(LootItem item, int count)> PreLooted;
             public bool Victory => Result.Outcome == BattleOutcome.TeamAVictory;
         }
 
         private static readonly System.Random Rng = new System.Random();
+
+        private static List<(LootItem item, int count)> GroupLoot(IEnumerable<(LootItem item, int count)> loot) =>
+            loot.GroupBy(l => l.item).Select(g => (g.Key, g.Sum(l => l.count))).ToList();
 
         /// <summary>퀘스트 waveIndex번째 라운드의 적(이름은 라운드 적, 능력치는 퀘스트 난이도, 보스는 따로 세게).</summary>
         public static List<Combatant> SpawnWave(Quest quest, int waveIndex, System.Random rng)
@@ -137,7 +143,7 @@ namespace GN3.Quests
             if (battle.Victory)
             {
                 int reward = Pricing.QuestReward(quest);
-                int rep = Guild.VictoryReputation(questGrade);
+                int rep = (int)System.Math.Round(Guild.VictoryReputation(questGrade) * VillageCharm.ReputationMultiplier); // 마을 매력 단계만큼 더
                 string joint = "";
                 if (quest.IsJoint) // 연합 의뢰: 보상 40%는 함께한 길드 몫
                 {
@@ -151,7 +157,11 @@ namespace GN3.Quests
                 report.Gold = reward;
                 report.Reputation = rep;
                 // 전리품: 쓰러뜨린 적마다 굴려 전리품 가방에(퇴각·전멸하면 못 챙긴다)
-                report.Loot = LootCatalog.Roll(killed, LootRng, archerSplit: !battle.NamedArchers);
+                report.Loot = battle.PreLooted != null ? GroupLoot(battle.PreLooted) : LootCatalog.Roll(killed, LootRng, archerSplit: !battle.NamedArchers);
+                // 부탁한 마을 사람이 준 건설 재료 묶음(Quest.MaterialReward)도 같은 가방·보고서에
+                if (quest.MaterialReward.Count > 0)
+                    report.Loot = report.Loot.Concat(quest.MaterialReward).GroupBy(l => l.item)
+                        .Select(g => (g.Key, g.Sum(l => l.count))).ToList();
                 LootBag.Add(report.Loot);
                 if (report.Loot.Count > 0) summary += $" · 전리품: {LootCatalog.Describe(report.Loot)}";
                 QuestClearHistory.RecordClear(quest.Region, quest.Difficulty); // 이 레벨은 다음 게시판에서 덜 나오고, 덜 깬 레벨이 더 자주 나온다
@@ -168,6 +178,13 @@ namespace GN3.Quests
                 summary = $"{quest.Title} — 임무 실패...{where} 명성 -{Guild.FailPenalty}";
                 Guild.Add(-Guild.FailPenalty);
                 report.Reputation = -Guild.FailPenalty;
+                // 직접 전투에서 지기 전에 시체를 뒤져 챙긴 것은 가져온다
+                if (battle.PreLooted != null && battle.PreLooted.Count > 0)
+                {
+                    report.Loot = GroupLoot(battle.PreLooted);
+                    LootBag.Add(report.Loot);
+                    summary += $" · 챙긴 전리품: {LootCatalog.Describe(report.Loot)}";
+                }
             }
 
             // 살아남은 파견원 성장: 승리 1 + 0.5×퀘스트 등급, 실패는 절반(× 나이 배율, GrowthTuning.BattleGrowth).

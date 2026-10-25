@@ -31,6 +31,8 @@ namespace GN3.Economy
         public int Gold;
         public int Relation; // -100(적대) ~ 100(동맹)
         public int LastGiftDay = -1;
+        public int BarterDay = -1;  // 교역(RivalDeals.Barter)한 날과 그날 횟수
+        public int BarterCount;
         public readonly List<Mercenary> Roster = new List<Mercenary>();
         public readonly Dictionary<string, int> RosterEnd = new Dictionary<string, int>(); // 용병 id → 계약 끝나는 날
         public readonly List<RivalJob> Jobs = new List<RivalJob>();

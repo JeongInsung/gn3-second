@@ -11,9 +11,10 @@ namespace GN3.Mercenaries
         /// <summary>
         /// 시장 용병을 만든다. 나이는 GrowthTuning.RollHireAge, 처음 경력(성장 횟수) = 나이 경력(StartGrowthForAge) + 길드 단계 경력(minGrowth~maxGrowth).
         /// 나이 든 용병은 처음부터 강하지만 덜 자라고, 어린 용병은 약하지만 빨리 자란다.
+        /// qualityChance: 용병마다 이 확률로 재능을 두 번 굴려 좋은 쪽을 쓴다(우리 시장 — 마을 매력 VillageCharm, 근처 길드는 0).
         /// </summary>
         public static List<Mercenary> Generate(IReadOnlyList<MercenaryClassSO> classPool, int count, int minGrowth, int maxGrowth, Random rng,
-            MercenaryGrade maxGrade = MercenaryGrade.S)
+            MercenaryGrade maxGrade = MercenaryGrade.S, float qualityChance = 0f)
         {
             var result = new List<Mercenary>(count);
 
@@ -32,6 +33,11 @@ namespace GN3.Mercenaries
                 var personality = PersonalityTable.GetRandom(rng);
                 bool hasRarePassive = ClassPassiveFactory.RollRare(rng);
                 var talent = GradeTable.Roll(rng, maxGrade); // 재능(길드 단계 상한). 등급은 전투력으로 정해진다
+                if (qualityChance > 0f && rng.NextDouble() < qualityChance)
+                {
+                    var again = GradeTable.Roll(rng, maxGrade);
+                    if (again > talent) talent = again;
+                }
                 var merc = new Mercenary(name, mercClass, age, birthday, appearance, personality, hasRarePassive, talent);
                 merc.GrantStartingGrowth(GrowthTuning.StartGrowthForAge(age) + rng.Next(minGrowth, maxGrowth + 1), rng);
                 merc.SnapshotMonth(); // 처음엔 괄호(이번 달 변화) 없음

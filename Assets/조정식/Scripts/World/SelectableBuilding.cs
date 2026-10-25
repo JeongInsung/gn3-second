@@ -78,7 +78,7 @@ namespace GN3.World
             Vector3 world = cam.ScreenToWorldPoint(mouse.position.ReadValue());
             // 건물 앞에 선 마을 캐릭터를 가리키고 있으면 캐릭터가 우선(건물 테두리·클릭은 무시).
             // 건물을 놓는 중·옮기기 모드면 건물 창은 열리지 않는다(BuildPlacement·BuildingMover).
-            SetHover(!overUI && !BuildPlacement.Active && !BuildingMover.Active && Pick(world) == this && VillageWanderer.Pick(world) == null);
+            SetHover(!overUI && !BuildPlacement.Active && !BuildingMover.Active && !ForestFelling.Active && Pick(world) == this && VillageWanderer.Pick(world) == null);
 
             if (IsHovered && mouse.leftButton.wasPressedThisFrame)
             {

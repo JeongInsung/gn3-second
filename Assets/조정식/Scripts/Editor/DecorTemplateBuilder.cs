@@ -54,6 +54,7 @@ namespace GN3.EditorTools
                 AddLamp(fire, new Vector2(0.5f, 0.45f), 1.4f, 0.4f);
                 Prop(group, material, ppu, "banner", "깃발", 104f);
                 Prop(group, material, ppu, "sacks", "자루", 52f);
+                Prop(group, material, ppu, "dummy", "허수아비", 96f); // 훈련 장식(DecorActivities)
 
                 // 마을 소품
                 var fountain = Art(group, material, "fountain", "푸른 물의 원형 석조 분수", FirstSprite(Baked + "Animated/분수 루프@82x76.png"), Vector3.one);

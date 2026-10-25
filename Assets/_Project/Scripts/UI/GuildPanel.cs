@@ -9,8 +9,8 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 마을의 길드 건물(또는 왼쪽 위 길드 글자)을 클릭하면 뜨는 창: 길드 티어(몇 / 10단계)·명성 막대 아래에 짧은 줄 다섯 개
-    /// (인원·주급·지금 혜택·다음 단계·전체 단계) — 자세한 내용은 줄에 마우스를 올리면 툴팁으로 나온다. 아래에 "창고" 버튼(GuildStorageUI).
+    /// 마을의 길드 건물(또는 왼쪽 위 길드 글자)을 클릭하면 뜨는 창: 길드 티어(몇 / 10단계)·명성 막대 아래에 짧은 줄 여섯 개
+    /// (인원·주급·지금 혜택·다음 단계·전체 단계·마을 매력) — 자세한 내용은 줄에 마우스를 올리면 툴팁으로 나온다. 아래에 "창고" 버튼(GuildStorageUI).
     /// 명성·파티·파견이 바뀌면 열린 채로 다시 그린다. 끌어 옮길 수 있고 X·ESC로 닫는다.
     /// </summary>
     public class GuildPanel : MonoBehaviour
@@ -19,7 +19,7 @@ namespace GN3.UI
         private const float Height = 420f;
         private const float BodyTop = 144f;   // 판 위에서 첫 줄까지
         private const float RowHeight = 36f;
-        private const int RowCount = 5;       // 인원 · 주급 · 지금 혜택 · 다음 단계 · 전체 단계
+        private const int RowCount = 6;       // 인원 · 주급 · 지금 혜택 · 다음 단계 · 전체 단계 · 마을 매력
         private const string Hint = "  <color=#7a7064>(?)</color>"; // 마우스를 올리면 설명이 있다는 표시
         private const string Gold = "#f0c060";
         private const string Dim = "#7a7064";
@@ -61,6 +61,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged += panel.RefreshIfOpen;
             ExpeditionLog.Instance.OnChanged += panel.RefreshIfOpen;
             GuildStorage.OnChanged += panel.RefreshIfOpen;
+            GN3.World.VillageCharm.OnChanged += panel.RefreshIfOpen; // 장식을 놓거나 치우면 마을 매력 줄
             return panel;
         }
 
@@ -70,6 +71,7 @@ namespace GN3.UI
             PlayerParty.Instance.OnChanged -= RefreshIfOpen;
             ExpeditionLog.Instance.OnChanged -= RefreshIfOpen;
             GuildStorage.OnChanged -= RefreshIfOpen;
+            GN3.World.VillageCharm.OnChanged -= RefreshIfOpen;
         }
 
         private void OpenStorage()
@@ -180,6 +182,9 @@ namespace GN3.UI
                 table.Append('\n').Append(line);
             }
             SetRow(4, $"<b>전체 단계</b>   {ranks.Length}단계 중 {rank + 1}단계", table.ToString());
+
+            // 6. 마을 매력(장식품 — VillageCharm)
+            SetRow(5, $"<b>마을 매력</b>   {GN3.World.VillageCharm.Score} ({GN3.World.VillageCharm.TierName})", GN3.World.VillageCharm.Tooltip());
 
             _storageButton.SetActive(_openStorage != null);
             _facilityButton.SetActive(_openStorage != null && GuildFacilities.Enabled);

@@ -62,6 +62,12 @@ namespace GN3.Save
         public List<LoanSave> loans = new List<LoanSave>();                // 근처 길드와 주고받은 용병(대여·연합 손님)
         public List<string> facilities = new List<string>();               // 길드 시설 "Training|2"(버전 9, 예전 저장엔 없어 전부 0단계)
         public List<string> buildings = new List<string>();                // 지은 마을 건물 "이름#번째|x|y"(버전 10, VillageLayout)
+        public List<string> felledTrees = new List<string>();              // 벤 숲 물체 "이름#번째"(ForestLayout)
+        public int fellsUsed;                                              // 그날 벤 횟수와 그 날짜
+        public int fellsDay = -1;
+        public int merchantHereDay = -1;                                   // 떠돌이 상인이 와 있는 날(-1 없음)·다음에 올 날·남은 물건(TravelingMerchant)
+        public int merchantNextDay = -1;
+        public List<LootSave> merchantStock = new List<LootSave>();
         public int rivalTargetIndex = -1;                                  // 근처 길드가 노리는 게시판 의뢰(questBoard 몇 번째)
         public string rivalTargetGuild;
     }
@@ -76,6 +82,8 @@ namespace GN3.Save
         public int gold;
         public int relation;
         public int lastGiftDay = -1;
+        public int barterDay = -1;
+        public int barterCount;
         public List<MercenarySave> roster = new List<MercenarySave>();
         public List<int> rosterEnd = new List<int>(); // roster와 같은 순서: 계약 끝나는 날
         public List<RivalJobSave> jobs = new List<RivalJobSave>();
@@ -213,6 +221,7 @@ namespace GN3.Save
         public string allyGuildId; // 연합 의뢰(보상을 나눌 근처 길드)
         public int allyCount;
         public List<WaveSave> waves = new List<WaveSave>(); // 라운드 구성(예전 저장엔 없어 enemy × enemyCount 한 라운드)
+        public List<LootSave> materialReward = new List<LootSave>(); // 성공하면 받는 건설 재료(Quest.MaterialReward)
     }
 
     /// <summary>게시판에 붙어 있는(아직 수락 안 한) 퀘스트.</summary>
@@ -232,6 +241,7 @@ namespace GN3.Save
         public string allyGuildId; // 연합 의뢰(함께하는 근처 길드)
         public int allyCount;
         public List<WaveSave> waves = new List<WaveSave>();
+        public List<LootSave> materialReward = new List<LootSave>(); // 성공하면 받는 건설 재료(Quest.MaterialReward)
     }
 
     [Serializable]

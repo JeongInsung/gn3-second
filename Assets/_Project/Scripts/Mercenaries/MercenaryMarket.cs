@@ -15,6 +15,9 @@ namespace GN3.Mercenaries
 
         /// <summary>시장에 나올 수 있는 최고 등급(길드 단계가 정한다).</summary>
         public MercenaryGrade MaxGrade { get; set; } = MercenaryGrade.S;
+
+        /// <summary>용병마다 재능을 두 번 굴려 좋은 쪽을 쓸 확률(마을 매력 — VillageCharm.MarketQualityChance).</summary>
+        public float QualityChance { get; set; }
         public IReadOnlyList<Mercenary> Listings { get; private set; } = new List<Mercenary>();
 
         public MercenaryMarket(List<MercenaryClassSO> classPool, int size = 5, int minGrowth = 0, int maxGrowth = 4, int? seed = null)
@@ -28,7 +31,7 @@ namespace GN3.Mercenaries
 
         public IReadOnlyList<Mercenary> Refresh()
         {
-            Listings = MercenaryMarketGenerator.Generate(_classPool, Size, MinGrowth, MaxGrowth, _random, MaxGrade);
+            Listings = MercenaryMarketGenerator.Generate(_classPool, Size, MinGrowth, MaxGrowth, _random, MaxGrade, QualityChance);
             return Listings;
         }
     }

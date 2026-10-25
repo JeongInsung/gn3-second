@@ -82,6 +82,8 @@ namespace GN3.UI
             BuildMenuPanel.Create(canvas.transform);              // 왼쪽 위 "건설" 버튼 → 지을 건물 목록
             BuildingMover.Create(hud);                            // [건설] 창 "옮기기" → 지은 건물 옮기기 모드(완료·옮기기 취소)
             PlaceConfirmPanel.Create(hud);                        // 건물을 놓으려고 클릭하면 "여기에 짓겠습니까?" 확인 창
+            ForestFelling.Create(hud);                            // [건설] 창 "벌목" → 숲을 베어 재료(하루 몇 번)
+            MerchantShopUI.Create(canvas.transform);              // 떠돌이 상인(마을에 와 있을 때 누르면) 상점 창
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
             new GameObject("GuildStorageUI", typeof(GuildStorageUI)); // 길드 창 "창고" → 건물 패널에 창고 목록

@@ -46,7 +46,7 @@ namespace GN3.UI
         private string _selectedId;
 
         /// <summary>오른쪽 목록에 무엇을 보이나: 그 길드 소속 / 팔 우리 용병 / 빌려줄 우리 용병 / 맞바꿀 우리 용병.</summary>
-        private enum ListMode { Roster, Sell, Lend, Trade }
+        private enum ListMode { Roster, Sell, Lend, Trade, Barter }
         private ListMode _mode;
         private Mercenary _tradeTarget;
 
@@ -186,12 +186,20 @@ namespace GN3.UI
             {
                 _rosterTitle.text = _mode switch
                 {
+                    ListMode.Barter => $"<b>{Josa.WaGwa(g.Name)} 교역</b>  <color={Muted}>전리품 하나 → {RivalDeals.BarterMaterial(g).Name} · 오늘 남은 {RivalDeals.BartersLeft(g)}번</color>",
                     ListMode.Sell => $"<b>{g.Name}에 팔 우리 용병</b>  <color={Muted}>위약금 없이 계약째 넘긴다</color>",
                     ListMode.Lend => $"<b>{g.Name}에 빌려줄 우리 용병</b>  <color={Muted}>{Loans.LoanDays}일 · 그동안 파티 자리는 비워 둔다</color>",
                     _ => $"<b>{_tradeTarget.Name}({_tradeTarget.Class.ClassName} · 전투력 {_tradeTarget.CombatPower})와 맞바꿀 우리 용병</b>",
                 };
-                foreach (var merc in PlayerParty.Instance.Members.Where(m => m.IsAlive && !Loans.IsGuest(m)).OrderByDescending(m => m.CombatPower))
-                    _rosterRows.Add(CreateRosterRow(g, merc, false));
+                if (_mode == ListMode.Barter)
+                {
+                    var loot = LootBag.Entries.Where(e => !e.item.Material && e.count > 0).ToList();
+                    if (loot.Count == 0) _rosterRows.Add(CreateBarterRow(g, null, 0));
+                    foreach (var (item, count) in loot) _rosterRows.Add(CreateBarterRow(g, item, count));
+                }
+                else
+                    foreach (var merc in PlayerParty.Instance.Members.Where(m => m.IsAlive && !Loans.IsGuest(m)).OrderByDescending(m => m.CombatPower))
+                        _rosterRows.Add(CreateRosterRow(g, merc, false));
             }
             LayoutRebuilder.ForceRebuildLayoutImmediate(_roster);
 
@@ -237,7 +245,15 @@ namespace GN3.UI
             bool canLend = g.Relation > -15;
             SetAction(1, _mode == ListMode.Lend ? "> 빌려주기 목록" : "우리 용병 빌려주기", () => SetMode(_mode == ListMode.Lend ? ListMode.Roster : ListMode.Lend), canLend,
                 canLend ? $"우리 용병을 {Loans.LoanDays}일 빌려주고 하루 대여료를 받는다(관계 +4). 돌아올 때 조금 자라 있다." : "경쟁·적대 관계라 우리 용병을 받지 않는다.");
-            SetAction(2, "소속 용병 보기", () => SetMode(ListMode.Roster), true, "이 길드 소속 용병 목록으로 돌아간다.", _mode != ListMode.Roster);
+            // 소속 용병 목록일 때는 그 자리가 [교역](전리품 → 재료), 다른 목록일 때는 [소속 용병 보기]
+            if (_mode == ListMode.Roster)
+            {
+                string barter = RivalDeals.BarterBlock(g);
+                var material = RivalDeals.BarterMaterial(g);
+                SetAction(2, "전리품 교역", () => SetMode(ListMode.Barter), barter == null,
+                    barter ?? $"남는 전리품을 이 길드의 건설 재료로 바꾼다(오늘 {material.Name}, 남은 {RivalDeals.BartersLeft(g)}번 · 관계 +{RivalDeals.BarterRelation}).");
+            }
+            else SetAction(2, "소속 용병 보기", () => SetMode(ListMode.Roster), true, "이 길드 소속 용병 목록으로 돌아간다.");
         }
 
         private void SetAction(int i, string label, UnityEngine.Events.UnityAction onClick, bool interactable, string tooltip, bool visible = true)
@@ -281,6 +297,41 @@ namespace GN3.UI
             if (theirs) AddRosterButtons(row.transform, g, merc);
             else AddOurButtons(row.transform, g, merc);
             RowClickHandler.Attach(row, () => MercenaryInfoPanel.ShowGlobal(merc));
+            return row;
+        }
+
+        /// <summary>교역 줄: 전리품 이름·개수·값 / 받을 재료 + [바꾸기]. item이 null이면 "바꿀 전리품이 없다" 안내 줄.</summary>
+        private GameObject CreateBarterRow(RivalGuild g, LootItem item, int count)
+        {
+            var row = new GameObject(item != null ? item.Name : "Empty", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            row.transform.SetParent(_roster, false);
+            var image = row.GetComponent<Image>();
+            image.sprite = _white;
+            image.color = RowColor;
+            var layoutElement = row.GetComponent<LayoutElement>();
+            layoutElement.minHeight = layoutElement.preferredHeight = 46f;
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(10, 8, 4, 4);
+            h.spacing = 10;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childForceExpandWidth = false;
+            h.childForceExpandHeight = true;
+            h.childControlWidth = true;
+            h.childControlHeight = true;
+
+            string text = item == null ? $"<color={Muted}>바꿀 전리품이 없다. 원정에서 몬스터를 쓰러뜨리면 생긴다.</color>"
+                : $"<b>{item.Name}</b> ×{count}  <color={Muted}>개당 {item.Price}G</color>\n" +
+                  $"<size=13><color=#f0a54a>→ {RivalDeals.BarterMaterial(g).Name} {RivalDeals.BarterAmount(g, item)}개</color></size>";
+            var label = CreateFlowText(row.transform, text, 15);
+            label.verticalOverflow = VerticalWrapMode.Overflow;
+            var labelLayout = label.gameObject.AddComponent<LayoutElement>();
+            labelLayout.minWidth = 200f;
+            labelLayout.flexibleWidth = 1f;
+            if (item == null) return row;
+
+            string block = RivalDeals.BarterBlock(g, item);
+            CreateRowButton(row.transform, "바꾸기", 90f, () => { RivalDeals.Barter(g, item); Refresh(); },
+                block ?? $"{item.Name} 하나를 {RivalDeals.BarterMaterial(g).Name} {RivalDeals.BarterAmount(g, item)}개로 바꾼다.").interactable = block == null;
             return row;
         }
 

@@ -27,6 +27,16 @@ namespace GN3.Quests
         public int AllyCount { get; set; }
         public bool IsJoint => !string.IsNullOrEmpty(AllyGuildId);
 
+        /// <summary>성공하면 금화와 함께 받는 건설 재료 묶음(없으면 빈 목록 — QuestGenerator가 일부 의뢰에 붙인다).</summary>
+        public List<(GN3.Economy.LootItem item, int count)> MaterialReward { get; } = new List<(GN3.Economy.LootItem, int)>();
+
+        /// <summary>이 의뢰의 적들에게서 나올 수 있는 건설 재료(게시판 "얻는 재료").</summary>
+        public IEnumerable<GN3.Economy.LootItem> DroppedMaterials =>
+            Waves.SelectMany(w => GN3.Economy.LootCatalog.MaterialsForEnemy(w.EnemyName)).Distinct();
+
+        /// <summary>"쇠못 2 · 밧줄 1"(재료 보상이 없으면 빈 문자열).</summary>
+        public string MaterialRewardText => string.Join(" · ", MaterialReward.Select(m => $"{m.item.Name} {m.count}"));
+
         /// <summary>라운드 구성(순서대로). 한 라운드짜리도 있다.</summary>
         public IReadOnlyList<QuestWave> Waves { get; }
         public int WaveCount => Waves.Count;

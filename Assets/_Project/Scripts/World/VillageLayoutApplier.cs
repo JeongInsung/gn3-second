@@ -100,9 +100,63 @@ namespace GN3.World
                 if (slot?.Renderer != null) builtAreas.Add(BuildingArea(slot.Renderer));
             }
 
+            IndexForest(village.transform);
+            HideFelled(village.transform);
             ClearForestUnder(village.transform, builtAreas);
             AppliedStamp = VillageLayout.Stamp;
             RefreshLamps();
+        }
+
+        // ---------- 숲 벌목(ForestFelling) ----------
+
+        // "숲" 그룹 자식 → 키(이름#같은 이름 중 몇 번째). 앞뒤 정렬이 부모를 바꾸기 전에(Apply 때) 프리팹 순서로 매긴다.
+        private static readonly Dictionary<Transform, string> _forestKeys = new Dictionary<Transform, string>();
+
+        private static void IndexForest(Transform village)
+        {
+            _forestKeys.Clear();
+            var group = village.Find(ForestGroupName);
+            if (group == null) return;
+            var seen = new Dictionary<string, int>();
+            foreach (Transform child in group)
+            {
+                seen.TryGetValue(child.name, out int n);
+                seen[child.name] = n + 1;
+                _forestKeys[child] = $"{child.name}#{n}";
+            }
+        }
+
+        private static void HideFelled(Transform village)
+        {
+            if (ForestLayout.Felled.Count == 0) return;
+            var shadows = village.GetComponentsInChildren<ProjectedShadow>();
+            foreach (var kv in _forestKeys)
+            {
+                if (!ForestLayout.IsFelled(kv.Value)) continue;
+                var renderer = kv.Key.GetComponent<SpriteRenderer>();
+                if (renderer != null) Hide(renderer, shadows);
+            }
+        }
+
+        /// <summary>지금 보이는 숲 물체(나무·덤불·바위)와 그 키 — 벌목 모드가 클릭으로 고른다.</summary>
+        public static IEnumerable<(SpriteRenderer renderer, string key)> StandingForest()
+        {
+            foreach (var kv in _forestKeys)
+            {
+                if (kv.Key == null) continue;
+                var renderer = kv.Key.GetComponent<SpriteRenderer>();
+                if (renderer != null && renderer.gameObject.activeInHierarchy) yield return (renderer, kv.Value);
+            }
+        }
+
+        /// <summary>숲 물체 하나를 벤다: 그림자째 숨기고 벤 목록(ForestLayout)에 적은 뒤 길찾기 격자를 다시 맞춘다.</summary>
+        public static void Fell(SpriteRenderer renderer, string key)
+        {
+            var village = GameObject.Find(VillageRootName);
+            if (village == null || renderer == null) return;
+            Hide(renderer, village.GetComponentsInChildren<ProjectedShadow>());
+            ForestLayout.Add(key);
+            NotifyRebuilt();
         }
 
         // ---------- 장식품 ----------

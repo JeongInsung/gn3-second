@@ -21,10 +21,10 @@ namespace GN3.UI
 
         private static readonly Vector2 TopRight = new Vector2(1f, 1f);
 
-        /// <summary>parent의 corner(기본 오른쪽 위)에서 offset만큼 떨어진 [옮기기] 버튼.</summary>
-        public static Button CreateButton(Transform parent, Vector2 offset, UnityEngine.Events.UnityAction onClick, Vector2? corner = null)
+        /// <summary>parent의 corner(기본 오른쪽 위)에서 offset만큼 떨어진 [옮기기] 버튼(label로 같은 모양의 다른 버튼도 — [건설] 창 [벌목]).</summary>
+        public static Button CreateButton(Transform parent, Vector2 offset, UnityEngine.Events.UnityAction onClick, Vector2? corner = null, string label = "옮기기")
         {
-            var button = ShopListUI.CreateButton(parent, "옮기기", onClick, Width);
+            var button = ShopListUI.CreateButton(parent, label, onClick, Width);
             Object.Destroy(button.GetComponent<LayoutElement>()); // 레이아웃 줄이 아니라 자리를 직접 잡는다
             var rect = (RectTransform)button.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = corner ?? TopRight;

@@ -89,8 +89,10 @@ namespace GN3.UI
 
             var trainees = TrainingHall.Trainees;
             int facility = GuildFacilities.Level(Facility.Training);
-            CreateHeaderRow($"훈련 중 {trainees.Count}/{TrainingHall.Capacity} · {1f / (GrowthTuning.TrainingGrowthPerHour * GuildFacilities.TrainingGrowthMultiplier):0.#}시간마다 성장(어릴수록 빠름)" +
-                            (facility > 0 ? $" · 시설 {facility}단계" : ""));
+            float dummyBonus = DecorActivities.TrainingHallBonus;
+            CreateHeaderRow($"훈련 중 {trainees.Count}/{TrainingHall.Capacity} · {1f / TrainingHall.GrowthPerHour:0.#}시간마다 성장(어릴수록 빠름)" +
+                            (facility > 0 ? $" · 시설 {facility}단계" : "") +
+                            (dummyBonus > 1f ? $" · 허수아비 +{Mathf.RoundToInt((dummyBonus - 1f) * 100f)}%" : ""));
             if (trainees.Count == 0) ShopListUI.CreateEmptyRow(_panel, "훈련 중인 용병이 없습니다.");
             foreach (var merc in trainees)
             {

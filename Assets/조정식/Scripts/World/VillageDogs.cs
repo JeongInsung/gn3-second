@@ -8,7 +8,7 @@ namespace GN3.World
     /// <summary>
     /// 마을 잔디·길을 돌아다니는 강아지들. 에디터 메뉴(GN3/Village/강아지 만들기)가 걷기 프레임 8장과 그림자 재질을 넣어 두고,
     /// Play 때 이 컴포넌트가 강아지를 만든다(에디터에서는 아무것도 만들지 않는다).
-    /// 걷는 범위는 마을 바닥 전체(VillageBounds)에서 여백을 뺀 곳이고(용병 걷기 영역과 같은 규칙),
+    /// 걷는 범위는 3×3 마을 바닥의 가운데 칸(VillageBounds.Center)에서 여백을 뺀 곳이고(용병 걷기 영역과 같은 규칙),
     /// 건물·장식은 VillageNavGrid로 피한다. 밤(NightLightFactor가 용병 숨김 기준을 넘으면)에는 들어가 잔다.
     /// </summary>
     public class VillageDogs : MonoBehaviour
@@ -100,12 +100,12 @@ namespace GN3.World
 
         private static bool IsDaytime() => DayNightCycle.NightLightFactor <= HideNightLightFactor;
 
-        /// <summary>마을 바닥 전체(VillageBounds)에서 여백을 뺀 곳 — 용병 걷기 영역과 같은 기준.</summary>
+        /// <summary>가운데 칸(VillageBounds.Center)에서 여백을 뺀 곳 — 용병 걷기 영역과 같은 기준.</summary>
         private static bool TryGetArea(out Rect area)
         {
             area = default;
             if (!VillageBounds.Exists) return false;
-            var world = VillageBounds.World;
+            var world = VillageBounds.Center;
             area = Rect.MinMaxRect(world.xMin + AreaMargin + ScreenMarginSide, world.yMin + AreaMargin + ScreenMarginBottom,
                                    world.xMax - AreaMargin - ScreenMarginSide, world.yMax - AreaMargin - ScreenMarginTop);
             return true;

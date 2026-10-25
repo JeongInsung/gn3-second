@@ -97,6 +97,8 @@ namespace GN3.Mercenaries
                 }
                 if (merc.IsExhausted) merc.AddMorale(-ExhaustedMoralePerDay);
                 Drift(merc);
+                // 아름다운 마을(장식 매력 단계)에서 지내면 사기가 조금씩 오른다 — 파견 중이면 없음
+                if (!ExpeditionLog.Instance.IsOnExpedition(merc) && VillageCharm.MoralePerDay > 0) merc.AddMorale(VillageCharm.MoralePerDay);
             }
 
             int day = GameClock.CurrentDay;

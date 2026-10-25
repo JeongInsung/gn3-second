@@ -61,6 +61,38 @@ namespace GN3.Battle
             public int ShownHealth = -1;    // 막대에 보이는 체력(맞을 때마다 그만큼 깎이고, 기다리는 공격이 없으면 실제 체력)
         }
 
+        // ---------- 시체 뒤지기 ----------
+        // 쓰러진 몬스터는 쓰러짐 동작 마지막 그림으로 남는다(시체). 누르면 머리 위 황금 진행률 바가 LootSeconds 동안 차고,
+        // 다 차면 그 몬스터 한 마리 몫 전리품이 튀어나와 _lootedItems에 쌓인다(결과 창·가방 — ExpeditionBattle.Battle.PreLooted).
+        // 앞 라운드 시체도 필드에 남는다(_corpses). 이기면 결과 창 전에 '전리품 수습' 시간(_salvaging).
+        private const float LootSeconds = 1.2f;
+        private const float LootedAlpha = 0.55f;   // 털린 시체
+        private const float LootBarWidth = 110f;
+        private const float LootBarHeight = 10f;
+        private const float LootBarLift = 74f;     // 시체 발밑에서 바까지
+        // 채움 칸이 테두리 그림 안에서 차지하는 비율(tools/bake_loot_bar.py 출력)
+        private const float LootBarInsetLeft = 0.0442f, LootBarInsetRight = 0.0401f, LootBarInsetBottom = 0.2249f, LootBarInsetTop = 0.2308f;
+
+        private class LootBar
+        {
+            public UnitView View;
+            public RectTransform Root;
+            public Image Fill;
+            public float Progress;
+        }
+
+        private readonly Dictionary<FieldUnit, UnitView> _corpses = new Dictionary<FieldUnit, UnitView>(); // 앞 라운드 시체(지우지 않고 남김)
+        private readonly HashSet<FieldUnit> _looted = new HashSet<FieldUnit>();
+        private readonly Dictionary<FieldUnit, LootBar> _looting = new Dictionary<FieldUnit, LootBar>();
+        private readonly List<(LootItem item, int count)> _lootedItems = new List<(LootItem, int)>();
+        private readonly System.Random _lootRng = new System.Random();
+        private Sprite _lootFrameSprite, _lootFillSprite;
+        private bool _salvaging;
+        private bool _victoryBannerShown;
+        private GameObject _salvageBar;
+        private Text _salvageText;
+        private float _salvageDoneAt = -1f;
+
         private Font _font;
         private Expedition _expedition;
         private List<Mercenary> _fighters;
@@ -211,9 +243,17 @@ namespace GN3.Battle
             {
                 if (!_views.TryGetValue(u, out var v)) continue;
                 _views.Remove(u);
+                if (v.BossHud != null) Destroy(v.BossHud.gameObject);
+                if (!u.IsPlayerSide && !u.IsAlive)
+                {
+                    _corpses[u] = v; // 시체는 필드에 남겨 뒤질 수 있게(그림은 쓰러짐 마지막 프레임에 멈춰 있다)
+                    bool looted = _looted.Contains(u);
+                    v.Group.alpha = looted ? LootedAlpha : 1f;
+                    v.ClickArea.raycastTarget = !looted;
+                    continue;
+                }
                 _drawOrder.Remove(v);
                 Destroy(v.Root.gameObject);
-                if (v.BossHud != null) Destroy(v.BossHud.gameObject);
             }
             int tier = _expedition.Quest.Waves[wave].Tier;
             foreach (var u in added)
@@ -581,6 +621,12 @@ namespace GN3.Battle
                 foreach (var v in _views.Values) UpdateUnitView(v); // 마지막에 쓰러진 유닛도 끝까지 넘어가게(그림만)
                 return;
             }
+            UpdateLooting();
+            if (_salvaging)
+            {
+                UpdateSalvage();
+                return;
+            }
 
             if (_deploying)
             {
@@ -615,7 +661,10 @@ namespace GN3.Battle
             {
                 // 결과창은 바로 띄우지 않고 마지막 쓰러짐·피격 연출이 끝날 때까지 잠깐 기다린다(일시정지 중엔 기다림도 멈춤).
                 if (_overSince < 0f) _overSince = Time.time;
-                if (Time.time - _overSince >= ResultDelaySeconds) ShowResult();
+                if (Time.time - _overSince < ResultDelaySeconds) return;
+                // 이기면 결과 창 전에 남은 시체를 뒤질 '전리품 수습' 시간
+                if (_session.Outcome == BattleOutcome.TeamAVictory && RemainingCorpses() > 0) BeginSalvage();
+                else ShowResult();
                 return;
             }
             RefreshPanel();
@@ -713,7 +762,12 @@ namespace GN3.Battle
         private void OnUnitClicked(FieldUnit unit, PointerEventData e)
         {
             if (_deploying) return;
-            if (!unit.IsAlive) return;
+            if (!unit.IsAlive)
+            {
+                BeginLoot(unit); // 쓰러진 몬스터: 뒤지기
+                return;
+            }
+            if (_salvaging || _resultShown) return;
             if (_focusPicking)
             {
                 if (!unit.IsPlayerSide && _session.OrderFocus(unit))
@@ -806,8 +860,11 @@ namespace GN3.Battle
             bool animatedDeath = v.Monster != null && v.Monster.HasDie;
             float deathTime = alive ? 0f : Time.time - v.DeathStart - (animatedDeath ? v.Monster.DieSeconds : 0f);
             float fall = alive ? 0f : 1f - Mathf.Pow(1f - Mathf.Clamp01(deathTime / DeathFallSeconds), 3f);
-            v.Group.alpha = Mathf.Lerp(1f, 0.3f, fall);
-            v.ClickArea.raycastTarget = alive;
+            bool corpse = !alive && !u.IsPlayerSide;
+            bool looted = _looted.Contains(u);
+            // 몬스터 시체는 쓰러진 그림 그대로 남고(털리면 조금 흐려짐), 쓰러짐이 끝나면 눌러 뒤질 수 있다. 아군은 흐려진다.
+            v.Group.alpha = corpse ? (looted ? LootedAlpha : 1f) : Mathf.Lerp(1f, 0.3f, fall);
+            v.ClickArea.raycastTarget = alive || (corpse && !looted && fall >= 1f);
             v.Kick = Vector2.MoveTowards(v.Kick, Vector2.zero, KickRecoverPerSecond * Time.deltaTime);
             // 중독은 판정(쏘는 순간)이 아니라 포자가 닿은 뒤부터 보인다(여러 마리가 연달아 쏴도 첫 포자가 닿으면 바로).
             if (!u.Combatant.IsPoisoned) v.PoisonShown = false;
@@ -1117,6 +1174,192 @@ namespace GN3.Battle
             if (big && _shakeTargets != null) StartCoroutine(BattleFx.Shake(_shakeTargets, ShakeStrength, ShakeSeconds));
         }
 
+        // ---------- 시체 뒤지기 ----------
+
+        private UnitView CorpseView(FieldUnit unit) =>
+            _views.TryGetValue(unit, out var v) ? v : _corpses.TryGetValue(unit, out var c) ? c : null;
+
+        /// <summary>쓰러진 몬스터를 뒤지기 시작한다: 머리 위에 황금 진행률 바(여러 시체를 같이 뒤질 수 있다).</summary>
+        private void BeginLoot(FieldUnit unit)
+        {
+            if (unit.IsPlayerSide || unit.IsAlive || _resultShown || _looted.Contains(unit) || _looting.ContainsKey(unit)) return;
+            var view = CorpseView(unit);
+            if (view == null) return;
+            _looting[unit] = new LootBar { View = view, Root = CreateLootBar(view, out var fill), Fill = fill };
+        }
+
+        private RectTransform CreateLootBar(UnitView view, out Image fill)
+        {
+            if (_lootFrameSprite == null) _lootFrameSprite = Resources.Load<Sprite>("Battle/UI/loot_bar_frame");
+            if (_lootFillSprite == null) _lootFillSprite = Resources.Load<Sprite>("Battle/UI/loot_bar_fill");
+            var go = new GameObject("LootBar", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(_fxLayer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.sizeDelta = new Vector2(LootBarWidth, LootBarHeight * 2.2f);
+            rect.anchoredPosition = view.Root.anchoredPosition + new Vector2(0f, LootBarLift);
+            var frame = go.GetComponent<Image>();
+            frame.sprite = _lootFrameSprite;
+            frame.color = _lootFrameSprite != null ? Color.white : new Color(0.25f, 0.15f, 0.08f);
+            frame.raycastTarget = false;
+
+            var fillGO = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fillGO.transform.SetParent(go.transform, false);
+            var fillRect = (RectTransform)fillGO.transform;
+            fillRect.anchorMin = new Vector2(LootBarInsetLeft, LootBarInsetBottom);
+            fillRect.anchorMax = new Vector2(1f - LootBarInsetRight, 1f - LootBarInsetTop);
+            fillRect.offsetMin = fillRect.offsetMax = Vector2.zero;
+            fill = fillGO.GetComponent<Image>();
+            fill.sprite = _lootFillSprite;
+            fill.color = _lootFillSprite != null ? Color.white : new Color(1f, 0.65f, 0.15f);
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+            fill.fillOrigin = 0;
+            fill.fillAmount = 0f;
+            fill.raycastTarget = false;
+            return rect;
+        }
+
+        /// <summary>뒤지는 중인 시체마다 바를 채우고(실제 시간, 일시정지 중엔 멈춤), 다 차면 전리품을 꺼낸다.</summary>
+        private void UpdateLooting()
+        {
+            if (_looting.Count == 0) return;
+            float dt = _paused ? 0f : Time.unscaledDeltaTime;
+            foreach (var pair in _looting.ToList())
+            {
+                var bar = pair.Value;
+                if (bar.Root == null) { _looting.Remove(pair.Key); continue; }
+                bar.Progress += dt / LootSeconds;
+                bar.Fill.fillAmount = Mathf.Clamp01(bar.Progress);
+                bar.Root.anchoredPosition = bar.View.Root.anchoredPosition + new Vector2(0f, LootBarLift);
+                if (bar.Progress < 1f) continue;
+                _looting.Remove(pair.Key);
+                Destroy(bar.Root.gameObject);
+                FinishLoot(pair.Key, bar.View);
+            }
+        }
+
+        /// <summary>그 몬스터 한 마리 몫을 굴려 챙기고, 시체에서 아이템이 튀어나오게 한다. 털린 시체는 흐려지고 더 누를 수 없다.</summary>
+        private void FinishLoot(FieldUnit unit, UnitView view)
+        {
+            _looted.Add(unit);
+            view.Group.alpha = LootedAlpha;
+            view.ClickArea.raycastTarget = false;
+            var loot = LootCatalog.Roll(new[] { unit.Combatant.Name }, _lootRng, archerSplit: false);
+            _lootedItems.AddRange(loot);
+            Vector2 origin = view.Root.anchoredPosition + new Vector2(0f, 30f);
+            if (loot.Count == 0)
+            {
+                StartCoroutine(BattleFx.DamageNumber(_fxLayer, origin, "빈손", new Color(0.75f, 0.7f, 0.62f), false));
+                return;
+            }
+            for (int i = 0; i < loot.Count; i++)
+                StartCoroutine(PopLoot(loot[i].item, loot[i].count, origin, i, loot.Count));
+            AppendLog($"<color=#ffd36b>{Josa.EulReul(unit.Combatant.Name)} 뒤졌다 — {LootCatalog.Describe(loot)}</color>");
+        }
+
+        /// <summary>시체에서 아이템 아이콘이 위로 툭 튀었다가 조금 떨어지며 사라지고, 그 위에 "+이름" 글자가 뜬다.</summary>
+        private IEnumerator PopLoot(LootItem item, int count, Vector2 origin, int index, int total)
+        {
+            yield return new WaitForSecondsRealtime(index * 0.12f);
+            var go = new GameObject("LootPop", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
+            go.transform.SetParent(_fxLayer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.sizeDelta = new Vector2(34f, 34f);
+            var image = go.GetComponent<Image>();
+            image.sprite = item.Icon;
+            image.preserveAspect = true;
+            image.raycastTarget = false;
+            if (item.Icon == null) image.color = new Color(1f, 0.8f, 0.3f);
+            var group = go.GetComponent<CanvasGroup>();
+            float side = (index - (total - 1) * 0.5f) * 34f;
+            StartCoroutine(BattleFx.DamageNumber(_fxLayer, origin + new Vector2(side, 46f), count > 1 ? $"+{item.Name} ×{count}" : $"+{item.Name}",
+                new Color(1f, 0.85f, 0.4f), false));
+            const float duration = 0.9f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                if (go == null) yield break;
+                float k = t / duration;
+                float arc = 70f * k - 80f * k * k; // 위로 튀었다 조금 떨어진다
+                rect.anchoredPosition = origin + new Vector2(side * k, arc + 10f);
+                rect.localScale = Vector3.one * (k < 0.15f ? Mathf.Lerp(0.4f, 1.2f, k / 0.15f) : 1f);
+                group.alpha = k < 0.75f ? 1f : 1f - (k - 0.75f) / 0.25f;
+                yield return null;
+            }
+            if (go != null) Destroy(go);
+        }
+
+        private IEnumerable<UnitView> AllCorpseViews() =>
+            _views.Values.Where(v => !v.Unit.IsPlayerSide && !v.Unit.IsAlive).Concat(_corpses.Values);
+
+        private int RemainingCorpses() => AllCorpseViews().Count(v => !_looted.Contains(v.Unit));
+
+        /// <summary>이겼다: "승리!" 뒤 화면 아래 '전리품 수습' 막대(남은 시체 수 · [수습 끝내기]). 시체를 다 뒤지면 저절로 결과 창.</summary>
+        private void BeginSalvage()
+        {
+            _salvaging = true;
+            _picking = _focusPicking = false;
+            SetPaused(false);
+            _victoryBannerShown = true;
+            StartCoroutine(BattleFx.ResultBanner(_canvas.transform, "승리!", VictoryTitleColor));
+
+            _salvageBar = new GameObject("SalvageBar", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
+            _salvageBar.transform.SetParent(_canvas.transform, false);
+            var rect = (RectTransform)_salvageBar.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = new Vector2(0f, 40f);
+            var image = _salvageBar.GetComponent<Image>();
+            image.sprite = UITheme.Panel;
+            image.type = Image.Type.Sliced;
+            var layout = _salvageBar.GetComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(18, 12, 8, 8);
+            layout.spacing = 12f;
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = layout.childForceExpandHeight = false;
+            var fitter = _salvageBar.GetComponent<ContentSizeFitter>();
+            fitter.horizontalFit = fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _salvageText = ShopListUI.CreateText(_salvageBar.transform, "", 18, TextAnchor.MiddleLeft, UITheme.BodyText);
+            _salvageText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _salvageText.supportRichText = true;
+            ShopListUI.CreateButton(_salvageBar.transform, "수습 끝내기", ShowResult, 130f);
+            UIThemeApplier.ApplyNow(_salvageBar.transform);
+            _salvageBar.transform.SetAsLastSibling();
+            UpdateSalvage();
+        }
+
+        private void UpdateSalvage()
+        {
+            foreach (var v in _views.Values) UpdateUnitView(v);
+            SortByDepth();
+            int remaining = RemainingCorpses();
+            if (_salvageText != null)
+                _salvageText.text = $"<b>전리품 수습</b>  시체를 눌러 뒤지세요 · 남은 시체 {remaining}" +
+                                    (_lootedItems.Count > 0 ? $"  <color=#ffd36b>챙김: {_lootedItems.Sum(l => l.count)}개</color>" : "");
+            var kb = Keyboard.current;
+            if (kb != null && kb.escapeKey.wasPressedThisFrame)
+            {
+                ShowResult();
+                return;
+            }
+            // 다 뒤졌으면(뒤지는 중인 것도 없으면) 잠깐 뒤 결과 창
+            if (remaining > 0 || _looting.Count > 0) { _salvageDoneAt = -1f; return; }
+            if (_salvageDoneAt < 0f) _salvageDoneAt = Time.unscaledTime;
+            if (Time.unscaledTime - _salvageDoneAt >= 1f) ShowResult();
+        }
+
+        /// <summary>수습을 끝낸다: 뒤지는 중이던 바는 버리고(그 시체 몫은 없음) 막대를 치운다.</summary>
+        private void EndSalvage()
+        {
+            foreach (var bar in _looting.Values)
+                if (bar.Root != null) Destroy(bar.Root.gameObject);
+            _looting.Clear();
+            _salvaging = false;
+            if (_salvageBar != null) Destroy(_salvageBar);
+            _salvageBar = null;
+        }
+
         // ---------- 결과 ----------
 
         private void ShowResult()
@@ -1139,7 +1382,9 @@ namespace GN3.Battle
                 Result = result, Fighters = _fighters, Combatants = _session.PlayerTeam,
                 WavesCleared = _session.WavesCleared, WaveCount = _session.WaveCount,
                 NamedArchers = true, // 궁수는 "고블린 궁수"로 이름이 붙어 있다
+                PreLooted = new List<(LootItem, int)>(_lootedItems), // 시체를 뒤져 챙긴 것만(안 뒤진 시체 몫은 없다)
             };
+            EndSalvage();
             var report = ExpeditionBattle.ConcludeReport(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
 
             _skillButton.interactable = false;
@@ -1149,8 +1394,9 @@ namespace GN3.Battle
         /// <summary>큰 "승리!"/"패배…" 배너를 잠깐 보여 준 뒤 결과창을 띄운다(결과 계산은 이미 끝난 상태).</summary>
         private IEnumerator ShowResultAfterBanner(ExpeditionBattle.Report report)
         {
-            yield return BattleFx.ResultBanner(_canvas.transform, report.Victory ? "승리!" : "패배…",
-                report.Victory ? VictoryTitleColor : DefeatColor);
+            if (!_victoryBannerShown) // 수습 단계 앞에서 이미 "승리!"를 보였으면 다시 띄우지 않는다
+                yield return BattleFx.ResultBanner(_canvas.transform, report.Victory ? "승리!" : "패배…",
+                    report.Victory ? VictoryTitleColor : DefeatColor);
             BuildResultOverlay(report);
         }
 

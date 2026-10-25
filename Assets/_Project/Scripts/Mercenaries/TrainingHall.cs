@@ -20,8 +20,8 @@ namespace GN3.Mercenaries
         public const int BaseCapacity = 3;
         /// <summary>정원(길드 시설 훈련소 단계마다 +1 — GuildFacilities).</summary>
         public static int Capacity => BaseCapacity + GN3.Economy.GuildFacilities.TrainingCapacityBonus;
-        /// <summary>시간당 훈련 성장(시설 단계마다 +20%).</summary>
-        private static float GrowthPerHour => GrowthTuning.TrainingGrowthPerHour * GN3.Economy.GuildFacilities.TrainingGrowthMultiplier;
+        /// <summary>시간당 훈련 성장(시설 단계마다 +20%, 마을 허수아비마다 +10% — DecorActivities.TrainingHallBonus).</summary>
+        public static float GrowthPerHour => GrowthTuning.TrainingGrowthPerHour * GN3.Economy.GuildFacilities.TrainingGrowthMultiplier * DecorActivities.TrainingHallBonus;
         public const float MinSessionHours = 1f;
         public const float MaxSessionHours = 3f;
 
@@ -72,7 +72,7 @@ namespace GN3.Mercenaries
         /// <summary>훈련하러 갈 수 있는 사람: 살아 있고, 파견 중이 아니고, 아직 훈련 중이 아니고, 최대 레벨이 아니고, 부상·질병이 없음(그러면 병원으로).</summary>
         public static bool CanTrain(Mercenary merc) =>
             merc != null && merc.IsAlive && merc.CanGrow && !merc.IsExhausted && !merc.HasAilment
-            && !ExpeditionLog.Instance.IsOnExpedition(merc) && !IsTraining(merc) && !Hospital.IsAdmitted(merc) && !RestVenues.IsResting(merc);
+            && !ExpeditionLog.Instance.IsOnExpedition(merc) && !IsTraining(merc) && !Hospital.IsAdmitted(merc) && !RestVenues.IsResting(merc) && !DecorActivities.IsBusy(merc);
 
         /// <summary>
         /// 스스로 훈련하러 갈 마음이 드는지(자동 방문용 — 플레이어가 직접 넣을 때는 CanTrain만 본다):

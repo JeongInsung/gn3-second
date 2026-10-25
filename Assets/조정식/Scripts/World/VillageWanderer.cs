@@ -99,6 +99,13 @@ namespace GN3.World
         private float _repathTimer;
         private float _speedMultiplier = 1f;
         private bool _scriptedWalk; // 문에서 나오기·마을로 걸어 들어오기: 따라가기로 끊지 않는다
+        // 장식에서 머물기(벤치·모닥불에서 쉬기, 허수아비 치기 — DecorActivities): 자리까지 걸어가 Release 전까지 서 있는다
+        private bool _holding;
+        private Vector2 _holdSpot;
+        private bool _holdFaceRight;
+        private string _holdClipName;
+        private ComposedCharacter _appearance;
+        private readonly Dictionary<string, Clip> _extraClips = new Dictionary<string, Clip>();
 
         /// <summary>따라 걷고 있는 동료(없으면 null).</summary>
         public VillageWanderer Leader => _leader;
@@ -136,6 +143,7 @@ namespace GN3.World
             _outlineRoot.transform.SetParent(_body, false);
             _outlineRoot.SetActive(false);
 
+            _appearance = appearance;
             _idle = LoadClip(appearance, IdleClip);
             _walk = LoadClip(appearance, WalkClip);
 
@@ -300,7 +308,7 @@ namespace GN3.World
         /// </summary>
         public void Follow(VillageWanderer leader, Vector2 offset)
         {
-            if (leader == null || leader == this) return;
+            if (leader == null || leader == this || _holding) return;
             _leader = leader;
             _followOffset = offset;
             if (!_walking && !_entering) _idleTimer = Mathf.Min(_idleTimer, FollowIdleMin);
@@ -371,6 +379,7 @@ namespace GN3.World
         /// </summary>
         public void ExitBuilding(Vector2 door, Vector2 outside)
         {
+            _holding = false;
             _entering = false; // 들어가다 밤이 되어 꺼졌던 경우의 상태를 지운다
             _onEntered = null;
             transform.position = new Vector3(door.x, door.y, transform.position.z);
@@ -389,6 +398,7 @@ namespace GN3.World
         public void PlaceAt(Vector2 position)
         {
             StopFollowing();
+            _holding = false;
             _entering = false;
             _onEntered = null;
             _path.Clear();
@@ -417,6 +427,7 @@ namespace GN3.World
         private void WalkThenCall(Vector2 target, IList<Vector2> extraSteps, System.Action onArrived)
         {
             StopFollowing();
+            _holding = false;
             Vector2 here = transform.position;
             Vector2 start = _grid.NearestWalkable(here);
             if (!_grid.TryFindPath(start, target, _path))
@@ -443,6 +454,7 @@ namespace GN3.World
         /// </summary>
         public void WalkInFrom(IList<Vector2> approach, Vector2 to)
         {
+            _holding = false;
             _entering = false;
             _onEntered = null;
             Vector2 from = approach[0], entry = approach[approach.Count - 1];
@@ -458,6 +470,66 @@ namespace GN3.World
             _walking = true;
             _scriptedWalk = true;
             Play(_walk);
+        }
+
+        /// <summary>장식에서 머무는 중인가(그 자리 — 같은 자리로 다시 부르지 않게).</summary>
+        public bool IsHolding => _holding;
+        public Vector2 HoldSpot => _holdSpot;
+
+        /// <summary>
+        /// spot(벤치 앞·허수아비 옆)까지 길을 찾아 걸어가 faceRight 쪽을 보고 서서, Release 전까지 스스로 돌아다니지 않는다.
+        /// clip은 서 있는 동안 반복할 동작("idle", 허수아비는 "slash" — 없으면 idle). 고르기·클릭은 평소처럼 된다.
+        /// </summary>
+        public void HoldAt(Vector2 spot, bool faceRight, string clip = IdleClip)
+        {
+            StopFollowing();
+            _entering = false;
+            _onEntered = null;
+            _holding = true;
+            _holdSpot = spot;
+            _holdFaceRight = faceRight;
+            _holdClipName = clip;
+            Vector2 from = _grid.NearestWalkable(transform.position);
+            Vector2 target = _grid.NearestWalkable(spot);
+            if (Vector2.Distance(from, target) < 0.05f || !_grid.TryFindPath(from, target, _path) || _path.Count == 0)
+            {
+                ArriveHold();
+                return;
+            }
+            transform.position = new Vector3(from.x, from.y, transform.position.z);
+            _pathIndex = 0;
+            FaceTowards(_path[0]);
+            _walking = true;
+            _scriptedWalk = true;
+            Play(_walk);
+        }
+
+        /// <summary>머물기를 풀고 잠시 쉬었다가 다시 돌아다닌다.</summary>
+        public void Release()
+        {
+            if (!_holding) return;
+            _holding = false;
+            if (!_walking) StartIdle();
+        }
+
+        private void ArriveHold()
+        {
+            _walking = false;
+            _scriptedWalk = false;
+            float facing = _holdFaceRight == SheetFacesRight ? 1f : -1f;
+            _body.localScale = new Vector3(facing * CharacterScale, CharacterScale, CharacterScale);
+            Play(ClipFor(_holdClipName));
+        }
+
+        private Clip ClipFor(string name)
+        {
+            if (string.IsNullOrEmpty(name) || name == IdleClip || _appearance == null) return _idle;
+            if (!_extraClips.TryGetValue(name, out var clip))
+            {
+                clip = LoadClip(_appearance, name);
+                _extraClips[name] = clip;
+            }
+            return clip.FrameCount > 0 ? clip : _idle;
         }
 
         private float PathLength(Vector2 from)
@@ -513,10 +585,11 @@ namespace GN3.World
                     _pathIndex++;
                     if (_pathIndex < _path.Count) FaceTowards(_path[_pathIndex]);
                     else if (_entering) FinishEntering();
+                    else if (_holding) ArriveHold();
                     else StartIdle();
                 }
             }
-            else
+            else if (!_holding)
             {
                 _idleTimer -= Time.deltaTime;
                 if (_idleTimer <= 0f) StartWalk();

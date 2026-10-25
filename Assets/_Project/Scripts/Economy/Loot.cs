@@ -144,6 +144,18 @@ namespace GN3.Economy
             table == Rider ? RiderMaterials : table == Wolf ? WolfMaterials : table == Mushroom ? MushroomMaterials
             : table == Archer ? ArcherMaterials : WarriorMaterials;
 
+        /// <summary>
+        /// 그 적에게서 나올 수 있는 건설 재료(의뢰 게시판·상세에 "얻는 재료"로 보인다). 그냥 고블린은 자동 전투에서 셋 중 하나가 궁수라
+        /// 전사·궁수 재료를 다 보이고, 엔트(숲의 주인)는 통나무·말뚝.
+        /// </summary>
+        public static LootItem[] MaterialsForEnemy(string enemyName)
+        {
+            var table = TableFor(enemyName);
+            if (table == Ent) return new[] { Log, Stake };
+            if (table == Warrior) return WarriorMaterials.Concat(ArcherMaterials).Distinct().ToArray();
+            return MaterialsFor(table);
+        }
+
         public static LootItem Find(string name) => All.FirstOrDefault(i => i.Name == name);
 
         /// <summary>적 이름 → 전리품 표(흔한 것 3 + 드문 것 1). 이름 판별은 전투 그림(BattleMonsterSprite.KindFor)과 같은 순서.
