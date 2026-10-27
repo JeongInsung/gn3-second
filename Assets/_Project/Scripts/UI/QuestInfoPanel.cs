@@ -78,7 +78,7 @@ namespace GN3.UI
         {
             _refreshTimer = RefreshInterval;
             var q = _quest;
-            _title.text = QuestDifficulty.ShortRichTitle(q); // 핵심만(레벨은 본문, 의뢰인은 부탁 글 아래)
+            _title.text = (q.IsChallenge ? "<color=#ffd36b>[도전]</color> " : "") + QuestDifficulty.ShortRichTitle(q); // 핵심만(레벨은 본문, 의뢰인은 부탁 글 아래) · 도전 의뢰는 깨면 다음 숲 레벨
             _body.text =
                 (string.IsNullOrEmpty(q.RequestText) ? "" : $"<i>\"{q.RequestText}\"</i>\n<color=#a3937c>— {q.Requester}</color>\n\n") + // 마을 사람의 부탁
                 (string.IsNullOrEmpty(q.LocationName) ? "" : $"장소: {q.LocationName}\n") + // 지역(동서남북) 구분은 없앴다

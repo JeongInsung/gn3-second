@@ -56,6 +56,7 @@ namespace GN3.UI
         private enum ListMode { Roster, Sell, Lend, Trade, Barter }
         private ListMode _mode;
         private Mercenary _tradeTarget;
+        private string _armedKey; // 팔기·맞교환을 한 번 누른 줄(다시 누르면 실행, 모드를 바꾸면 풀린다)
 
         public static RivalGuildsPanel Create()
         {
@@ -95,6 +96,10 @@ namespace GN3.UI
             _panel.SetActive(true);
             _panel.transform.SetAsLastSibling();
             Refresh();
+            FirstTimeTips.Show(FirstTimeTips.Rivals, "근처 길드",
+                "근처 길드와 순위를 다툰다. 사이가 좋은 길드와는 연합 의뢰가 생기고, 게시판 의뢰를 노려 가로채 가는 길드도 있다(카드에 \"노리는 중\").\n" +
+                "다른 길드 용병을 며칠 빌리거나(하루 요금), 우리 용병을 빌려주거나 팔고 맞바꿀 수 있다.\n" +
+                "팔기·맞교환은 되돌릴 수 없어 두 번 눌러야 한다.");
         }
 
         public void Hide() => _panel.SetActive(false);
@@ -235,6 +240,7 @@ namespace GN3.UI
         {
             _mode = mode;
             _tradeTarget = tradeTarget;
+            _armedKey = null;
             Refresh();
         }
 
@@ -365,6 +371,10 @@ namespace GN3.UI
                 hostile ? "적대 관계라 거래하지 않는다." : core ? "길드의 핵심이라 내주지 않는다." : "우리 용병 한 명과 맞바꾼다(차액은 금화로). 누르면 우리 용병별 차액이 보인다.").interactable = !hostile && !core;
         }
 
+        /// <summary>잠긴 우리 용병은 팔기·빌려주기·맞교환을 막는다(Mercenary.Locked).</summary>
+        private static string LockBlock(Mercenary merc) =>
+            merc != null && merc.Locked ? "잠긴 용병입니다 — 용병 정보 창에서 잠금을 풀어야 내보낼 수 있습니다." : null;
+
         private void AddOurButtons(Transform row, RivalGuild g, Mercenary merc)
         {
             switch (_mode)
@@ -372,15 +382,22 @@ namespace GN3.UI
                 case ListMode.Sell:
                 {
                     int offer = RivalDeals.SellOffer(g, merc);
-                    string block = RivalDeals.SellBlock(g, merc) ?? (offer <= 0 ? "그 길드가 살 여유(정원·금화)가 없다." : null);
-                    CreateRowButton(row, offer > 0 ? $"팔기 +{offer}G" : "팔기", 120f, () => { RivalDeals.Sell(g, merc); Refresh(); },
-                        block ?? $"{offer}G를 받고 보낸다(위약금 없음). 관계 +{RivalDeals.SellRelation}").interactable = block == null;
+                    string block = LockBlock(merc) ?? RivalDeals.SellBlock(g, merc) ?? (offer <= 0 ? "그 길드가 살 여유(정원·금화)가 없다." : null);
+                    string key = "sell:" + merc.Id; // 되돌릴 수 없어 두 번 누른다(해고와 같은 방식)
+                    bool armed = _armedKey == key;
+                    CreateRowButton(row, armed ? $"정말? +{offer}G" : offer > 0 ? $"팔기 +{offer}G" : "팔기", 120f, () =>
+                    {
+                        if (!armed) { _armedKey = key; Refresh(); return; }
+                        _armedKey = null;
+                        RivalDeals.Sell(g, merc);
+                        Refresh();
+                    }, block ?? $"{offer}G를 받고 보낸다(위약금 없음). 관계 +{RivalDeals.SellRelation}\n되돌릴 수 없어 한 번 더 눌러야 한다").interactable = block == null;
                     break;
                 }
                 case ListMode.Lend:
                 {
                     int daily = Loans.LendFee(g, merc);
-                    string block = Loans.LendBlock(g, merc);
+                    string block = LockBlock(merc) ?? Loans.LendBlock(g, merc);
                     CreateRowButton(row, $"빌려주기 +{daily}G/일", 150f, () => { Loans.Lend(g, merc); Refresh(); },
                         block ?? $"{Loans.LoanDays}일 동안 {g.Name}에서 일한다. 하루 {daily}G를 받는다. 주급은 그대로 나간다.").interactable = block == null;
                     break;
@@ -389,10 +406,16 @@ namespace GN3.UI
                 {
                     var target = _tradeTarget;
                     int diff = RivalDeals.TradeDifference(g, merc, target);
-                    string block = RivalDeals.TradeBlock(g, merc, target);
+                    string block = LockBlock(merc) ?? RivalDeals.TradeBlock(g, merc, target);
                     string money = diff > 0 ? $"-{diff}G" : diff < 0 ? $"+{-diff}G" : "±0";
-                    CreateRowButton(row, $"맞교환 {money}", 130f, () => { if (RivalDeals.Trade(g, merc, target)) SetMode(ListMode.Roster); else Refresh(); },
-                        block ?? $"{Josa.EulReul(merc.Name)} 보내고 {Josa.EulReul(target.Name)} 받는다.\n{Josa.EunNeun(target.Name)} 남은 계약을 이어받는다(주급은 자기 시세).").interactable = block == null;
+                    string key = "trade:" + merc.Id + ":" + target?.Id;
+                    bool armed = _armedKey == key;
+                    CreateRowButton(row, armed ? $"정말? {money}" : $"맞교환 {money}", 130f, () =>
+                    {
+                        if (!armed) { _armedKey = key; Refresh(); return; }
+                        _armedKey = null;
+                        if (RivalDeals.Trade(g, merc, target)) SetMode(ListMode.Roster); else Refresh();
+                    }, block ?? $"{Josa.EulReul(merc.Name)} 보내고 {Josa.EulReul(target.Name)} 받는다.\n{Josa.EunNeun(target.Name)} 남은 계약을 이어받는다(주급은 자기 시세).\n되돌릴 수 없어 한 번 더 눌러야 한다").interactable = block == null;
                     break;
                 }
             }

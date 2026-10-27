@@ -68,13 +68,6 @@ namespace GN3.World
         private bool _hasInn;
         private Vector2 _innDoor;
         private Vector2 _innExit;
-        // 길드 본부(길드 천막·길드 홀): 여관이 없을 때 3명이 묵는다(GuildHqLodging) — 그 3명은 이 문으로 드나든다
-        private bool _hasHq;
-        private Vector2 _hqDoor;
-        private Vector2 _hqExit;
-        private const string GuildHallSpritePrefix = "쇠락한 모험가 길드 홀";
-        private const float HqDoorU = 0.5f;
-        private const float HqDoorV = 0.1f;
         private Vector2 _villageExit;                                 // 파견대가 드나드는 마을 출구(화면 아래쪽 가운데)
         private readonly HashSet<string> _awayIds = new HashSet<string>(); // 파견 나가 있는 용병(돌아오면 출구에서 걸어 들어온다)
         private readonly HashSet<string> _trainingIds = new HashSet<string>(); // 훈련소에 들어간 용병(훈련을 끝내면 훈련소 문에서 나온다)
@@ -115,7 +108,7 @@ namespace GN3.World
         private const float SeatSpacing = 0.32f;       // 쉼터 자리 사이
         private const float SeatFrontGap = 0.22f;      // 장식 아래끝에서 앞으로
         private readonly Dictionary<string, float> _nextDecorRoll = new Dictionary<string, float>();
-        // 떠돌이 상인(TravelingMerchant): 와 있는 날 마을 가운데 조금 오른쪽 아래에 서 있고, 누르면 상점 창
+        // 재료 상인(TravelingMerchant): 와 있는 날 마을 가운데 조금 오른쪽 아래에 서 있고, 누르면 상점 창
         private const string MerchantOwnerId = "merchant";
         private static readonly Vector2 MerchantOffset = new Vector2(2.2f, -1.2f);
         private VillageWanderer _merchant;
@@ -250,7 +243,7 @@ namespace GN3.World
                 foreach (var pair in _wanderers)
                 {
                     if (pair.Value == null) continue;
-                    // 아침: 숙소(여관·숙소 천막·길드 본부)가 있는 사람은 안에서 시작해 각자 무작위로 나온다(처음 결정은 조금 빨리).
+                    // 아침: 숙소(여관·용병 텐트)가 있는 사람은 안에서 시작해 각자 무작위로 나온다(처음 결정은 조금 빨리).
                     if (!_hidden && TryHomeDoor(pair.Key, out _, out _))
                         _nextDecision[pair.Key] = Time.time + RandomRange(0.5f, InsideRestMax * 0.5f);
                     else pair.Value.gameObject.SetActive(!_hidden);
@@ -258,7 +251,7 @@ namespace GN3.World
             }
 
             if (!_hidden) UpdateCompanions();
-            if (!_hidden && (_hasInn || _hasHq))
+            if (!_hidden && _hasInn)
             {
                 if (IsAllOutTime()) BringEveryoneOut();
                 else UpdateInnVisits();
@@ -278,7 +271,7 @@ namespace GN3.World
         /// <summary>
         /// 용병이 묵는 숙소의 문과, 그 아래 처음 걸을 수 있는 바깥 지점: 여관(구운 "여관@..." 포함), 없으면 여관 전 단계의
         /// 용병 텐트(입구 아래 가운데). 둘 다 없으면 드나들기 없이 마을 아무 곳에 나타난다.
-        /// 이 문으로 아침에 나오고 낮에 들어가 쉬었다 나온다(_hasInn·_innDoor는 숙소 천막도 뜻한다). 길드 본부 문(_hqDoor)도 함께 찾는다.
+        /// 이 문으로 아침에 나오고 낮에 들어가 쉬었다 나온다(_hasInn·_innDoor는 숙소 천막도 뜻한다). 길드 천막·길드 홀에는 묵지 않는다.
         /// </summary>
         private void FindLodgings()
         {
@@ -296,13 +289,6 @@ namespace GN3.World
                 _innExit = _grid.FirstWalkableBelow(_innDoor);
                 _hasInn = true;
             }
-
-            // 길드 본부(길드 홀, 없으면 길드 천막)의 아래 가운데 입구
-            var hq = VillageProps.FindRenderer(GuildHallSpritePrefix) ?? VillageProps.FindRenderer(BuildingCatalog.TentPrefix);
-            _hasHq = hq != null;
-            if (!_hasHq) return;
-            _hqDoor = DoorOf(hq, HqDoorU, HqDoorV);
-            _hqExit = _grid.FirstWalkableBelow(_hqDoor);
         }
 
         private static Vector2 DoorOf(SpriteRenderer renderer, float u, float v)
@@ -313,17 +299,10 @@ namespace GN3.World
         }
 
         /// <summary>
-        /// 이 용병이 묵는 곳의 문: 길드 본부에 묵는 3명(GuildHqLodging — 여관이 없을 때)은 본부 문, 그 밖은 여관·숙소 천막 문.
-        /// 묵을 곳이 없으면 false(마을 아무 곳에 나타나고 드나들지 않는다).
+        /// 이 용병이 묵는 곳의 문: 여관·용병 텐트 문. 묵을 곳이 없으면 false(마을 아무 곳에 나타나고 드나들지 않는다).
         /// </summary>
         private bool TryHomeDoor(string mercId, out Vector2 door, out Vector2 exit)
         {
-            if (_hasHq && !GuildHqLodging.HasInn && GuildHqLodging.IsResident(mercId))
-            {
-                door = _hqDoor;
-                exit = _hqExit;
-                return true;
-            }
             door = _innDoor;
             exit = _innExit;
             return _hasInn;
@@ -500,7 +479,7 @@ namespace GN3.World
             }
         }
 
-        /// <summary>떠돌이 상인이 와 있으면(낮) 마을 가운데쯤에 세우고, 떠났거나 밤이면 치운다(그날 외형은 날짜로 고정).</summary>
+        /// <summary>재료 상인이 와 있으면(낮) 마을 가운데쯤에 세우고, 떠났거나 밤이면 치운다(그날 외형은 날짜로 고정).</summary>
         private void SyncMerchant()
         {
             bool show = GN3.Economy.TravelingMerchant.IsHere && !_hidden && !TimeAdvanceController.IsSkippingDays;
@@ -512,13 +491,13 @@ namespace GN3.World
             }
             if (_merchant != null) return;
             Vector2 spot = _grid.NearestWalkable(_area.center + MerchantOffset);
-            var go = new GameObject("Wanderer_떠돌이 상인");
+            var go = new GameObject("Wanderer_" + GN3.Economy.TravelingMerchant.DisplayName);
             go.transform.position = spot;
             _merchant = go.AddComponent<VillageWanderer>();
             _merchant.Init(GN3.CharacterAnim.RandomCharacterComposer.Compose(new System.Random(GN3.Economy.TravelingMerchant.HereDay)), _grid, _rng, _shadowMaterial);
             _merchant.OwnerId = MerchantOwnerId;
             _merchant.HoldAt(spot, false);
-            VillageNameTag.Create(_tagLayer, go.transform, "<color=#f0c060>떠돌이 상인</color>");
+            VillageNameTag.Create(_tagLayer, go.transform, $"<color=#f0c060>{GN3.Economy.TravelingMerchant.DisplayName}</color>");
         }
 
         /// <summary>의뢰 중개인이 와 있으면(낮) 마을 가운데쯤에 세우고, 떠났거나 밤이면 치운다(그날 외형은 날짜로 고정).
@@ -889,7 +868,7 @@ namespace GN3.World
             VillageDepthSorter.Apply(obstacles);
             CullOffscreenAnimators();
             BuildDecorSpots();
-            _hasInn = _hasHq = _hasTrainingHall = _hasHospital = false;
+            _hasInn = _hasTrainingHall = _hasHospital = false;
             _venueDoors.Clear();
             FindLodgings();
             FindTrainingHallDoor();

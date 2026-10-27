@@ -20,6 +20,15 @@ namespace GN3.Mercenaries
     {
         public const float NaturalProgressPerHour = 0.01f;
 
+        /// <summary>간이 의무 천막(초반 임시 건물)이 있으면 저절로 낫는 속도 배율. 병원이 생기면 꺼진다(천막은 남는다).</summary>
+        public const float AidTentMultiplier = 2f;
+        public const string AidTentId = "aidtent";
+
+        public static bool AidTentActive => VillageLayout.HasBuilding(AidTentId) && !VillageLayout.HasBuilding("hospital");
+
+        /// <summary>지금 마을에서 저절로 낫는 시간당 진행도(종류별 naturalSpeed는 따로 곱한다).</summary>
+        public static float NaturalRatePerHour => NaturalProgressPerHour * (AidTentActive ? AidTentMultiplier : 1f);
+
         // GameClock.ResetForPlaySession(SubsystemRegistration)이 이벤트를 비운 뒤에 구독한다(InnRest와 같은 방식).
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Subscribe()
@@ -55,6 +64,7 @@ namespace GN3.Mercenaries
         public static bool Inflict(Mercenary merc, AilmentSO def, string verb)
         {
             if (!merc.AddAilment(def)) return false;
+            if (def.IsInjury) merc.Record.AddInjury(); else merc.Record.AddIllness(); // 경력(불러오기는 AddAilment를 바로 불러 중복되지 않는다)
             string line = $"{Josa.IGa(merc.Name)} {verb}: {def.displayName}"; // 효과는 마우스를 올리면 툴팁으로(EffectTooltip)
             ToastLog.Show(line);
             DailyLog.Add(line);
@@ -191,11 +201,13 @@ namespace GN3.Mercenaries
 
         private static void RecoverNaturally(float hours)
         {
+            float rate = NaturalRatePerHour;
+            string place = AidTentActive ? "의무 천막에서" : "저절로";
             foreach (var merc in PlayerParty.Instance.Members.Where(m => InVillage(m) && m.HasAilment && !Hospital.IsAdmitted(m)).ToList())
                 foreach (var ailment in merc.Ailments.ToList())
                 {
                     if (ailment.Def.noNaturalRecovery || ailment.Def.naturalSpeed <= 0f) continue;
-                    Heal(merc, ailment, hours * NaturalProgressPerHour * ailment.Def.naturalSpeed, "저절로");
+                    Heal(merc, ailment, hours * rate * ailment.Def.naturalSpeed, place);
                 }
         }
     }

@@ -37,18 +37,15 @@ namespace GN3.UI
         private Text _healthText;
         private Text _growthText; // "23세 (5월 12일생) · 성장 빠름 · 성장 공격 +6 · 체력 +12"
         private Text _statsText;
-        private Text _weaponText;
         private Text _personalityText;
         private Text _passiveText;
-        private TooltipTrigger _weaponTip;
-        // 가방 줄(무기 줄 아래): 가방 아이콘 · 이름 · 칸 수만큼 빈 칸 네모(BagSlotsUI)
-        private RectTransform _bagRow;
-        private Image _bagIcon;
-        private Text _bagText;
-        private Transform _bagSlots;
-        private TooltipTrigger _bagTip;
-        private BagItem _bagShown; // 칸 네모를 다시 그릴지(0.5초마다 갱신되므로 가방이 바뀔 때만)
-        private const float BagRowHeight = 24f, BagPipSize = 14f;
+        // 장비칸 줄(능력치 아래): 무기 · 가방 칸(BagSlotsUI.CreateEquipSlot). 가방 칸을 누르면 가방 창
+        private RectTransform _equipRow;
+        private Mercenary _equipMerc; // 칸을 다시 그릴지(0.5초마다 갱신되므로 용병·무기·가방이 바뀔 때만)
+        private WeaponItem _equipWeapon;
+        private BagItem _equipBag;
+        private int _equipCarried;
+        private const float EquipSlotSize = 44f, EquipRowHeight = 62f;
         private TooltipTrigger _personalityTip;
         private TooltipTrigger _passiveTip;
         private Text _friendsText;
@@ -59,6 +56,28 @@ namespace GN3.UI
         private TooltipTrigger _statsTip;
         private GameObject _relationsButton;
         private GameObject _renewButton; // 계약 재협상(고용된 용병만)
+        private GameObject _lockButton;  // 잠금 토글(고용된 용병만)
+        private Text _recordText;        // "전적 …" 한 줄(누르면 기록 창)
+        private TooltipTrigger _recordTip;
+
+        /// <summary>전적 한 줄: 전투가 있으면 "전적 12전 9승 · 평균 B+ · 처치 31 · 부상 3", 없으면 "전적 없음".</summary>
+        private void RefreshRecord(Mercenary merc)
+        {
+            var r = merc.Record;
+            string line = r.Battles > 0
+                ? $"전적 {r.Battles}전 {r.Wins}승 · 평균 {BattleRating.RichGrade(r.AverageScore)} · 처치 {r.Kills} · 부상 {r.Injuries}"
+                : r.Injuries + r.Illnesses > 0 ? $"전적 없음 · 부상 {r.Injuries} · 질병 {r.Illnesses}" : "전적 없음";
+            SetTipLine(_recordText, _recordTip, line, "눌러서 기록 보기 (레벨별 의뢰 성공·최근 전투 평점)");
+        }
+
+        private void RefreshLock(Mercenary merc)
+        {
+            _lockButton.GetComponentInChildren<Text>().text = merc.Locked ? "잠금 해제" : "잠금";
+            _lockButton.GetComponent<Image>().color = merc.Locked ? new Color(0.6f, 0.5f, 0.2f, 1f) : new Color(0.35f, 0.35f, 0.4f, 1f);
+            _lockButton.GetComponent<TooltipTrigger>().Text = merc.Locked
+                ? "잠긴 용병: 해고·근처 길드에 팔기·맞교환·빌려주기가 막혀 있다. 누르면 풀린다."
+                : "아끼는 용병을 실수로 내보내지 않게 잠근다(해고·팔기·맞교환·빌려주기 막기).";
+        }
 
         private Mercenary _shown;
         private bool _shownWasHired; // 열 때 파티원이었는지(그 뒤 이탈·사망하면 창을 닫는다)
@@ -132,24 +151,39 @@ namespace GN3.UI
             float bottomWidth = PanelWidth - 28f;
             // 능력치 두 줄: 공격·방어·속도 / 전투력 — 괄호(이번 달 변화)가 붙어도 잘리지 않게
             _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -150f), new Vector2(bottomWidth, 38f));
-            // 무기·성격·패시브는 이름만 쓰고, 마우스를 올리면 설명이 툴팁으로 뜬다.
-            _weaponText = CreateText("Weapon", 15, FontStyle.Normal, new Vector2(14f, -190f), new Vector2(bottomWidth, 22f));
+            // 성격·패시브는 이름만 쓰고, 마우스를 올리면 설명이 툴팁으로 뜬다.
             _personalityText = CreateText("Personality", 15, FontStyle.Normal, new Vector2(14f, -218f), new Vector2(bottomWidth, 22f));
             _passiveText = CreateText("Passive", 15, FontStyle.Normal, new Vector2(14f, -246f), new Vector2(bottomWidth, 22f));
             _statusTip = AddTooltip(_statusText);
             _statsTip = AddTooltip(_statsText);
-            _weaponTip = AddTooltip(_weaponText);
             _personalityTip = AddTooltip(_personalityText);
             _passiveTip = AddTooltip(_passiveText);
-            CreateBagRow();
+            CreateEquipRow();
             _friendsText = CreateText("Friends", 15, FontStyle.Normal, new Vector2(14f, -274f), new Vector2(bottomWidth, 22f));
             _friendsTip = AddTooltip(_friendsText);
             _healthStatusText = CreateText("HealthStatus", 15, FontStyle.Normal, new Vector2(14f, -302f), new Vector2(bottomWidth, 22f));
             _healthStatusText.supportRichText = true; // 상태이상 이름 색(에셋 이름에는 태그가 없다)
             _healthStatusTip = AddTooltip(_healthStatusText);
+            // 전적: "전적 12전 9승 · 평균 B+ · 처치 31 · 부상 3" — 누르면 기록 창(MercenaryRecordWindow)
+            _recordText = CreateText("Record", 15, FontStyle.Normal, new Vector2(14f, -330f), new Vector2(bottomWidth, 22f));
+            _recordText.supportRichText = true; // 평균 등급 색
+            _recordTip = AddTooltip(_recordText);
+            var recordButton = _recordText.gameObject.AddComponent<Button>();
+            recordButton.transition = Selectable.Transition.None;
+            recordButton.onClick.AddListener(() => { if (_shown != null) MercenaryRecordWindow.Open(_shown); });
             _relationsButton = CreateRelationsButton();
             _renewButton = CreateBottomButton("RenewButton", "재계약", new Vector2(122f, 8f), new Color(0.62f, 0.5f, 0.2f, 1f),
                 () => { if (_shown != null) ContractNegotiationPanel.OpenRenewal(_shown); });
+            // 잠금: 해고·근처 길드에 팔기·맞교환·빌려주기를 막는다(고용된 용병만)
+            _lockButton = CreateBottomButton("LockButton", "잠금", new Vector2(230f, 8f), new Color(0.35f, 0.35f, 0.4f, 1f), () =>
+            {
+                if (_shown == null) return;
+                _shown.Locked = !_shown.Locked;
+                ToastLog.Show(_shown.Locked ? $"{Josa.EulReul(_shown.Name)} 잠갔습니다 (해고·팔기·맞교환·빌려주기 불가)" : $"{_shown.Name} 잠금 해제", false);
+                RefreshLock(_shown);
+                PlayerParty.Instance.NotifyChanged(); // 파티 목록 "[잠금]" 표시
+            });
+            _lockButton.AddComponent<TooltipTrigger>();
 
             CreateCloseButton();
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
@@ -203,54 +237,37 @@ namespace GN3.UI
             return text;
         }
 
-        /// <summary>가방 줄: [아이콘] "가방: 낡은 주머니" ▢▢▢▢. 마우스를 올리면 몇 개까지 들고 오는지·어디서 바꾸는지.</summary>
-        private void CreateBagRow()
+        /// <summary>장비칸 줄: [무기] [가방] 칸. 마우스를 올리면 설명, 가방 칸을 누르면 큰 칸 가방 창.</summary>
+        private void CreateEquipRow()
         {
-            var row = new GameObject("BagRow", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup));
+            var row = new GameObject("EquipRow", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             row.transform.SetParent(_panel.transform, false);
-            _bagRow = (RectTransform)row.transform;
-            _bagRow.anchorMin = _bagRow.anchorMax = _bagRow.pivot = new Vector2(0f, 1f);
-            _bagRow.sizeDelta = new Vector2(PanelWidth - 28f, BagRowHeight);
-            row.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.001f); // 툴팁용 레이캐스트(보이지 않음)
+            _equipRow = (RectTransform)row.transform;
+            _equipRow.anchorMin = _equipRow.anchorMax = _equipRow.pivot = new Vector2(0f, 1f);
+            _equipRow.sizeDelta = new Vector2(PanelWidth - 28f, EquipRowHeight);
             var h = row.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = 6f;
-            h.childAlignment = TextAnchor.MiddleLeft;
+            h.spacing = 10f;
+            h.childAlignment = TextAnchor.UpperLeft;
             h.childControlWidth = h.childControlHeight = true;
             h.childForceExpandWidth = h.childForceExpandHeight = false;
-
-            var icon = new GameObject("Icon", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
-            icon.transform.SetParent(row.transform, false);
-            _bagIcon = icon.GetComponent<Image>();
-            _bagIcon.preserveAspect = true;
-            _bagIcon.raycastTarget = false;
-            var iconLayout = icon.GetComponent<LayoutElement>();
-            iconLayout.preferredWidth = iconLayout.preferredHeight = 22f;
-
-            _bagText = ShopListUI.CreateText(row.transform, "", 15, TextAnchor.MiddleLeft, Color.white);
-            _bagText.font = UITheme.Font;
-            _bagText.horizontalOverflow = HorizontalWrapMode.Overflow;
-
-            var slots = new GameObject("Slots", typeof(RectTransform), typeof(HorizontalLayoutGroup));
-            slots.transform.SetParent(row.transform, false);
-            var s = slots.GetComponent<HorizontalLayoutGroup>();
-            s.spacing = 3f;
-            s.childAlignment = TextAnchor.MiddleLeft;
-            s.childControlWidth = s.childControlHeight = true;
-            s.childForceExpandWidth = s.childForceExpandHeight = false;
-            _bagSlots = slots.transform;
-            _bagTip = row.AddComponent<TooltipTrigger>();
         }
 
-        private void RefreshBagRow(Mercenary merc)
+        private void RefreshEquipRow(Mercenary merc)
         {
+            var weapon = merc.Weapon;
             var bag = merc.Bag;
-            _bagText.text = $"가방: {bag.Name}";
-            _bagTip.Text = $"가방 {bag.Name} ({bag.Slots}칸): 원정에서 전리품을 {bag.Slots}개까지 들고 온다\n건설 재료·동전 주머니는 칸을 쓰지 않는다 · 의약품 상점에서 더 큰 가방으로 바꿀 수 있다";
-            if (_bagShown == bag) return;
-            _bagShown = bag;
-            _bagIcon.sprite = bag.Icon;
-            for (int i = _bagSlots.childCount - 1; i >= 0; i--) Destroy(_bagSlots.GetChild(i).gameObject);
-            for (int i = 0; i < bag.Slots; i++) BagSlotsUI.CreateSlot(_bagSlots, null, BagPipSize);
+            int carried = merc.BagContents.Count;
+            if (_equipMerc == merc && _equipWeapon == weapon && _equipBag == bag && _equipCarried == carried) return;
+            _equipMerc = merc;
+            _equipWeapon = weapon;
+            _equipBag = bag;
+            _equipCarried = carried;
+            for (int i = _equipRow.childCount - 1; i >= 0; i--) Destroy(_equipRow.GetChild(i).gameObject);
+            BagSlotsUI.CreateEquipSlot(_equipRow, "무기", weapon?.Icon,
+                weapon != null ? $"무기: {weapon.Name}\n{weapon.DescribeFor(merc.Class.Kind)}" : "무기: 맨손", EquipSlotSize);
+            BagSlotsUI.CreateEquipSlot(_equipRow, "가방", bag.Icon,
+                $"가방 {bag.Name} ({carried}/{bag.Slots}칸): 원정에서 전리품을 빈 칸만큼 들고 온다(주운 것은 가방에 남는다)\n건설 재료·동전 주머니는 칸을 쓰지 않는다 · 의약품 상점에서 더 큰 가방으로 바꿀 수 있다\n눌러서 가방 보기",
+                EquipSlotSize, () => { if (_shown != null) MercenaryBagWindow.Open(_shown); });
         }
 
         /// <summary>왼쪽 아래 "관계 보기": 이 용병을 고른 채로 관계 창(RelationsPanel)을 연다. 고용된 용병만 보인다.</summary>
@@ -320,8 +337,8 @@ namespace GN3.UI
             _debugButton = go;
             var rect = go.GetComponent<RectTransform>();
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0f);
-            rect.anchoredPosition = new Vector2(-10f, 8f);
-            rect.sizeDelta = new Vector2(96f, 24f); // 왼쪽 관계 보기·재계약 버튼과 겹치지 않게
+            rect.anchoredPosition = new Vector2(-10f, 36f);
+            rect.sizeDelta = new Vector2(96f, 24f); // 아래 줄(관계 보기·재계약·잠금) 바로 위 — 겹치지 않게
             go.GetComponent<Image>().color = new Color(0.45f, 0.45f, 0.45f, 1f);
             go.GetComponent<Button>().onClick.AddListener(() =>
             {
@@ -480,7 +497,8 @@ namespace GN3.UI
             }
 
             // 나이 칸: 나이와 생일만(성장 속도·재능은 숨은 값)
-            _growthText.text = $"{merc.Age}세 · {MercenaryAge.BirthdayText(merc)}생";
+            int toRetire = GrowthTuning.RetireAge - merc.Age; // 은퇴가 가까우면 미리 보인다(그 나이 생일에 은퇴)
+            _growthText.text = $"{merc.Age}세 · {MercenaryAge.BirthdayText(merc)}생" + (toRetire <= 2 ? $" · 은퇴까지 {toRetire}년" : "");
 
             // 능력치: "공격 23 (+3 −2)"(마법사는 "마력", 힐러는 "신성력"도) — 23 = 지금 영구 수치(성장·쇠퇴·무기·수련이 바로 반영),
             // +3/−1 = 이번 달 오른·내린 양(참고용, 왼쪽에 이미 들어 있음, 매달 1일 Mercenary.SnapshotMonth로 0부터),
@@ -518,11 +536,7 @@ namespace GN3.UI
                 + (permanent.Holy > 0 ? $"{Stat("신성력", merc.MonthBaseHoly, permanent.Holy, stats.Holy)}  ·  " : "")
                 + Stat("전투력", merc.MonthBasePower, permanentPower, merc.CombatPower),
                 statsTip);
-            if (merc.Weapon != null)
-                SetTipLine(_weaponText, _weaponTip, $"무기: {merc.Weapon.Name}", merc.Weapon.DescribeFor(merc.Class.Kind));
-            else
-                SetTipLine(_weaponText, _weaponTip, "무기: 맨손", null);
-            RefreshBagRow(merc); // 가방(전리품을 들고 올 칸 — BagCatalog)은 무기 아래 줄
+            RefreshEquipRow(merc); // 장비칸(무기·가방)은 능력치 아래 줄
 
             var personality = PersonalityTable.Get(merc.Personality);
             SetTipLine(_personalityText, _personalityTip, $"성격 [{personality.Label}]", personality.Description);
@@ -542,6 +556,9 @@ namespace GN3.UI
             _friendsText.gameObject.SetActive(hired);
             _relationsButton.SetActive(hired);
             _renewButton.SetActive(hired);
+            _lockButton.SetActive(hired);
+            if (hired) RefreshLock(merc);
+            RefreshRecord(merc); // 시장·근처 길드 용병도 경력이 따라다닌다
             if (hired)
             {
                 var friends = Affinity.Friends(merc, Affinity.Acquaintance.MinValue).Take(3).ToList();
@@ -578,16 +595,13 @@ namespace GN3.UI
             // 아래 칸(전체 폭): 초상 아래부터
             y = Mathf.Min(y, -14f - PortraitSize - 26f);
             float bottomWidth = PanelWidth - 28f;
-            y = Place(_statsText, 14f, y, bottomWidth, 38f, true) - 2f;
-            foreach (var row in new[] { _weaponText, _personalityText, _passiveText, _friendsText, _healthStatusText })
+            y = Place(_statsText, 14f, y, bottomWidth, 38f, true) - 4f;
+            _equipRow.anchoredPosition = new Vector2(14f, y); // 능력치 바로 아래 장비칸 줄
+            y -= EquipRowHeight + 6f;
+            foreach (var row in new[] { _personalityText, _passiveText, _friendsText, _healthStatusText, _recordText })
             {
                 if (!row.gameObject.activeSelf) continue;
                 y = Place(row, 14f, y, bottomWidth, 22f, true) - 6f;
-                if (row == _weaponText) // 무기 줄 바로 아래 가방 줄
-                {
-                    _bagRow.anchoredPosition = new Vector2(14f, y + 2f);
-                    y -= BagRowHeight - 2f + 6f;
-                }
             }
             _panelRect.sizeDelta = new Vector2(PanelWidth, Mathf.Max(PanelHeight, -(y + 6f) + BottomSpace));
         }

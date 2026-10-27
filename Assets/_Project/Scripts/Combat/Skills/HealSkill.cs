@@ -18,7 +18,9 @@ namespace GN3.Combat
             int round, System.Random rng)
         {
             int amount = CombatFormulas.Scale(user.Stats.Holy * HolyRatio); // 피해와 같은 배율로(체력 대비 회복량 유지)
+            int before = target.CurrentHealth;
             target.Heal(amount);
+            Combatant.RecordHeal(user, before, target); // 평점용(실제로 오른 체력만)
             return new List<BattleEvent> { new BattleEvent(round, user, target, -amount, false, false) };
         }
     }

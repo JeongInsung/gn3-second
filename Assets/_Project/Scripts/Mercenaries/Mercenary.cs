@@ -43,8 +43,48 @@ namespace GN3.Mercenaries
         /// <summary>메고 다니는 가방(전리품을 들고 올 칸 수 — BagCatalog). 처음엔 낡은 주머니, 의약품 상점에서 바꿔 준다.</summary>
         public GN3.Economy.BagItem Bag { get; private set; } = GN3.Economy.BagCatalog.Basic;
 
-        /// <summary>가방을 바꾼다(들던 가방은 버린다). null이면 기본 가방.</summary>
+        /// <summary>가방을 바꾼다(들던 가방은 버리고 내용물은 옮겨 담는다 — 상점은 더 큰 가방으로만 바꿔 준다). null이면 기본 가방.</summary>
         public void SetBag(GN3.Economy.BagItem bag) => Bag = bag ?? GN3.Economy.BagCatalog.Basic;
+
+        /// <summary>경력(전투·평점·레벨별 의뢰 성공·부상) — 용병 정보 창의 "전적", 기록 창.</summary>
+        public MercenaryRecord Record { get; } = new MercenaryRecord();
+
+        /// <summary>잠금: 아끼는 용병을 실수로 내보내지 않게(해고·근처 길드에 팔기·맞교환·빌려주기를 막는다). 용병 정보 창에서 켜고 끈다.</summary>
+        public bool Locked { get; set; }
+
+        // 가방에 든 전리품(칸 하나에 하나). 원정이 끝나도 남고, 가방 창의 [창고에 넣기]로 꺼낸다. 죽거나 떠나면 같이 잃는다.
+        private readonly List<LootItem> _bagContents = new List<LootItem>();
+        public IReadOnlyList<LootItem> BagContents => _bagContents;
+        /// <summary>가방 빈 칸 수(다음 원정에서 주울 수 있는 만큼).</summary>
+        public int BagFree => Math.Max(0, Bag.Slots - _bagContents.Count);
+
+        /// <summary>빈 칸만큼 담는다(넘치는 것은 버린다). 담은 개수.</summary>
+        public int AddToBag(IEnumerable<LootItem> items)
+        {
+            int added = 0;
+            foreach (var item in items)
+            {
+                if (item == null || BagFree <= 0) continue;
+                _bagContents.Add(item);
+                added++;
+            }
+            return added;
+        }
+
+        /// <summary>가방을 비우고 들어 있던 것을 돌려준다.</summary>
+        public List<LootItem> TakeAllFromBag()
+        {
+            var items = new List<LootItem>(_bagContents);
+            _bagContents.Clear();
+            return items;
+        }
+
+        /// <summary>저장 파일에서 불러올 때: 가방 내용물을 그대로 되돌린다.</summary>
+        public void RestoreBag(IEnumerable<LootItem> items)
+        {
+            _bagContents.Clear();
+            AddToBag(items);
+        }
 
         /// <summary>직업 기본값 + 성장 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어·신성력) → 부상·질병 순으로 계산한 현재 능력치.
         /// 마법사는 마지막에 공격을 마력으로 옮긴다(UsesMagic).</summary>

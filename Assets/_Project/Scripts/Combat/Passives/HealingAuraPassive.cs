@@ -37,7 +37,11 @@ namespace GN3.Combat
             }
 
             if (lowest != null)
+            {
+                int before = lowest.CurrentHealth;
                 lowest.Heal(CombatFormulas.Scale(self.Stats.Holy * HolyRatio));
+                Combatant.RecordHeal(self, before, lowest); // 평점용
+            }
         }
     }
 }

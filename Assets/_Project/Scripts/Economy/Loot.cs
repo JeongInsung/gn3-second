@@ -491,6 +491,21 @@ namespace GN3.Economy
         /// <summary>전리품을 모두 팔면 받는 골드(건설 재료는 뺀다).</summary>
         public static int TotalValue => _counts.Where(kv => !kv.Key.Material).Sum(kv => kv.Key.Price * kv.Value);
 
+        /// <summary>용병 가방을 비워 창고에 넣는다(가방 창·창고의 가방 비우기). 넣은 개수.</summary>
+        public static int StashFrom(Mercenaries.Mercenary merc)
+        {
+            var items = merc.TakeAllFromBag();
+            Add(items.GroupBy(i => i).Select(g => (g.Key, g.Count())));
+            return items.Count;
+        }
+
+        /// <summary>얻어 본 것으로만 적는다(창고에 넣지 않고 용병 가방에 담은 전리품 — 도감).</summary>
+        public static void MarkSeen(IEnumerable<LootItem> items)
+        {
+            foreach (var item in items)
+                if (item != null) _seen.Add(item.Name);
+        }
+
         public static void Add(IEnumerable<(LootItem item, int count)> loot)
         {
             bool any = false;

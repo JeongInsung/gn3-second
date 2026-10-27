@@ -26,6 +26,10 @@ namespace GN3.UI
             if (building == null || !building.DisplayName.Contains(ShopKeyword)) return;
             _panel = panel;
             ShowItems();
+            FirstTimeTips.Show(FirstTimeTips.Hospital, "의약품 상점",
+                "약을 사서 바로 치료하거나 [창고로] 사 두었다가 길드 창고에서 쓸 수 있다.\n" +
+                "가방도 여기서 바꿔 준다 — 가방 칸만큼 원정에서 전리품을 들고 온다.\n" +
+                "주운 전리품은 가방에 남으니, 길드 창고의 [가방 비우기]로 꺼내 팔자.");
         }
 
         // ---------- 아이템 목록 ----------
@@ -158,7 +162,7 @@ namespace GN3.UI
                 ShopListUI.CreateTwoLineLabel(row.transform, merc.Name, $"체력 {merc.CurrentHealth} / {merc.CurrentStats.MaxHealth}");
                 var target = merc;
                 var button = ShopListUI.CreateButton(row.transform, "치료", () => Treat(item, target));
-                button.interactable = item.CanHeal(merc);
+                ShopListUI.SetBlocked(button, item.CanHeal(merc) ? null : "이 약으로 나을 곳이 없습니다 (체력 가득·해당 증상 없음).");
             }
 
             ShopListUI.EndList(_panel);
@@ -178,7 +182,7 @@ namespace GN3.UI
             }
             int healed = item.Apply(merc);
             ToastLog.Show($"{merc.Name}에게 {item.Name} 사용 (체력 +{healed}) -{item.Price}G");
-            ShowItems();
+            ShowTargets(item); // 대상 목록에 머문다(여러 명을 이어서 치료)
         }
     }
 }

@@ -22,6 +22,19 @@ namespace GN3.UI
         public static IEnumerable<Mercenary> MercsInVillage() =>
             PlayerParty.Instance.Members.Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m));
 
+        /// <summary>
+        /// 버튼을 막고 마우스를 올리면 이유가 뜨게 한다(왜 꺼졌는지 누르기 전에 안다). reason이 null이면 켠다.
+        /// 이미 툴팁이 있으면 막혔을 때만 이유로 바꾼다.
+        /// </summary>
+        public static void SetBlocked(Selectable button, string reason)
+        {
+            if (button == null) return;
+            button.interactable = reason == null;
+            if (reason == null) return;
+            var tip = button.GetComponent<TooltipTrigger>() ?? button.gameObject.AddComponent<TooltipTrigger>();
+            tip.Text = reason;
+        }
+
         /// <summary>상품 칸을 비우고("상품 준비 중"도 숨김) 세로 목록 설정을 맞춘다.</summary>
         public static void BeginList(BuildingPanel panel)
         {

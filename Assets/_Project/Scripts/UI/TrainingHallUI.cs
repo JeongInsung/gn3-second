@@ -54,6 +54,9 @@ namespace GN3.UI
             if (building == null || !building.DisplayName.Contains(HallKeyword)) return;
             _panel = panel;
             Draw();
+            FirstTimeTips.Show(FirstTimeTips.Training, "훈련소",
+                "용병을 맡기면 며칠 동안 마을을 떠나 능력치를 올린다(그동안 파견·치료 불가).\n" +
+                "지친 용병은 훈련할 수 없다 — 먼저 마을에서 쉬게 하자.");
         }
 
         private bool IsShowing =>
@@ -90,9 +93,14 @@ namespace GN3.UI
             var trainees = TrainingHall.Trainees;
             int facility = GuildFacilities.Level(Facility.Training);
             float dummyBonus = DecorActivities.TrainingHallBonus;
-            CreateHeaderRow($"훈련 중 {trainees.Count}/{TrainingHall.Capacity} · {1f / TrainingHall.GrowthPerHour:0.#}시간마다 성장(어릴수록 빠름)" +
+            var traineeHeader = CreateHeaderRow($"훈련 중 {trainees.Count}/{TrainingHall.Capacity} · {1f / TrainingHall.GrowthPerHour:0.#}시간마다 성장(어릴수록 빠름)" +
                             (facility > 0 ? $" · 시설 {facility}단계" : "") +
                             (dummyBonus > 1f ? $" · 허수아비 +{Mathf.RoundToInt((dummyBonus - 1f) * 100f)}%" : ""));
+            if (trainees.Count > 0)
+                ShopListUI.CreateButton(traineeHeader.transform, "모두 빼기", () =>
+                {
+                    foreach (var m in TrainingHall.Trainees.ToList()) TrainingHall.Remove(m);
+                }, 100f);
             if (trainees.Count == 0) ShopListUI.CreateEmptyRow(_panel, "훈련 중인 용병이 없습니다.");
             foreach (var merc in trainees)
             {
@@ -108,7 +116,19 @@ namespace GN3.UI
             // 직접 넣기: 마을에 있는 파티원(파견 중·이미 훈련 중 제외)
             var candidates = PlayerParty.Instance.Members
                 .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !TrainingHall.IsTraining(m)).ToList();
-            if (candidates.Count > 0) CreateHeaderRow($"훈련 보내기 · {TrainingHall.MaxSessionHours:0}시간");
+            if (candidates.Count > 0)
+            {
+                var header = CreateHeaderRow($"훈련 보내기 · {TrainingHall.MaxSessionHours:0}시간");
+                // 막힌 사유가 없는 사람을 자리만큼 한꺼번에
+                var sendAll = ShopListUI.CreateButton(header.transform, "모두 넣기", () =>
+                {
+                    int sent = 0;
+                    foreach (var m in candidates)
+                        if (BlockReason(m) == null && TrainingHall.TryAdd(m, TrainingHall.MaxSessionHours)) sent++;
+                    if (sent > 0) ToastLog.Show($"{sent}명 훈련 시작 ({TrainingHall.MaxSessionHours:0}시간)");
+                }, 100f);
+                ShopListUI.SetBlocked(sendAll, candidates.Any(m => BlockReason(m) == null) ? null : "지금 넣을 수 있는 용병이 없습니다.");
+            }
             foreach (var merc in candidates)
             {
                 var row = ShopListUI.CreateRow(_panel, "Candidate_" + merc.Name);
@@ -205,15 +225,22 @@ namespace GN3.UI
         {
             if (!merc.CanGrow) return $"{GrowthTuning.RateLabel(merc.Age)} · 전투력 {merc.CombatPower}";
             string next = $"{GrowthTuning.RateLabel(merc.Age)} · 다음 성장 {TrainingHall.HoursToNextGrowth(merc):0.#}시간";
-            return training ? $"{next} · 남은 {TrainingHall.RemainingHours(merc):0.#}시간" : $"{next} · 전투력 {merc.CombatPower}";
+            return training ? $"{next} · 남은 {TrainingHall.RemainingHours(merc):0.#}시간 · {FatigueText(merc)}" : $"{next} · 전투력 {merc.CombatPower} · {FatigueText(merc)}";
         }
 
-        private void CreateHeaderRow(string title)
+        /// <summary>훈련은 시간마다 피로가 쌓인다(TrainingHall) — 지치기 전에 뺄 수 있게 늘 보인다.</summary>
+        private static string FatigueText(Mercenary merc) =>
+            merc.IsExhausted ? $"피로 {merc.Fatigue} (지침)"
+            : merc.Fatigue >= Mercenary.TiredFatigue ? $"피로 {merc.Fatigue} (높음)"
+            : $"피로 {merc.Fatigue}";
+
+        private GameObject CreateHeaderRow(string title)
         {
             var row = ShopListUI.CreateRow(_panel, "Header");
             var text = ShopListUI.CreateText(row.transform, title, 16, TextAnchor.MiddleLeft, UITheme.TitleText);
             text.fontStyle = FontStyle.Bold;
             text.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            return row;
         }
     }
 }

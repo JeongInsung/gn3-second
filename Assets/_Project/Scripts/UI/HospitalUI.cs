@@ -109,7 +109,7 @@ namespace GN3.UI
             string ailments = merc.AilmentSummary();
             return admitted
                 ? $"{ailments} · 남은 약 {Hospital.RemainingHours(merc):0.#}시간 · 치료비 {Hospital.Fee(merc)}G"
-                : $"{ailments} · 마을에서 쉬는 중(저절로 시간당 {Ailments.NaturalProgressPerHour * 100f:0}%)";
+                : $"{ailments} · 마을에서 쉬는 중(저절로 시간당 {Ailments.NaturalRatePerHour * 100f:0}%)";
         }
 
         private void CreateHeaderRow(string title)

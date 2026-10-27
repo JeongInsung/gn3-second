@@ -52,6 +52,9 @@ namespace GN3.Quests
         /// <summary>사건에서 지름길을 골랐다: 이번 길(가는 길)의 습격 확률이 두 배.</summary>
         public bool RiskyRoute { get; set; }
 
+        /// <summary>도착하면 묻지 않고 자동 전투(편성 때 고른다 — Mailbox.PostArrival). 결과 편지만 온다.</summary>
+        public bool AutoOnArrival { get; set; }
+
         /// <summary>사건으로 이동 시간을 늘리거나(+) 줄인다(−, 남은 시간은 최소 1시간). 가는 길·돌아오는 길 모두.</summary>
         public void Delay(float hours)
         {

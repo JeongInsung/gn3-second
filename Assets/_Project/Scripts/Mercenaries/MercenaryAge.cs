@@ -70,6 +70,13 @@ namespace GN3.Mercenaries
         {
             merc.GrowOlder();
             DailyLog.Add($"{merc.Name}의 생일 — {merc.Age}세가 되었다. ({GrowthTuning.RateLabel(merc.Age)})");
+            // 은퇴 한 해 전: 미리 알린다(다음 생일에 바로 떠나므로 대신할 사람을 키울 시간)
+            if (merc.Age == GrowthTuning.RetireAge - 1)
+            {
+                string notice = $"{Josa.IGa(merc.Name)} {merc.Age}세 — 다음 생일({BirthdayText(merc)})에 {GrowthTuning.RetireAge}세가 되어 은퇴한다.";
+                ToastLog.Show(notice, true, ToastKind.Warn);
+                DailyLog.Add(notice);
+            }
             if (merc.Age < GrowthTuning.DeclineStartAge || merc.Age >= GrowthTuning.RetireAge) return;
             var losses = merc.Decline(GrowthTuning.DeclinePerYear);
             if (losses.Count == 0) return;

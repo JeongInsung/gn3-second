@@ -25,6 +25,7 @@ namespace GN3.UI
 
         private Text _title;
         private Image _icon;
+        private Text _description;
         private RectTransform _needs; // 필요한 것 칸 줄(열 때마다 다시 만든다)
         private Text _block;
         private Button _ok;
@@ -78,6 +79,9 @@ namespace GN3.UI
             popup._icon.raycastTarget = false;
             var iconLayout = icon.GetComponent<LayoutElement>();
             iconLayout.minHeight = iconLayout.preferredHeight = IconSize;
+            // 이 건물이 하는 일(BuildingCatalog.Entry.Description) — 짓기 전에 무엇이 생기는지
+            popup._description = ShopListUI.CreateText(panel.transform, "", 14, TextAnchor.MiddleCenter, UITheme.BodyText);
+            popup._description.horizontalOverflow = HorizontalWrapMode.Wrap;
 
             var needs = new GameObject("Needs", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
             needs.transform.SetParent(panel.transform, false);
@@ -114,11 +118,14 @@ namespace GN3.UI
         /// 내용을 채워 연다. materials: 필요한 재료(다 지었으면 null). block: 지을 수 없는 이유(없으면 null → [짓기] 켜짐).
         /// 금화·재료가 모자란 이유는 칸의 붉은 수가 보여 주므로 글로는 쓰지 않는다.
         /// </summary>
-        public static void Show(string title, Sprite icon, int cost, IReadOnlyList<(LootItem item, int count)> materials, string block, string okLabel, System.Action onOk)
+        public static void Show(string title, Sprite icon, int cost, IReadOnlyList<(LootItem item, int count)> materials, string block, string okLabel, System.Action onOk,
+            string description = null)
         {
             if (_instance == null) return;
             var p = _instance;
             p._title.text = title;
+            p._description.text = description ?? "";
+            p._description.gameObject.SetActive(!string.IsNullOrEmpty(description));
             p._icon.sprite = icon;
             p._icon.type = Image.Type.Simple; // preserveAspect는 Simple에서만 듣는다
             p._icon.color = Color.white;

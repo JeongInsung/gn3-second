@@ -151,6 +151,11 @@ namespace GN3.World
 
             _blockReason = BlockReason();
             _ghost.color = _blockReason == null ? ValidTint : InvalidTint;
+            if (_blockReason != null) // 왜 못 놓는지 누르기 전에 미리보기 위에
+            {
+                var b = _ghost.bounds;
+                WorldHoverLabel.Show(_blockReason, new Vector3(b.center.x, b.max.y, 0f), warn: true);
+            }
 
             bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
             if (overUI || !mouse.leftButton.wasPressedThisFrame || (_moving && Time.frameCount == _startFrame)) return;

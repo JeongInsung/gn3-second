@@ -61,6 +61,13 @@ namespace GN3.UI
             tip.Text = any ? "지은 건물을 다른 자리로 옮깁니다(무료). 화면 아래 [옮기기 취소]로 되돌릴 수 있습니다." : "지은 건물이 없습니다.";
         }
 
+        /// <summary>건설 창이 열려 있으면 닫고, 아니면 연다(단축키 B — VillageHotkeys).</summary>
+        public static void Toggle()
+        {
+            if (_panel != null && _panel.gameObject.activeSelf) _panel.Close();
+            else ShowGlobal();
+        }
+
         public static void ShowGlobal()
         {
             if (_panel == null) return;
@@ -230,7 +237,8 @@ namespace GN3.UI
                     BuildDetailPopup.Hide();
                     _panel.Close();
                     BuildPlacement.Begin(target);
-                }));
+                }, entry.Description));
+            if (!string.IsNullOrEmpty(entry.Description)) card.AddComponent<TooltipTrigger>().Text = $"{entry.Name}\n{entry.Description}"; // 카드에 올리기만 해도 하는 일
         }
 
         /// <summary>줄 둘째 칸 한 줄: "짧은 설명 · 재료: 천 2/3 …"(설명이 없으면 재료만, 다 지었으면 설명만).</summary>

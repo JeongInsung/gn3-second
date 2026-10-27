@@ -97,8 +97,14 @@ namespace GN3.Quests
         {
             _active.Add(expedition);
             OnChanged?.Invoke();
-            if (expedition.IsReady) OnArrived?.Invoke(expedition);
+            // 불러오는 중엔 용병·시설이 아직 다 돌아오지 않아 자동 전투를 하지 않고 편지로 묻는다(IsRestoring)
+            IsRestoring = true;
+            try { if (expedition.IsReady) OnArrived?.Invoke(expedition); }
+            finally { IsRestoring = false; }
         }
+
+        /// <summary>저장 파일에서 파견을 되돌리는 중(도착 알림이 불러오기 때문인지).</summary>
+        public bool IsRestoring { get; private set; }
 
         /// <summary>새로 시작·불러오기 전에 진행 중인 파견을 모두 비운다.</summary>
         public void Clear()

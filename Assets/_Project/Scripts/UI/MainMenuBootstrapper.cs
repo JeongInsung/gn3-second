@@ -84,9 +84,10 @@ namespace GN3.UI
             BuildingMover.Create(hud);                            // [건설] 창 "옮기기" → 지은 건물 옮기기 모드(완료·옮기기 취소)
             PlaceConfirmPanel.Create(hud);                        // 건물을 놓으려고 클릭하면 "여기에 짓겠습니까?" 확인 창
             ForestFelling.Create(hud);                            // [건설] 창 "벌목" → 숲을 베어 재료(하루 몇 번)
-            MerchantShopUI.Create(canvas.transform);              // 떠돌이 상인(마을에 와 있을 때 누르면) 상점 창
+            MerchantShopUI.Create(canvas.transform);              // 재료 상인(마을에 와 있을 때 누르면) 상점 창
             BlackMarketShopUI.Create(canvas.transform);           // 암거래 상인(와 있을 때 누르면) 전리품을 비싸게 파는 창
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
+            new GameObject("StallShop", typeof(StallShop));       // 행상 좌판(비싼 기초 치료품)·간이 의무 천막 패널
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
             new GameObject("GuildStorageUI", typeof(GuildStorageUI)); // 길드 창 "창고" → 건물 패널에 창고 목록
             new GameObject("TrainingHallUI", typeof(TrainingHallUI)); // 훈련소 패널에 훈련 중·맡길 용병 목록
@@ -262,6 +263,15 @@ namespace GN3.UI
                     $"다치거나 병든 용병이 스스로 입원해 치료받고, 퇴원할 때 치료비를 냅니다. (최대 {Hospital.Capacity}명)");
                 Hospital.AdmitWaiting();
             }
+            // 초반 임시 건물 → 건물 패널(StallShop이 "의무 천막"·"행상 좌판" 이름을 보고 채운다)
+            var aidTent = VillageProps.FindRenderer(BuildingCatalog.AidTentPrefix);
+            if (aidTent != null)
+                VillageProps.EnsureClickable(aidTent).SetInfo(StallShop.AidTentName,
+                    $"병원이 생기기 전 다친 용병을 돌보는 천막. 마을에서 저절로 낫는 속도가 ×{Ailments.AidTentMultiplier:0}가 됩니다.");
+            var stall = VillageProps.FindRenderer(BuildingCatalog.StallPrefix);
+            if (stall != null)
+                VillageProps.EnsureClickable(stall).SetInfo(StallShop.StallName,
+                    $"잡화점이 생기기 전 기초 치료품을 파는 좌판. 값은 잡화점의 ×{StallShop.PriceMultiplier:0.#}입니다.");
 
             // 쉼터(찻집 → 온천, 주사위 간판 도박장 → 도박장, 마법사 연구소 → 마법 연구소, 성당 → 성당) → 건물 패널(RestVenueUI가 쉼터 이름을 보고 목록을 채운다)
             foreach (var venue in RestVenues.All)
@@ -379,12 +389,12 @@ namespace GN3.UI
         private static readonly Vector2 SmallButtonSize = new Vector2(84f, 40f); // 배속·저장 버튼(예전 바 안 크기)
         private const float TopRightSpacing = 8f;
 
-        /// <summary>오른쪽 위 작은 버튼의 세로 위치: 진행 버튼 높이의 가운데.</summary>
-        private static float SmallButtonTop => -(AdvanceButton.Margin + (AdvanceButton.ButtonSize.y - SmallButtonSize.y) * 0.5f);
+        /// <summary>오른쪽 위 작은 버튼의 세로 위치: 윗변을 진행 버튼·왼쪽 메뉴 줄 윗변(위 16px)에 맞춘다.</summary>
+        private static float SmallButtonTop => -AdvanceButton.Margin;
 
         /// <summary>
         /// 진행 버튼(AdvanceButton) 왼쪽에 붙는 작은 버튼(저장·불러오기·배속). slot 0이 진행 버튼 바로 왼쪽, 1·2…는 한 칸씩 더 왼쪽.
-        /// 세로는 진행 버튼 높이의 가운데. HUD 캔버스에 있어 창을 열어도 가려지지 않는다.
+        /// 윗변은 진행 버튼·왼쪽 메뉴 줄과 같은 줄. HUD 캔버스에 있어 창을 열어도 가려지지 않는다.
         /// </summary>
         private static Button CreateSmallButton(Transform canvasTransform, string name, string label, int slot,
             UnityEngine.Events.UnityAction onClick, int fontSize = 15)
@@ -467,7 +477,18 @@ namespace GN3.UI
                 if (flash != null) CoroutineHost.Instance.StopCoroutine(flash);
                 flash = CoroutineHost.Instance.StartCoroutine(FlashGold(text, delta > 0 ? new Color(0.5f, 0.9f, 0.45f) : new Color(1f, 0.4f, 0.35f)));
             };
+            // 주급날이 가까운데 골드가 모자라면 알림(표시 모양은 그대로)
+            GameClock.OnDayAdvanced += () =>
+            {
+                if (text == null) return; // 씬이 바뀌어 사라진 표시(정적 이벤트라 구독이 남는다)
+                int wage = MercenaryCondition.TotalWeeklyWage();
+                int daysLeft = MercenaryCondition.NextPayday - GameClock.CurrentDay;
+                if (daysLeft <= WageWarnDays && Wallet.Gold < wage)
+                    ToastLog.Show($"{(daysLeft <= 1 ? "내일" : $"{daysLeft}일 뒤")} 주급 {wage}G — {wage - Wallet.Gold}G 부족", true, ToastKind.Warn);
+            };
         }
+
+        private const int WageWarnDays = 2; // 주급날 며칠 전부터 골드가 모자라면 알린다
 
         /// <summary>"견습 용병단 · 명성 40". 마우스를 올리면 지금 해금 내용과 다음 단계 조건이 툴팁으로 뜬다.</summary>
         private static void CreateGuildText(Transform parent)
@@ -491,10 +512,11 @@ namespace GN3.UI
             {
                 if (text == null) return;
                 text.text = $"{Guild.CurrentName} · 명성 {Guild.Reputation}";
-                tip.Text = Guild.Tooltip();
+                tip.Text = Guild.Tooltip() + "\n\n" + ForestProgress.GoalText; // 지금 목표(은월의 숲·앤트킹)도 함께
             }
             Refresh();
             Guild.OnChanged += _ => Refresh();
+            ForestProgress.OnChanged += Refresh;
         }
 
         private static IEnumerator FlashGold(Text text, Color flashColor)
@@ -534,12 +556,13 @@ namespace GN3.UI
             layout.childControlHeight = true;
 
             // 아이콘: Resources/UIIcons/menu_*(tools/bake_menu_icons.py)
-            CreateMenuButton(barGO.transform, "용병시장", "UIIcons/menu_market", () => OpenPanel(marketPanel));
-            CreateMenuButton(barGO.transform, "파티 구성", "UIIcons/menu_party", () => OpenPanel(partyPanel));
-            CreateMenuButton(barGO.transform, "퀘스트", "UIIcons/menu_quest", () => OpenPanel(questPanel));
+            CreateMenuButton(barGO.transform, "용병시장", "UIIcons/menu_market", () => OpenPanel(marketPanel), "M");
+            CreateMenuButton(barGO.transform, "파티 구성", "UIIcons/menu_party", () => OpenPanel(partyPanel), "T");
+            CreateMenuButton(barGO.transform, "퀘스트", "UIIcons/menu_quest", () => OpenPanel(questPanel), "Q");
             CreateMenuButton(barGO.transform, "도감", "UIIcons/menu_bestiary", BestiaryPanel.ShowGlobal); // 몬스터 도감 창
             CreateMenuButton(barGO.transform, "근처 길드", "UIIcons/menu_guilds", RivalGuildsPanel.ShowGlobal); // 근처 길드 순위·관계·거래 창
-            CreateMenuButton(barGO.transform, "건설", "UIIcons/menu_build", BuildMenuPanel.ShowGlobal); // 마을에 건물 짓기(BuildPlacement)
+            CreateMenuButton(barGO.transform, "건설", "UIIcons/menu_build", BuildMenuPanel.ShowGlobal, "B"); // 마을에 건물 짓기(BuildPlacement)
+            barGO.AddComponent<VillageHotkeys>().Init(marketPanel, partyPanel, questPanel); // M·T·Q·L·B 단축키
         }
 
         private static void OpenPanel(GameObject panel) => PanelActivator.Open(panel);
@@ -554,10 +577,11 @@ namespace GN3.UI
         private const float MenuIconInset = 6f;
 
         /// <summary>메뉴 버튼: 왼쪽에 아이콘, 남은 자리 가운데에 이름. 아이콘이 없으면 이름만. 이름은 "{label}Button"(튜토리얼이 이 이름으로 찾는다).</summary>
-        private static void CreateMenuButton(Transform parent, string label, string iconPath, UnityEngine.Events.UnityAction onClick)
+        private static void CreateMenuButton(Transform parent, string label, string iconPath, UnityEngine.Events.UnityAction onClick, string hotkey = null)
         {
             var buttonGO = new GameObject(label + "Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             buttonGO.transform.SetParent(parent, false);
+            if (hotkey != null) buttonGO.AddComponent<TooltipTrigger>().Text = $"{label} ({hotkey})"; // 단축키(VillageHotkeys)
 
             buttonGO.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.25f, 0.9f);
 

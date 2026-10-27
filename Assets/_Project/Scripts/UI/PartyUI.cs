@@ -74,6 +74,7 @@ namespace GN3.UI
 
         private void OnDestroy()
         {
+            if (_pendingQuest != null && PendingQuest == _pendingQuest) PendingQuest = null; // 씬이 바뀌면(불러오기) 편성도 끝난다
             PlayerParty.Instance.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnProgress -= RefreshList;
@@ -105,9 +106,42 @@ namespace GN3.UI
         }
 
         /// <summary>퀘스트 수락 시 호출됨. 이 퀘스트에 보낼 용병을 고르는 선택 모드로 전환한다.</summary>
-        public void BeginDispatch(Quest quest)
+        /// <summary>지금 편성 중인 의뢰(없으면 null). 게시판 카드가 "편성 중"으로 보인다(QuestBoardUI).</summary>
+        public static Quest PendingQuest { get; private set; }
+        /// <summary>편성 중인 의뢰가 바뀌었을 때(수락·취소·출발).</summary>
+        public static event System.Action PendingChanged;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetForPlaySession()
+        {
+            PendingQuest = null;
+            PendingChanged = null;
+        }
+
+        private void SetPending(Quest quest)
         {
             _pendingQuest = quest;
+            PendingQuest = quest;
+            PendingChanged?.Invoke();
+        }
+
+        /// <summary>그 의뢰가 아직 게시판(또는 중개인)에 붙어 있는가.</summary>
+        private static bool IsListed(Quest quest) =>
+            quest != null && (QuestBroker.Quests.Contains(quest) || (QuestBoardListings.Current != null && QuestBoardListings.Current.Contains(quest)));
+
+        /// <summary>[편성 취소]: 고른 것을 모두 풀고 의뢰는 게시판에 그대로 둔다.</summary>
+        private void CancelDispatch()
+        {
+            _selectedForDispatch.Clear();
+            _squadOf.Clear();
+            _leaderIds[0] = _leaderIds[1] = null;
+            SetPending(null);
+            RefreshList();
+        }
+
+        public void BeginDispatch(Quest quest)
+        {
+            SetPending(quest);
             _selectedForDispatch.Clear();
             _squadOf.Clear();
             _leaderIds[0] = _leaderIds[1] = null;
@@ -146,7 +180,7 @@ namespace GN3.UI
                 var selected = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id));
                 int teamPower = QuestDifficulty.TeamPower(selected);
                 string power = $"{QuestDifficulty.DescribeTeam(_pendingQuest, teamPower)} · {QuestDifficulty.DurationText(_pendingQuest, teamPower)}"
-                    + $" · 가방 {BagCatalog.CapacityOf(selected)}칸"; // 전리품을 들고 올 칸(BagCatalog)
+                    + $" · 가방 빈 칸 {BagCatalog.CapacityOf(selected)}칸"; // 전리품을 들고 올 칸(BagCatalog — 가방에 남은 것만큼 준다)
                 if (SquadCount > 1)
                 {
                     for (int s = 0; s < SquadCount; s++)
@@ -165,10 +199,16 @@ namespace GN3.UI
                     : $"{_selectedForDispatch.Count}/{_pendingQuest.MaxDispatchSize}명";
                 // 한 줄에 다 넣으면 창 폭을 넘어 난이도·소요가 잘린다 → 두 줄
                 _rows.Add(CreateSectionHeader($"파견 편성 — {QuestDifficulty.RichTitle(_pendingQuest)} ({size})\n{power}", 2));
+                _rows.Add(CreateDispatchToolsRow());
             }
 
             _rows.Add(CreateSectionHeader("보유 용병"));
-            foreach (var merc in PlayerParty.Instance.Members)
+            _rows.Add(CreateSortRow());
+            // 고른 정렬. 편성 중에는 그보다 먼저 고를 수 있는 사람을 위로(지치거나 다친 사람, 마을에 없는 사람 순).
+            var sorted = SortMembers(PlayerParty.Instance.Members);
+            var members = _pendingQuest == null ? sorted
+                : sorted.OrderBy(m => !Loans.InVillage(m)).ThenBy(m => !_selectedForDispatch.Contains(m.Id) && !CanPick(m)).ToList();
+            foreach (var merc in members)
                 _rows.Add(CreateMemberRow(merc));
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
@@ -207,6 +247,85 @@ namespace GN3.UI
             textRect.offsetMax = Vector2.zero;
 
             return go;
+        }
+
+        // ---------- 보유 용병 정렬(이번 실행 동안 기억) ----------
+        private static readonly string[] SortNames = { "고용순", "전투력", "직업", "나이", "계약", "상태" };
+        private static int _sort;
+
+        /// <summary>고른 정렬로(편성 중이 아니면 이 순서 그대로). 상태 = 지침·중상·피로·체력이 나쁜 사람부터.</summary>
+        private static List<Mercenary> SortMembers(IEnumerable<Mercenary> list) => (_sort switch
+        {
+            1 => list.OrderByDescending(m => m.CombatPower),
+            2 => list.OrderBy(m => m.Class.Kind).ThenByDescending(m => m.CombatPower),
+            3 => list.OrderBy(m => m.Age),
+            4 => list.OrderBy(m => Loans.IsGuest(m) ? int.MaxValue : Contracts.RemainingDays(m)),
+            5 => list.OrderByDescending(m => m.IsExhausted || m.IsSeverelyAiling).ThenByDescending(m => m.Fatigue)
+                     .ThenBy(m => m.CurrentHealth / (float)System.Math.Max(1, m.CurrentStats.MaxHealth)),
+            _ => list,
+        }).ToList();
+
+        /// <summary>"보유 용병" 아래 정렬 버튼 줄. 고른 것은 밝은 색.</summary>
+        private GameObject CreateSortRow()
+        {
+            var row = new GameObject("Sort", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            row.transform.SetParent(listContainer, false);
+            var layout = row.GetComponent<LayoutElement>();
+            layout.minHeight = layout.preferredHeight = 34;
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(4, 4, 0, 0);
+            h.spacing = 6;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childForceExpandWidth = h.childForceExpandHeight = false;
+            h.childControlWidth = h.childControlHeight = true;
+            var label = CreateText(row.transform, "정렬", 14, TextAnchor.MiddleLeft);
+            label.color = new Color(1f, 1f, 1f, 0.6f);
+            label.gameObject.AddComponent<LayoutElement>().minWidth = 36;
+            for (int i = 0; i < SortNames.Length; i++)
+            {
+                int mode = i;
+                var button = CreateActionButton(row.transform, SortNames[i],
+                    i == _sort ? new Color(0.62f, 0.5f, 0.2f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
+                    () => { _sort = mode; RefreshList(); });
+                var buttonLayout = button.GetComponent<LayoutElement>();
+                buttonLayout.minWidth = 60;
+                buttonLayout.minHeight = 28;
+            }
+            return row;
+        }
+
+        /// <summary>편성 머리줄 아래 버튼 줄: [편성 취소](의뢰는 게시판에 남는다) · [지난 편성](지난번 보낸 팀을 한 번에 고른다).</summary>
+        private GameObject CreateDispatchToolsRow()
+        {
+            var row = new GameObject("LastTeam", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            row.transform.SetParent(listContainer, false);
+            var layout = row.GetComponent<LayoutElement>();
+            layout.minHeight = layout.preferredHeight = 40;
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(4, 4, 2, 2);
+            h.spacing = 8;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childForceExpandWidth = h.childForceExpandHeight = false;
+            h.childControlWidth = h.childControlHeight = true;
+            var cancel = CreateActionButton(row.transform, "편성 취소", new Color(0.45f, 0.3f, 0.3f, 1f), CancelDispatch);
+            cancel.GetComponent<LayoutElement>().minWidth = 100;
+            cancel.gameObject.AddComponent<TooltipTrigger>().Text = "고른 용병을 풀고 편성을 그만둔다 (의뢰는 게시판에 그대로 남는다)";
+            // 도착하면 자동 전투(켜면 도착 편지로 묻지 않는다) — 마지막 선택을 기억
+            var auto = CreateActionButton(row.transform, _autoOnArrival ? "도착 시 자동: 켬" : "도착 시 자동: 끔",
+                _autoOnArrival ? new Color(0.3f, 0.55f, 0.35f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
+                () => { _autoOnArrival = !_autoOnArrival; RefreshList(); });
+            auto.GetComponent<LayoutElement>().minWidth = 140;
+            auto.gameObject.AddComponent<TooltipTrigger>().Text = "켜면 이 파견대는 목적지에 도착하자마자 자동으로 싸우고 결과 편지만 온다(직접 전투 보너스 없음)";
+            if (_lastTeam.Count == 0) return row;
+            var names = PlayerParty.Instance.Members.Where(m => _lastTeam.ContainsKey(m.Id)).Select(m => m.Name).ToList();
+            var button = CreateActionButton(row.transform, "지난 편성", new Color(0.3f, 0.4f, 0.5f, 1f), ApplyLastTeam,
+                interactable: PlayerParty.Instance.Members.Any(m => _lastTeam.ContainsKey(m.Id) && !_selectedForDispatch.Contains(m.Id) && CanPick(m)));
+            button.GetComponent<LayoutElement>().minWidth = 100;
+            var label = CreateText(row.transform, names.Count > 0 ? string.Join(", ", names) : "지난 팀이 모두 떠났습니다", 14, TextAnchor.MiddleLeft);
+            label.color = new Color(1f, 1f, 1f, 0.6f);
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            button.gameObject.AddComponent<TooltipTrigger>().Text = "지난번 보낸 용병 중 지금 갈 수 있는 사람을 고르고 분대·분대장을 되살린다";
+            return row;
         }
 
         private GameObject CreateExpeditionRow(Expedition expedition)
@@ -266,7 +385,7 @@ namespace GN3.UI
             restTextRect.offsetMax = Vector2.zero;
 
             var restButton = restButtonGO.GetComponent<Button>();
-            restButton.interactable = anyWounded;
+            ShopListUI.SetBlocked(restButton, anyWounded ? null : "다친 대원이 없어 쉴 필요가 없습니다.");
             restButton.onClick.AddListener(() => ExpeditionLog.Instance.Rest(expedition));
 
             bool canFight = expedition.IsReady && _battlingExpedition == null;
@@ -287,11 +406,16 @@ namespace GN3.UI
             btnTextRect.offsetMax = Vector2.zero;
 
             var button = buttonGO.GetComponent<Button>();
-            button.interactable = canFight;
+            ShopListUI.SetBlocked(button, canFight ? null
+                : !expedition.IsReady ? (expedition.IsReturning ? "임무를 마치고 돌아오는 중입니다." : "아직 목적지에 도착하지 않았습니다.")
+                : "다른 전투가 진행 중입니다. 끝나면 시작할 수 있습니다.");
             button.onClick.AddListener(() => StartBattle(expedition));
 
             return row;
         }
+
+        private const string DangerHex = "#e05a4a";  // 파견 불가(지침·중한 부상/병)
+        private const string CautionHex = "#f0a54a"; // 능력치 감소(피로·사기 낮음)·계약 갱신
 
         private GameObject CreateMemberRow(Mercenary merc)
         {
@@ -330,7 +454,8 @@ namespace GN3.UI
             Color textColor = onExpedition ? new Color(1f, 1f, 1f, 0.45f) : Color.white;
 
             string guestTag = Loans.GuestTag(merc) is string tag ? $" <size=13><color=#6ab8ff>({tag})</color></size>" : ""; // 근처 길드에서 빌려 온 손님
-            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}{guestTag}", 17, TextAnchor.MiddleLeft);
+            string lockTag = merc.Locked ? " <size=13><color=#f0c050>[잠금]</color></size>" : ""; // 해고·팔기 막힘
+            var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}{guestTag}{lockTag}", 17, TextAnchor.MiddleLeft);
             nameText.fontStyle = FontStyle.Bold;
             nameText.color = textColor;
             nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -349,12 +474,14 @@ namespace GN3.UI
             string status = where; // 둘째 줄(좁은 칸에서 "전투력 233 ·"처럼 어중간하게 끊기지 않게)
             if (merc.CurrentHealth < stats.MaxHealth) status += $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}";
             // 피로·사기: 지치면 파견 불가, 피로 50↑·사기 30↓은 능력치가 깎이니 눈에 띄게
-            if (merc.IsExhausted) status += $"  · 지침(피로 {merc.Fatigue})";
-            else if (merc.Fatigue >= Mercenary.TiredFatigue) status += $"  · 피로 {merc.Fatigue}";
-            if (merc.Morale < Mercenary.LowMorale) status += "  · 사기 낮음";
-            if (Contracts.NeedsRenewal(merc)) status += $"  · <color=#f0a54a>계약 {Contracts.RemainingDays(merc)}일 남음</color>";
-            foreach (var ailment in merc.Ailments) status += $"  · {ailment.Def.displayName}"; // 부상·질병(중하면 파견 불가)
-            var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}\n<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
+            // 파견을 막는 것은 빨강 "!", 능력치가 깎이는 것은 주황 — 색만이 아니라 "!"·글자로도 알 수 있게(글꼴에 없는 기호는 안 쓴다)
+            if (merc.IsExhausted) status += $"  · <color={DangerHex}>! 지침(피로 {merc.Fatigue})</color>";
+            else if (merc.Fatigue >= Mercenary.TiredFatigue) status += $"  · <color={CautionHex}>피로 {merc.Fatigue}</color>";
+            if (merc.Morale < Mercenary.LowMorale) status += $"  · <color={CautionHex}>사기 낮음</color>";
+            if (Contracts.NeedsRenewal(merc)) status += $"  · <color={CautionHex}>계약 {Contracts.RemainingDays(merc)}일 남음</color>";
+            foreach (var ailment in merc.Ailments) // 부상·질병(중하면 파견 불가)
+                status += ailment.Def.isSevere ? $"  · <color={DangerHex}>! {ailment.Def.displayName}(중)</color>" : $"  · {ailment.Def.displayName}";
+            var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}  <color=#a3937c>· 가방 {merc.BagContents.Count}/{merc.Bag.Slots}칸</color>\n<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
             powerText.color = onExpedition ? new Color(UITheme.TitleText.r, UITheme.TitleText.g, UITheme.TitleText.b, 0.5f) : UITheme.TitleText;
             powerText.horizontalOverflow = HorizontalWrapMode.Wrap; // 길면 버튼 앞에서 줄을 바꾼다(줄 높이는 RefreshList가 늘림)
             powerText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -374,11 +501,11 @@ namespace GN3.UI
 
             if (_pendingQuest != null && !onExpedition)
             {
-                bool atCap = !selected && _selectedForDispatch.Count >= _pendingQuest.MaxDispatchSize;
-                CreateActionButton(row.transform, selected ? "선택됨" : "선택",
+                string block = SelectBlock(merc, selected);
+                var select = CreateActionButton(row.transform, selected ? "선택됨" : "선택",
                     selected ? new Color(0.3f, 0.55f, 0.35f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
-                    () => ToggleSelection(merc), interactable: !IsLockedGuest(merc) && Loans.CanDispatchFor(merc, _pendingQuest)
-                        && !atCap && (selected || (!merc.IsExhausted && !merc.IsSeverelyAiling)));
+                    () => ToggleSelection(merc), interactable: block == null);
+                if (block != null) select.gameObject.AddComponent<TooltipTrigger>().Text = block; // 왜 못 고르는지(누르기 전에)
             }
 
             // 파견에 고른 용병은 해고 대신 분대장 버튼(직접 진행 전투에서 조종할 사람). 두 분대 퀘스트는 분대 버튼도(누르면 다른 분대로).
@@ -409,8 +536,9 @@ namespace GN3.UI
                 // 해고: 첫 클릭에 위약금을 보여 주고, 한 번 더 눌러야 낸다(남은 계약 주급의 절반)
                 bool armed = _fireArmedId == merc.Id;
                 int release = Contracts.ReleaseCost(merc);
-                CreateActionButton(row.transform, armed ? $"해고 -{release}G?" : "해고", new Color(0.55f, 0.25f, 0.25f, 1f),
+                var fire = CreateActionButton(row.transform, armed ? $"해고 -{release}G?" : "해고", new Color(0.55f, 0.25f, 0.25f, 1f),
                     () => Fire(merc, armed, release));
+                ShopListUI.SetBlocked(fire, merc.Locked ? "잠긴 용병입니다 — 용병 정보 창에서 잠금을 풀어야 해고할 수 있습니다." : null);
             }
 
             return row;
@@ -420,6 +548,7 @@ namespace GN3.UI
 
         private void Fire(Mercenary merc, bool armed, int release)
         {
+            if (merc.Locked) return; // 잠긴 용병(버튼도 막혀 있다)
             if (!armed)
             {
                 _fireArmedId = merc.Id;
@@ -438,6 +567,49 @@ namespace GN3.UI
             Contracts.Remove(merc);
             RivalGuilds.OnPlayerReleased(merc); // 며칠 안에 근처 길드가 데려갈 수 있다
             ToastLog.Show(release > 0 ? $"{merc.Name} 해고 (위약금 -{release}G)" : $"{merc.Name} 해고", false);
+        }
+
+        /// <summary>파견 편성에서 이 용병의 [선택]을 누를 수 없으면 이유, 되면 null.</summary>
+        private string SelectBlock(Mercenary merc, bool selected)
+        {
+            if (IsLockedGuest(merc)) return "연합 의뢰에 함께 가는 손님이라 뺄 수 없습니다.";
+            if (!Loans.CanDispatchFor(merc, _pendingQuest)) return "다른 연합 의뢰에 합류한 손님입니다.";
+            if (selected) return null;
+            if (_selectedForDispatch.Count >= _pendingQuest.MaxDispatchSize) return $"인원이 다 찼습니다 (최대 {_pendingQuest.MaxDispatchSize}명).";
+            if (merc.IsExhausted) return $"지쳐서 출전할 수 없습니다 (피로 {merc.Fatigue}) — 마을에서 쉬면 회복합니다.";
+            if (merc.IsSeverelyAiling) return $"크게 다치거나 앓아 출전할 수 없습니다 ({merc.AilmentSummary()}) — 병원에서 치료하세요.";
+            return null;
+        }
+
+        /// <summary>지금 이 편성에 고를 수 있는가(마을에 있고 SelectBlock이 없음). 정렬·지난 편성에 쓴다.</summary>
+        private bool CanPick(Mercenary merc) => Loans.InVillage(merc) && SelectBlock(merc, false) == null;
+
+        private static bool _autoOnArrival; // 편성 화면 "도착 시 자동" 토글(이번 실행 동안 기억, 파견마다 저장됨)
+
+        // 지난 편성(이번 실행 동안만 기억): 마지막으로 보낸 용병 id → 분대, 분대장
+        private static readonly Dictionary<string, int> _lastTeam = new Dictionary<string, int>();
+        private static readonly string[] _lastLeaders = new string[2];
+
+        /// <summary>[지난 편성]: 지난번 보낸 사람 중 지금 고를 수 있는 사람을 인원 한도까지 고르고 분대·분대장을 되살린다.</summary>
+        private void ApplyLastTeam()
+        {
+            if (_pendingQuest == null) return;
+            foreach (var merc in PlayerParty.Instance.Members.Where(m => _lastTeam.ContainsKey(m.Id)).ToList())
+            {
+                if (_selectedForDispatch.Contains(merc.Id) || !CanPick(merc)) continue;
+                int squad = SquadCount > 1 ? _lastTeam[merc.Id] : 0;
+                if (SquadCount > 1 && SquadMembers(squad) >= _pendingQuest.SquadSize) squad = 1 - squad;
+                if (SquadCount > 1 && SquadMembers(squad) >= _pendingQuest.SquadSize) continue;
+                _selectedForDispatch.Add(merc.Id);
+                _squadOf[merc.Id] = squad;
+            }
+            for (int s = 0; s < 2; s++)
+            {
+                string leader = _lastLeaders[s];
+                if (leader != null && _selectedForDispatch.Contains(leader) && _squadOf.TryGetValue(leader, out int sq) && sq == s) _leaderIds[s] = leader;
+                else if (_leaderIds[s] == null || !_selectedForDispatch.Contains(_leaderIds[s])) PassLeader(s);
+            }
+            RefreshList();
         }
 
         private void ToggleSelection(Mercenary merc)
@@ -549,6 +721,14 @@ namespace GN3.UI
                 return;
             }
 
+            // 편성하는 동안 근처 길드가 가져갔거나 기한이 지났으면 출발하지 않는다(의뢰는 출발할 때 게시판에서 뗀다)
+            if (!IsListed(_pendingQuest))
+            {
+                ToastLog.Show($"{_pendingQuest.Title}: 의뢰가 사라졌습니다 (근처 길드가 가져갔거나 기한이 지남)");
+                CancelDispatch();
+                return;
+            }
+
             var members = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id)).ToList();
             var exhausted = members.Where(m => m.IsExhausted).Select(m => m.Name).ToList();
             if (exhausted.Count > 0)
@@ -563,10 +743,18 @@ namespace GN3.UI
                 return;
             }
             var squads = SquadCount > 1 ? members.Select(m => _squadOf.TryGetValue(m.Id, out int s) ? s : 0).ToList() : null;
-            ExpeditionLog.Instance.Dispatch(_pendingQuest, members, members.FirstOrDefault(m => m.Id == _leaderIds[0]),
+            // 지난 편성으로 기억(손님은 빼고) — 다음 편성의 [지난 편성]
+            _lastTeam.Clear();
+            foreach (var sent in members.Where(m => !Loans.IsGuest(m)))
+                _lastTeam[sent.Id] = _squadOf.TryGetValue(sent.Id, out int sq) ? sq : 0;
+            _lastLeaders[0] = _leaderIds[0];
+            _lastLeaders[1] = _leaderIds[1];
+            var sentOut = ExpeditionLog.Instance.Dispatch(_pendingQuest, members, members.FirstOrDefault(m => m.Id == _leaderIds[0]),
                 squads, SquadCount > 1 ? members.FirstOrDefault(m => m.Id == _leaderIds[1]) : null);
+            if (sentOut != null) sentOut.AutoOnArrival = _autoOnArrival;
+            if (!QuestBroker.Remove(_pendingQuest)) QuestBoardListings.Remove(_pendingQuest); // 출발하면 게시판에서 뗀다(저장에서도 빠진다)
 
-            _pendingQuest = null;
+            SetPending(null);
             _selectedForDispatch.Clear();
             _squadOf.Clear();
             _leaderIds[0] = _leaderIds[1] = null;
@@ -671,7 +859,7 @@ namespace GN3.UI
             Debug.Log(text);
         }
 
-        private void CreateActionButton(Transform parent, string label, Color color, UnityEngine.Events.UnityAction onClick, bool interactable = true)
+        private Button CreateActionButton(Transform parent, string label, Color color, UnityEngine.Events.UnityAction onClick, bool interactable = true)
         {
             var buttonGO = new GameObject(label + "Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             buttonGO.transform.SetParent(parent, false);
@@ -691,6 +879,7 @@ namespace GN3.UI
             var button = buttonGO.GetComponent<Button>();
             button.interactable = interactable;
             button.onClick.AddListener(onClick);
+            return button;
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

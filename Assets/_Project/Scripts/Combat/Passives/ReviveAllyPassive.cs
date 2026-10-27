@@ -32,7 +32,9 @@ namespace GN3.Combat
             if (rng.NextDouble() >= ProcChance) return;
 
             var target = fallen[rng.Next(fallen.Count)];
+            int before = target.CurrentHealth;
             target.Heal(Math.Clamp(CombatFormulas.Scale(self.Stats.Holy * ReviveHolyRatio), 1, target.Stats.MaxHealth));
+            Combatant.RecordHeal(self, before, target); // 평점용(살려 낸 체력)
             _used = true;
         }
     }

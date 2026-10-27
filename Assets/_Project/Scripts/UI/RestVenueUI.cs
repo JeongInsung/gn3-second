@@ -76,10 +76,15 @@ namespace GN3.UI
 
             var guests = _venue.Guests;
             int facility = _venue == RestVenues.HotSpring ? GuildFacilities.Level(Facility.HotSpring) : 0; // 길드 시설(온천만)
-            CreateHeaderRow($"{_venue.Name} {guests.Count}/{_venue.Capacity} · {_venue.Summary}" +
+            var guestHeader = CreateHeaderRow($"{_venue.Name} {guests.Count}/{_venue.Capacity} · {_venue.Summary}" +
                             (facility > 0 ? $" · 시설 {facility}단계(피로 회복 ×{GuildFacilities.HotSpringReliefMultiplier:0.0#})" : ""));
             if (guests.Count == 0) ShopListUI.CreateEmptyRow(_panel, $"{_venue.Name}에 있는 용병이 없습니다.");
             var venue = _venue;
+            if (guests.Count > 0)
+                ShopListUI.CreateButton(guestHeader.transform, "모두 빼기", () =>
+                {
+                    foreach (var m in venue.Guests.ToList()) venue.Remove(m);
+                }, 100f);
             foreach (var merc in guests)
             {
                 var row = ShopListUI.CreateRow(_panel, "Guest_" + merc.Name);
@@ -93,7 +98,19 @@ namespace GN3.UI
             // 직접 넣기: 마을에 있는 파티원(파견 중·이미 여기 있는 사람 제외). 연구소·성당은 직업이 맞는 사람만.
             var candidates = PlayerParty.Instance.Members
                 .Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m) && !venue.IsInside(m) && ClassFits(venue, m)).ToList();
-            if (candidates.Count > 0) CreateHeaderRow($"{venue.Name}에 보내기 · {venue.MaxSessionHours:0}시간");
+            if (candidates.Count > 0)
+            {
+                var header = CreateHeaderRow($"{venue.Name}에 보내기 · {venue.MaxSessionHours:0}시간");
+                // 막힌 사유가 없는 사람을 자리만큼 한꺼번에
+                var sendAll = ShopListUI.CreateButton(header.transform, "모두 넣기", () =>
+                {
+                    int sent = 0;
+                    foreach (var m in candidates)
+                        if (BlockReason(venue, m) == null && venue.TryAdd(m, venue.MaxSessionHours)) sent++;
+                    if (sent > 0) ToastLog.Show($"{sent}명 {venue.Name} 입장 ({venue.MaxSessionHours:0}시간)");
+                }, 100f);
+                ShopListUI.SetBlocked(sendAll, candidates.Any(m => BlockReason(venue, m) == null) ? null : "지금 넣을 수 있는 용병이 없습니다.");
+            }
             foreach (var merc in candidates)
             {
                 var row = ShopListUI.CreateRow(_panel, "Candidate_" + merc.Name);
@@ -160,12 +177,13 @@ namespace GN3.UI
             return $"{research} · {line}";
         }
 
-        private void CreateHeaderRow(string title)
+        private GameObject CreateHeaderRow(string title)
         {
             var row = ShopListUI.CreateRow(_panel, "Header");
             var text = ShopListUI.CreateText(row.transform, title, 16, TextAnchor.MiddleLeft, UITheme.TitleText);
             text.fontStyle = FontStyle.Bold;
             text.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            return row;
         }
     }
 }

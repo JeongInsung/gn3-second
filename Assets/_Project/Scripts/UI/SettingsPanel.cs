@@ -19,7 +19,7 @@ namespace GN3.UI
         private static readonly Vector2Int[] Resolutions = { new Vector2Int(1280, 720), new Vector2Int(1600, 900), new Vector2Int(1920, 1080) };
 
         private const float Width = 600f;
-        private const float Height = 476f;
+        private const float Height = 720f; // 볼륨·화면·해상도 + 안내 다시 보기 + 단축키 목록
         private const float LabelWidth = 130f;
         private const float RowLeft = 40f;
         private static readonly Color SelectedTint = new Color(1f, 0.82f, 0.5f); // 고른 버튼: 숯빛 버튼을 따뜻한 청동빛으로
@@ -170,6 +170,29 @@ namespace GN3.UI
                 options.Add(($"{r.x}×{r.y}", () => SetResolution(resolution), () => SavedResolution == resolution));
             }
             ChoiceRow(panel.transform, y, 124f, options.ToArray());
+
+            // 처음 여는 창 안내(FirstTimeTips)를 다시 켠다
+            y -= 76f;
+            RowLabel(panel.transform, "안내", y);
+            Text resetLabel = null;
+            var reset = CreateButton(panel.transform, "안내 다시 보기", () =>
+            {
+                FirstTimeTips.ResetAll();
+                if (resetLabel != null) resetLabel.text = "다시 보기 켬";
+            }, out resetLabel);
+            PlaceTop((RectTransform)reset.transform, RowLeft + LabelWidth, y, 190f, 44f, center: false);
+            reset.gameObject.AddComponent<TooltipTrigger>().Text = "대장간·창고·건강 창 등을 처음 열 때 뜨던 안내를 다음에 열 때 다시 보여 준다";
+
+            // 단축키 목록(게임 안에서 알 수 있게)
+            y -= 64f;
+            RowLabel(panel.transform, "단축키", y);
+            var keys = CreateText(panel.transform,
+                "마을  M 용병시장 · T 파티 · Q 퀘스트 · L 우편함 · B 건설\n" +
+                "      Space 시간 진행 · F 배속(1/2/4) · P 일시정지 · ESC 창 닫기/메뉴\n" +
+                "전투  Space 일시정지 · F 배속 · Q 스킬 · Tab 분대 바꾸기 · B 가방\n" +
+                "      분대 명령 1 집결 · 2 후퇴 · 3 전진 · 4 집중 · 결과 화면 Enter 마을로",
+                UITheme.SmallSize, TextAnchor.UpperLeft, UITheme.BodyText);
+            PlaceTop(keys.rectTransform, RowLeft + LabelWidth, y - 10f, Width - RowLeft * 2f - LabelWidth, 100f, center: false);
 
             if (Application.isEditor)
             {

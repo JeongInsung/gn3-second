@@ -123,42 +123,65 @@ namespace GN3.UI
             Mailbox.ImportantPosted -= MarkStop; // 넘기는 도중 씬이 바뀌어도 구독이 남지 않게
         }
 
-        /// <summary>1배속/2배속 토글 버튼. 지금 속도를 글자로 보여 주고 2배속이면 강조색이 된다.</summary>
+        /// <summary>배속 버튼(1 → 2 → 4배속, F). 지금 속도를 글자로 보여 주고 빠르면 강조색, 일시정지(P)면 "일시정지".</summary>
         public void SetSpeedButton(Button button)
         {
             _speedButton = button;
+            if (button != null && button.GetComponent<TooltipTrigger>() == null)
+                button.gameObject.AddComponent<TooltipTrigger>().Text = "배속 바꾸기 (F) · 일시정지 (P)";
             UpdateSpeedButton();
         }
 
+        private static readonly int[] Speeds = { 1, 2, 4 };
+
+        /// <summary>1 → 2 → 4 → 1배속. 일시정지 중에 누르면 풀린다.</summary>
         public void ToggleSpeed()
         {
-            _speed = _speed == 1 ? 2 : 1;
-            if (!GamePause.IsPaused) Time.timeScale = _speed; // 시계·캐릭터·Animator·파티클이 함께 빨라진다
+            if (_userPaused) _userPaused = false;
+            else _speed = Speeds[(System.Array.IndexOf(Speeds, _speed) + 1) % Speeds.Length];
+            ApplyTimeScale(); // 시계·캐릭터·Animator·파티클이 함께 빨라진다
             UpdateSpeedButton();
         }
+
+        /// <summary>플레이어가 건 일시정지(P). 시계·캐릭터가 멈춘다. 진행·배속을 누르면 풀린다.</summary>
+        public void TogglePause()
+        {
+            _userPaused = !_userPaused;
+            ApplyTimeScale();
+            UpdateSpeedButton();
+        }
+
+        private bool _userPaused;
+
+        // 중요 알림창(GamePause)이나 일시정지면 시계·캐릭터·애니메이션이 모두 멈춘다.
+        private void ApplyTimeScale() => Time.timeScale = GamePause.IsPaused || _userPaused ? 0f : _speed;
 
         private void UpdateSpeedButton()
         {
             if (_speedButton == null) return;
             var label = _speedButton.GetComponentInChildren<Text>();
-            if (label != null) label.text = _speed == 1 ? "1배속" : "2배속";
+            if (label != null) label.text = _userPaused ? "일시정지" : $"{_speed}배속";
             var image = _speedButton.GetComponent<Image>();
-            if (image != null) image.color = _speed == 1 ? SpeedNormalColor : SpeedFastColor;
+            if (image != null) image.color = _speed == 1 && !_userPaused ? SpeedNormalColor : SpeedFastColor;
         }
 
         private void Update()
         {
-            // 중요 알림창이 떠 있으면(GamePause) 시계·캐릭터·애니메이션이 모두 멈춘다.
-            Time.timeScale = GamePause.IsPaused ? 0f : _speed;
-            if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
-                RequestAdvance();
+            ApplyTimeScale();
+            var keyboard = Keyboard.current;
+            if (keyboard != null && !VillageHotkeys.IsTyping)
+            {
+                if (keyboard.spaceKey.wasPressedThisFrame) RequestAdvance();
+                if (keyboard.fKey.wasPressedThisFrame) ToggleSpeed();
+                if (keyboard.pKey.wasPressedThisFrame) TogglePause();
+            }
             FlowTime();
         }
 
         /// <summary>가만히 둬도 시간이 흐른다. 진행·건너뛰기 전환 중이거나 게임이 멈춰 있으면 멈춘다.</summary>
         private void FlowTime()
         {
-            if (_isAdvancing || GamePause.IsPaused) return;
+            if (_isAdvancing || GamePause.IsPaused || _userPaused) return;
             int dayBefore = GameClock.CurrentDay;
             GameClock.AdvanceHours(Time.deltaTime / RealSecondsPerGameHour); // deltaTime에 배속(timeScale)이 이미 들어 있다
             var cycle = DayNightCycle.Instance;
@@ -176,6 +199,12 @@ namespace GN3.UI
         public void RequestAdvance()
         {
             if (_isAdvancing || GamePause.IsPaused) return;
+            if (_userPaused) // 진행하면 일시정지는 풀린다
+            {
+                _userPaused = false;
+                ApplyTimeScale();
+                UpdateSpeedButton();
+            }
             StartCoroutine(AdvanceRoutine());
         }
 

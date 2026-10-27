@@ -26,6 +26,11 @@ namespace GN3.UI
             if (building == null || !building.DisplayName.Contains(ShopKeyword)) return;
             _panel = panel;
             ShowWeapons();
+            FirstTimeTips.Show(FirstTimeTips.Weapons, "대장간",
+                "무기는 용병 한 명이 하나만 든다. 공격·방어·속도 보너스가 능력치에 더해진다.\n" +
+                "직업 적성이 맞는 무기는 공격 보너스가 1.5배 — 목록의 \"○○ 적성\"을 보고 고르자.\n" +
+                "새 무기를 쥐여 주면 들던 무기는 길드 창고로 간다(창고가 가득이면 버려진다).\n" +
+                "몬스터 전리품·마정석으로만 만드는 제작 무기도 있다.");
         }
 
         // ---------- 무기 목록 ----------
@@ -148,13 +153,14 @@ namespace GN3.UI
                 int before = merc.CurrentStats.Offense;
                 int after = before - (merc.Weapon?.AttackFor(merc.Class.Kind) ?? 0) + weapon.AttackFor(merc.Class.Kind);
                 string fit = weapon.Suits(merc.Class.Kind) ? " (적성)" : "";
+                string lost = merc.Weapon != null && GuildStorage.IsFull ? " · 창고 가득 — 들던 무기는 버려짐" : ""; // 들던 무기는 창고로 간다(Equip)
                 ShopListUI.CreateTwoLineLabel(row.transform,
                     $"{merc.Name} ({merc.Class.ClassName})  현재: {current}",
-                    $"이 무기로: {merc.OffenseLabel} {before} → {after}{fit}");
+                    $"이 무기로: {merc.OffenseLabel} {before} → {after}{fit}{lost}");
 
                 var target = merc;
                 var button = ShopListUI.CreateButton(row.transform, "장착", () => Equip(weapon, target));
-                button.interactable = merc.Weapon != weapon;
+                ShopListUI.SetBlocked(button, merc.Weapon != weapon ? null : "이미 이 무기를 들고 있습니다.");
             }
 
             ShopListUI.EndList(_panel);
@@ -184,8 +190,11 @@ namespace GN3.UI
                 ToastLog.Show($"골드가 부족합니다 (필요 {weapon.Price}G, 보유 {Wallet.Gold}G)", false);
                 return;
             }
+            // 들던 무기는 창고로(가득 차 있으면 버린다 — 대상 목록에 미리 알린다)
+            var old = merc.Weapon;
+            string back = old == null ? "" : GuildStorage.TryAdd(old) ? $", {Josa.EunNeun(old.Name)} 창고로" : $", 창고가 가득 차 {Josa.EulReul(old.Name)} 버렸습니다";
             merc.Equip(weapon);
-            ToastLog.Show($"{Josa.IGa(merc.Name)} {weapon.Name} 장착 ({weapon.DescribeFor(merc.Class.Kind)}) -{weapon.Price}G");
+            ToastLog.Show($"{Josa.IGa(merc.Name)} {weapon.Name} 장착 ({weapon.DescribeFor(merc.Class.Kind)}) -{weapon.Price}G{back}");
             ShowWeapons();
         }
     }

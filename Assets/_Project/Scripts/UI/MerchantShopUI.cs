@@ -4,7 +4,7 @@ using UnityEngine;
 namespace GN3.UI
 {
     /// <summary>
-    /// 떠돌이 상인 상점 창(TravelingMerchant): 오늘 파는 건설 재료 줄마다 그림 · 이름(보유) · 남은 수량·값 · [사기].
+    /// 재료 상인 상점 창(TravelingMerchant): 오늘 파는 건설 재료 줄마다 그림 · 이름(보유) · 남은 수량·값 · [사기].
     /// 판은 건물 패널(BuildingPanel)과 같은 틀을 하나 더 만들어 쓴다. MainMenuBootstrapper가 만들고, 마을의 상인을 누르면 연다.
     /// </summary>
     public static class MerchantShopUI
@@ -24,7 +24,7 @@ namespace GN3.UI
             if (_panel == null) return;
             if (!TravelingMerchant.IsHere)
             {
-                ToastLog.Show("떠돌이 상인은 이미 떠났습니다.", false);
+                ToastLog.Show($"{TravelingMerchant.DisplayName}은 이미 떠났습니다.", false);
                 return;
             }
             Fill();
@@ -38,7 +38,7 @@ namespace GN3.UI
 
         private static void Fill()
         {
-            _panel.Show("떠돌이 상인", $"보유 {Wallet.Gold}G");
+            _panel.Show(TravelingMerchant.DisplayName,$"보유 {Wallet.Gold}G");
             ShopListUI.BeginList(_panel);
             foreach (var (item, count) in TravelingMerchant.Stock)
             {

@@ -46,6 +46,8 @@ namespace GN3.World
         public const string CampPrefix = "갈색 원뿔형 유목민 텐트";
         public const string BarracksPrefix = "중세 군영 천막";
         public const string CottagePrefix = "중세 판타지 픽셀 오두막";
+        public const string AidTentPrefix = "붉은 십자 야전 병원 천막";
+        public const string StallPrefix = "중세 판타지 약초 상점 텐트";
 
         /// <summary>용병 텐트 한 채에 묵는 용병 수(InnRest).</summary>
         public const int TentBeds = 3;
@@ -55,14 +57,14 @@ namespace GN3.World
         public static readonly string[] RetiredPrefixes = { CampPrefix };
 
         /// <summary>예전 저장(건물이 처음부터 다 있던 마을)에는 없던 그림 — 그 저장을 불러와도 지은 것으로 치지 않는다.</summary>
-        public static readonly string[] OldVillageMissing = { TentPrefix, CampPrefix, BarracksPrefix, CottagePrefix };
+        public static readonly string[] OldVillageMissing = { TentPrefix, CampPrefix, BarracksPrefix, CottagePrefix, AidTentPrefix, StallPrefix };
 
         private static (LootItem, int)[] M(params (LootItem, int)[] materials) => materials;
 
         public static readonly Entry[] All =
         {
             // 새 게임은 빈 숲에서 시작한다(StartBuilt 건물 없음) — 길드 천막과 첫 용병 텐트는 무료로 바로 세운다(2026-10-26).
-            new Entry { Id = "tent", Name = "길드 천막", Description = "창고·시설 · 3명 숙소", Prefixes = new[] { TentPrefix },
+            new Entry { Id = "tent", Name = "길드 천막", Description = "창고·시설", Prefixes = new[] { TentPrefix },
                 RequiredRank = 0, Cost = 0, Materials = M() },
             // 퀘스트 게시판은 돌빛부터(2026-10-26) — 그 전엔 며칠마다 오는 의뢰 중개인(QuestBroker)에게서만 의뢰를 받는다.
             // 정착민 시스템이 생기면 "정착민이 있을 때" 조건도 붙인다.
@@ -73,6 +75,13 @@ namespace GN3.World
             new Entry { Id = "barracks", Name = "용병 텐트", Description = $"용병 {TentBeds}명 숙소",
                 Prefixes = new[] { BarracksPrefix }, RequiredRank = 0, Cost = 0, Repeatable = true,
                 Materials = M((LootCatalog.Cloth, 4), (LootCatalog.Rope, 3), (LootCatalog.Stake, 4), (LootCatalog.IronRing, 2)) },
+            // 초반 임시 건물(2026-10-27): 정식 건물(병원·잡화점)이 생겨도 남지만 효과는 꺼진다(Ailments.AidTentActive · StallShop).
+            new Entry { Id = "aidtent", Name = "간이 의무 천막", Description = "부상·병 자연 회복 ×2 (병원 전까지)",
+                Prefixes = new[] { AidTentPrefix }, RequiredRank = 0, Cost = 80,
+                Materials = M((LootCatalog.Cloth, 3), (LootCatalog.Stake, 2), (LootCatalog.Rope, 1)) },
+            new Entry { Id = "stall", Name = "행상 좌판", Description = "기초 치료품 (잡화점 전까지, 비쌈)",
+                Prefixes = new[] { StallPrefix }, RequiredRank = 0, Cost = 60,
+                Materials = M((LootCatalog.Log, 2), (LootCatalog.Cloth, 2)) },
             new Entry { Id = "inn", Name = "여관", Description = "밤 회복 · 파티 구성",
                 Prefixes = new[] { "여관" }, RequiredRank = 1, Cost = 300,
                 Materials = M((LootCatalog.Log, 6), (LootCatalog.Nail, 6), (LootCatalog.Cloth, 2)) },
@@ -88,7 +97,7 @@ namespace GN3.World
             new Entry { Id = "hospital", Name = "병원", Description = "입원 치료",
                 Prefixes = new[] { "십자가가 돋보이는 중세 픽셀 병원" }, RequiredRank = 2, Cost = 600,
                 Materials = M((LootCatalog.Log, 4), (LootCatalog.Cloth, 6), (LootCatalog.Thread, 3), (LootCatalog.Needle, 2)) },
-            new Entry { Id = "guildhall", Name = "길드 홀", Description = "정식 길드 · 3명 숙소",
+            new Entry { Id = "guildhall", Name = "길드 홀", Description = "정식 길드",
                 Prefixes = new[] { "쇠락한 모험가 길드 홀" }, RequiredRank = 2, Cost = 800, Replaces = "tent",
                 Materials = M((LootCatalog.Log, 10), (LootCatalog.Nail, 10), (LootCatalog.IronRing, 4), (LootCatalog.Cloth, 4)) },
             new Entry { Id = "hotspring", Name = "온천", Description = "피로 회복",

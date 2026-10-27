@@ -99,6 +99,7 @@ namespace GN3.Combat
             // 기록·화면 피해는 남은 체력까지(마무리 일격의 확정 처치 ×100이 "-3000"으로 뜨지 않게)
             int loggedDamage = context.Evaded ? 0 : Math.Min(context.Damage, healthBefore);
             var evt = new BattleEvent(round, attacker, target, loggedDamage, targetDefeated, context.Evaded, blocked: context.Blocked && !context.Evaded);
+            Combatant.RecordHit(attacker, target, loggedDamage, targetDefeated); // 평점용 활약(BattleRating)
 
             if (targetDefeated)
                 RaiseAllyDefeated(targetTeam, target);
@@ -121,6 +122,7 @@ namespace GN3.Combat
                     int damage = unit.TakePoisonTick();
                     bool defeated = !unit.IsAlive;
                     events.Add(new BattleEvent(round, source ?? unit, unit, damage, defeated, isPoison: true));
+                    Combatant.RecordHit(source, unit, damage, defeated); // 독 피해·처치는 건 쪽 몫
                     if (defeated) RaiseAllyDefeated(team, unit);
                 }
             return events;
