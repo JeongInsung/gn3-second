@@ -74,6 +74,14 @@ namespace GN3.UI
         public static int UnreadCount => _mails.Count(m => !m.Read);
         public static int PendingChoiceCount => _mails.Count(m => m.IsPendingChoice);
 
+        /// <summary>읽었고 처리가 끝난 편지(선택 대기·확인 안 한 중요 편지는 남긴다)를 지운다. 지운 수.</summary>
+        public static int RemoveRead()
+        {
+            int removed = _mails.RemoveAll(m => m.Read && !m.IsPendingChoice && !(m.Important && !m.Acknowledged));
+            if (removed > 0) Changed?.Invoke();
+            return removed;
+        }
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForPlaySession()
         {
@@ -143,6 +151,12 @@ namespace GN3.UI
         public static void PostArrival(Expedition expedition)
         {
             if (expedition == null || _mails.Any(m => m.Kind == MailKind.Arrival && m.Expedition == expedition && !m.Resolved)) return;
+            // 편성 때 "도착하면 자동 전투"를 골랐으면 묻지 않고 바로(결과 편지만 온다)
+            if (expedition.AutoOnArrival && !ExpeditionLog.Instance.IsRestoring && MailActions.CanFight(expedition))
+            {
+                MailActions.AutoFight(expedition);
+                return;
+            }
             var quest = expedition.Quest;
             var members = expedition.Members.Where(m => m.IsAlive).ToList();
             string body = $"{QuestDifficulty.RichTitle(quest)}\n" +
@@ -173,6 +187,7 @@ namespace GN3.UI
             fromDay = System.Math.Min(fromDay, DailyLog.FirstPendingDay);
             var pending = DailyLog.TakePending();
             var sb = new StringBuilder();
+            AppendSummary(sb);
             for (int day = fromDay; day <= toDay; day++)
             {
                 sb.Append($"<b>■ {GameCalendar.Format(day)}</b>\n");
@@ -196,6 +211,45 @@ namespace GN3.UI
                 ? $"{GameCalendar.Format(fromDay)} 보고"
                 : $"{GameCalendar.Format(fromDay)} ~ {GameCalendar.Format(toDay)} 보고";
             Post(MailKind.Report, title, sb.ToString().TrimEnd());
+        }
+
+        // 지난 보고서 때의 골드·명성(요약의 "변화"). -1이면 아직 없음(이번 실행의 첫 보고서는 변화 줄을 빼고 기준만 잡는다).
+        private static int _reportGold = -1, _reportRep = -1;
+
+        /// <summary>
+        /// 보고서 맨 위 요약: 골드·명성 변화와 지금 손봐야 할 것(도착한 파견·지친/중한 용병·계약 갱신·주급 부족). 해당하는 줄만.
+        /// </summary>
+        private static void AppendSummary(StringBuilder sb)
+        {
+            var lines = new List<string>();
+            int gold = Economy.Wallet.Gold, rep = Economy.Guild.Reputation;
+            if (_reportGold >= 0)
+            {
+                int dg = gold - _reportGold, dr = rep - _reportRep;
+                if (dg != 0 || dr != 0)
+                    lines.Add($"골드 {_reportGold} → {gold} ({dg:+0;-0}G) · 명성 {_reportRep} → {rep} ({dr:+0;-0})");
+            }
+            _reportGold = gold;
+            _reportRep = rep;
+
+            var todo = new List<string>();
+            int arrived = ExpeditionLog.Instance.Active.Count(e => e.IsReady);
+            if (arrived > 0) todo.Add($"도착해 전투를 기다리는 파견 {arrived}개");
+            var village = Mercenaries.PlayerParty.Instance.Members.Where(m => m.IsAlive && !ExpeditionLog.Instance.IsOnExpedition(m)).ToList();
+            int exhausted = village.Count(m => m.IsExhausted);
+            if (exhausted > 0) todo.Add($"지친 용병 {exhausted}명 (파견 불가)");
+            int severe = village.Count(m => m.IsSeverelyAiling && !Mercenaries.Hospital.IsAdmitted(m));
+            if (severe > 0) todo.Add($"중한 부상·병 {severe}명 (병원 치료 권장)");
+            int renew = Mercenaries.PlayerParty.Instance.Members.Count(Mercenaries.Contracts.NeedsRenewal);
+            if (renew > 0) todo.Add($"계약 갱신이 필요한 용병 {renew}명");
+            int wage = Mercenaries.MercenaryCondition.TotalWeeklyWage();
+            if (gold < wage) todo.Add($"다음 주급 {wage}G까지 {wage - gold}G 부족 ({GameCalendar.Format(Mercenaries.MercenaryCondition.NextPayday)})");
+            if (todo.Count > 0) lines.Add(Colored("확인할 일: " + string.Join(" · ", todo), AlertColor));
+
+            if (lines.Count == 0) return;
+            sb.Append("<b>■ 요약</b>\n");
+            foreach (var line in lines) sb.Append("· ").Append(line).Append('\n');
+            sb.Append('\n');
         }
 
         public static void MarkRead(Mail mail)

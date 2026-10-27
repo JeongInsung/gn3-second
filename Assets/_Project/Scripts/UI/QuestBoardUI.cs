@@ -41,6 +41,29 @@ namespace GN3.UI
             _board = new QuestBoard(boardSize, minEnemyCount, maxEnemyCount, minDifficulty, maxDifficulty);
 
             _nextText = ListingTimer.ReplaceRefreshButton(refreshButton, panel, _font, -23f);
+            _goalText = CreateGoalText(panel);
+        }
+
+        private Text _goalText; // 제목 줄 가운데 "은월의 숲 Lv3/5 · 다음 목표 …"
+
+        /// <summary>지금 목표 한 줄(ForestProgress.GoalText): "새 의뢰까지" 글자 왼쪽, 제목 줄 높이.</summary>
+        private Text CreateGoalText(RectTransform panel)
+        {
+            var go = new GameObject("GoalText", typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(panel, false);
+            var rect = (RectTransform)go.transform;
+            var next = _nextText.rectTransform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 1f);
+            rect.sizeDelta = new Vector2(560f, 40f);
+            rect.anchoredPosition = next.anchoredPosition - new Vector2(next.sizeDelta.x + 16f, 0f);
+            var text = go.GetComponent<Text>();
+            text.font = _font;
+            text.fontSize = 16;
+            text.alignment = TextAnchor.MiddleRight;
+            text.color = UITheme.MutedText;
+            text.supportRichText = true;
+            text.raycastTarget = false;
+            return text;
         }
 
         private void Start()
@@ -51,6 +74,7 @@ namespace GN3.UI
             RivalGuilds.OnChanged += RedrawIfListed; // 근처 길드가 의뢰를 가져가거나 노릴 때
             QuestBroker.OnChanged += RedrawIfListed;  // 중개인이 오거나 떠날 때
             VillageLayout.OnChanged += RedrawIfListed; // 게시판을 지었을 때
+            PartyUI.PendingChanged += RedrawIfListed;  // 편성 시작·취소·출발 — "편성 중" 표시
         }
 
         private void RedrawIfListed()
@@ -65,6 +89,7 @@ namespace GN3.UI
             RivalGuilds.OnChanged -= RedrawIfListed;
             QuestBroker.OnChanged -= RedrawIfListed;
             VillageLayout.OnChanged -= RedrawIfListed;
+            PartyUI.PendingChanged -= RedrawIfListed;
         }
 
         /// <summary>불러오기 직후: 저장된 목록으로 다시 그린다(낡았으면 새로 뽑는다).</summary>
@@ -116,6 +141,7 @@ namespace GN3.UI
                 foreach (var quest in QuestBoardListings.Current)
                     _cardRows.Add(CreateCard(quest));
             _nextText.text = hasBoard ? ListingTimer.Label("의뢰", QuestBoardListings.DaysUntilRefresh) : "";
+            if (_goalText != null) _goalText.text = ForestProgress.GoalText;
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
         }
@@ -144,9 +170,10 @@ namespace GN3.UI
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
-            // 줄에는 [등급] 이름 · 보상만. 지역·적·권장 전투력·판정·소요 일수는 줄을 클릭하면 열리는 상세 창에서 본다.
+            // 줄에는 [등급] 이름 · 판정·권장 전투력 · 보상. 지역·적·소요 일수는 줄을 클릭하면 열리는 상세 창에서 본다.
             string jointTag = quest.IsJoint ? "<color=#6ab8ff>[연합]</color> " : "";
-            var titleText = CreateText(row.transform, jointTag + QuestDifficulty.RichTitle(quest), UITheme.HeadingSize, TextAnchor.MiddleLeft); // 큰 주황 글씨는 창 제목만
+            string challengeTag = quest.IsChallenge ? "<color=#ffd36b>[도전]</color> " : ""; // 깨면 다음 숲 레벨이 열린다(ForestProgress)
+            var titleText = CreateText(row.transform, challengeTag + jointTag + QuestDifficulty.RichTitle(quest), UITheme.HeadingSize, TextAnchor.MiddleLeft); // 큰 주황 글씨는 창 제목만
             titleText.fontStyle = FontStyle.Bold;
             titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
             titleText.gameObject.AddComponent<LayoutElement>().minWidth = 520;
@@ -155,7 +182,11 @@ namespace GN3.UI
             var rival = RivalGuilds.TargetOf(quest); // 내일 자정에 가져갈 근처 길드
             string targeted = rival != null ? $"  <color=#f0a54a>{Josa.IGa(rival.Name)} 노리는 중</color>" : "";
             string materials = quest.MaterialReward.Count > 0 ? $" · {quest.MaterialRewardText}" : ""; // 부탁한 사람이 주는 건설 재료
-            var rewardText = CreateText(row.transform, $"{rounds}보상 {Pricing.QuestReward(quest)}G{materials}{targeted}{extra}", 18, TextAnchor.MiddleLeft);
+            // 판정: 지금 보낼 수 있는 최선의 팀 vs 권장 전투력(쉬움·중간·어려움 — 상세 창을 열지 않고 비교)
+            int best = QuestDifficulty.BestTeamPower(quest);
+            string verdict = (best > 0 ? QuestDifficulty.RichLabel(QuestDifficulty.Rate(best, quest)) : "<color=#a3937c>[용병 없음]</color>")
+                + $" <color=#a3937c>권장 {QuestDifficulty.RecommendedPower(quest)}</color>  ";
+            var rewardText = CreateText(row.transform, $"{verdict}{rounds}보상 {Pricing.QuestReward(quest)}G{materials}{targeted}{extra}", 18, TextAnchor.MiddleLeft);
             rewardText.supportRichText = true;
             rewardText.color = UITheme.TitleText;
             rewardText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -173,7 +204,13 @@ namespace GN3.UI
             acceptLayout.minHeight = 40;
             acceptLayout.flexibleWidth = 0;
 
-            var acceptText = CreateText(acceptButtonGO.transform, "수락", 18, TextAnchor.MiddleCenter);
+            bool pending = PartyUI.PendingQuest == quest; // 편성 중인 의뢰: 바탕을 밝게, 버튼은 파티 창을 다시 연다
+            if (pending)
+            {
+                row.GetComponent<Image>().color = new Color(1f, 0.85f, 0.4f, 0.14f);
+                acceptButtonGO.GetComponent<Image>().color = new Color(0.55f, 0.45f, 0.2f, 1f);
+            }
+            var acceptText = CreateText(acceptButtonGO.transform, pending ? "편성 중" : "수락", 18, TextAnchor.MiddleCenter);
             var acceptTextRect = acceptText.GetComponent<RectTransform>();
             acceptTextRect.anchorMin = Vector2.zero;
             acceptTextRect.anchorMax = Vector2.one;
@@ -185,17 +222,15 @@ namespace GN3.UI
             return row;
         }
 
-        /// <summary>수락: 파견 편성을 시작하고 파티 패널을 연 뒤 게시판에서 그 퀘스트를 뗀다(줄 버튼·상세 창 버튼 공용).</summary>
+        /// <summary>
+        /// 수락: 파견 편성을 시작하고 파티 패널을 연다(줄 버튼·상세 창 버튼 공용). 이미 편성 중인 의뢰면 파티 패널만 연다.
+        /// 의뢰는 출발할 때 게시판에서 뗀다(PartyUI.ConfirmDispatch) — 편성을 취소하거나 다른 의뢰를 수락해도 잃지 않는다.
+        /// </summary>
         private void Accept(Quest quest, GameObject row)
         {
-            if (row == null) return; // 이미 수락된 줄
-            GetComponent<PartyUI>()?.BeginDispatch(quest);
+            if (PartyUI.PendingQuest != quest) GetComponent<PartyUI>()?.BeginDispatch(quest);
             if (partyPanel != null)
                 PanelActivator.Open(partyPanel);
-
-            if (!QuestBroker.Remove(quest)) QuestBoardListings.Remove(quest); // 저장에서도 빠진다
-            _cardRows.Remove(row);
-            Destroy(row);
         }
 
         private Text CreateText(Transform parent, string content, int fontSize, TextAnchor alignment)

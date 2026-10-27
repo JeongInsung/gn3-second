@@ -41,6 +41,9 @@ namespace GN3.Mercenaries
             OnChanged?.Invoke();
         }
 
+        /// <summary>파티원의 표시가 바뀌었을 때(잠금 등) 목록을 다시 그리게 알린다.</summary>
+        public void NotifyChanged() => OnChanged?.Invoke();
+
         public bool Remove(Mercenary mercenary)
         {
             bool removed = _members.RemoveAll(m => m.Id == mercenary.Id) > 0;

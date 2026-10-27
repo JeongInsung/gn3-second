@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Traits;
@@ -108,12 +109,58 @@ namespace GN3.UI
             }
 
             _hireButtons.Clear();
-            foreach (var merc in MarketListings.Current)
+            _cardRows.Add(CreateSortRow());
+            foreach (var merc in Sorted(MarketListings.Current))
                 _cardRows.Add(CreateCard(merc));
             _nextText.text = ListingTimer.Label("용병", MarketListings.DaysUntilRefresh);
             UpdateCapacity();
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
+        }
+
+        // ---------- 정렬(이번 실행 동안 기억) ----------
+        private static readonly string[] SortNames = { "기본", "전투력", "주급", "나이" };
+        private static int _sort;
+
+        private static IEnumerable<Mercenary> Sorted(IEnumerable<Mercenary> list) => _sort switch
+        {
+            1 => list.OrderByDescending(m => m.CombatPower),
+            2 => list.OrderBy(m => ContractTerms.For(m, renewal: false).WeeklyWage),
+            3 => list.OrderBy(m => m.Age),
+            _ => list,
+        };
+
+        /// <summary>목록 맨 위 정렬 버튼 줄: [기본][전투력][주급][나이] — 고른 것은 밝게.</summary>
+        private GameObject CreateSortRow()
+        {
+            var row = new GameObject("Sort", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            row.transform.SetParent(listContainer, false);
+            var layout = row.GetComponent<LayoutElement>();
+            layout.minHeight = layout.preferredHeight = 40;
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(4, 4, 2, 2);
+            h.spacing = 8;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childForceExpandWidth = h.childForceExpandHeight = false;
+            h.childControlWidth = h.childControlHeight = true;
+            var label = CreateText(row.transform, "정렬", 16, TextAnchor.MiddleLeft);
+            label.color = UITheme.MutedText;
+            label.gameObject.AddComponent<LayoutElement>().minWidth = 44;
+            for (int i = 0; i < SortNames.Length; i++)
+            {
+                int mode = i;
+                var button = ShopListUI.CreateButton(row.transform, SortNames[i], () => { _sort = mode; RefreshMarket(); }, 80f);
+                if (i == _sort) UITheme.CreateSelectFrame(button.transform); // 지금 정렬
+            }
+            UIThemeApplier.ApplyNow(row.transform); // 상점 버튼과 같은 테마
+            return row;
+        }
+
+        /// <summary>에이전트 귀띔 주급 범위(협상 버튼 툴팁과 같은 값).</summary>
+        private static (int low, int high) WageHint(ContractDemand demand)
+        {
+            float s = ContractTuning.AgentHintSpread;
+            return (Mathf.Max(1, Mathf.FloorToInt(demand.WeeklyWage * (1f - s))), Mathf.CeilToInt(demand.WeeklyWage * (1f + s)));
         }
 
         private GameObject CreateCard(Mercenary merc)
@@ -150,13 +197,17 @@ namespace GN3.UI
             classText.horizontalOverflow = HorizontalWrapMode.Overflow;
             classText.gameObject.AddComponent<LayoutElement>().minWidth = 140;
 
-            var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}", 18, TextAnchor.MiddleLeft);
+            // 전투력 + 주급 대략(에이전트 귀띔 범위 — 고용하기 전에 비교할 수 있게)
+            var demand = ContractTerms.For(merc, renewal: false);
+            var (wLow, wHigh) = WageHint(demand);
+            string wage = demand.Interest == Interest.NotInterested ? "" : $"\n<size=14><color=#a3937c>주급 {wLow}~{wHigh}G</color></size>";
+            var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}{wage}", 18, TextAnchor.MiddleLeft);
+            powerText.supportRichText = true;
             powerText.color = UITheme.TitleText;
             powerText.horizontalOverflow = HorizontalWrapMode.Overflow;
             powerText.gameObject.AddComponent<LayoutElement>().minWidth = 140;
 
             // 관심도(명성·등급 차이·성격): 관심 없으면 협상도 못 한다
-            var demand = ContractTerms.For(merc, renewal: false);
             var interestText = CreateText(row.transform, ContractTerms.InterestLabel(demand.Interest), 16, TextAnchor.MiddleLeft);
             interestText.color = ContractTerms.InterestColor(demand.Interest);
             interestText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -219,8 +270,7 @@ namespace GN3.UI
         {
             if (demand.Interest == Interest.NotInterested)
                 return "길드 등급·명성에 비해 눈이 높아 협상할 생각이 없습니다.\n명성을 올리면 마음이 바뀔 수 있습니다.";
-            float s = ContractTuning.AgentHintSpread;
-            int wLow = Mathf.Max(1, Mathf.FloorToInt(demand.WeeklyWage * (1f - s))), wHigh = Mathf.CeilToInt(demand.WeeklyWage * (1f + s));
+            var (wLow, wHigh) = WageHint(demand);
             string text = $"에이전트 귀띔: 주급 {wLow}~{wHigh}G · 계약금 약 {Mathf.RoundToInt(demand.SigningFee / 10f) * 10}G";
             text += $"\n관심도 {ContractTerms.InterestLabel(demand.Interest)} · 성향 {NegotiationStyles.Get(demand.Style).Label}";
             if (merc.HasRarePassive) text += "\n희귀 특성이 있어 몸값이 높습니다.";

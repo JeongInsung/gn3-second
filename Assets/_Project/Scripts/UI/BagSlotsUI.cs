@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using GN3.Economy;
+using GN3.Mercenaries;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace GN3.UI
@@ -18,13 +20,17 @@ namespace GN3.UI
         public static readonly Color EmptyBorder = new Color(1f, 1f, 1f, 0.2f);
         public static readonly Color SelectedBorder = Color.white; // 고른 칸(최상급 금빛 테두리와 헷갈리지 않게 흰색)
         private const float Border = 2f;
-        private const float IconPad = 3f;
+        private const float IconPad = 3f;          // 작은 칸 아이콘 여백(큰 칸은 칸 크기의 IconPadRatio)
+        private const float IconPadRatio = 0.08f;
+
+        // 큰 칸(용병별 가방 카드 — 전투 가방 창·마을 가방 창): 가장 큰 가방(10칸)도 한 줄에 든다
+        public const float LargeSlot = 60f, LargeGap = 6f;
+        public const int LargePerLine = 10;
+        private const float CardPad = 8f, CardSpacing = 10f, CardInfoWidth = 112f;
+        private static readonly Color CardColor = new Color(1f, 1f, 1f, 0.05f);
 
         /// <summary>(아이템, 개수) → 칸 단위 목록(칸을 쓰는 것만, 등급 높은 것·값 높은 것 먼저).</summary>
-        public static List<LootItem> Units(IEnumerable<(LootItem item, int count)> loot) =>
-            loot.Where(l => BagCatalog.UsesSlot(l.item))
-                .OrderByDescending(l => l.item.HasGrade ? (int)l.item.Grade : -1).ThenByDescending(l => l.item.Price)
-                .SelectMany(l => Enumerable.Repeat(l.item, Mathf.Max(0, l.count))).ToList();
+        public static List<LootItem> Units(IEnumerable<(LootItem item, int count)> loot) => BagCatalog.Units(loot);
 
         /// <summary>칸을 안 쓰는 것만(재료·동전 주머니).</summary>
         public static List<(LootItem item, int count)> Outside(IEnumerable<(LootItem item, int count)> loot) =>
@@ -35,9 +41,9 @@ namespace GN3.UI
             item == null ? EmptyBorder : item.HasGrade ? LootGrades.ColorOf(item.Grade) : new Color(0.75f, 0.68f, 0.55f);
 
         /// <summary>
-        /// 칸 하나. item null이면 빈 칸. onClick이 있으면 눌린다. 돌려주는 Image는 테두리(골랐을 때 색을 바꾸려고).
+        /// 칸 하나. item null이면 빈 칸. onClick이 있으면 눌린다(onRightClick은 우클릭). 돌려주는 Image는 테두리(골랐을 때 색을 바꾸려고).
         /// </summary>
-        public static Image CreateSlot(Transform parent, LootItem item, float size, UnityAction onClick = null)
+        public static Image CreateSlot(Transform parent, LootItem item, float size, UnityAction onClick = null, UnityAction onRightClick = null)
         {
             var go = new GameObject(item != null ? "Slot_" + item.Name : "Slot_Empty", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
@@ -60,13 +66,15 @@ namespace GN3.UI
             {
                 var icon = new GameObject("Icon", typeof(RectTransform), typeof(Image));
                 icon.transform.SetParent(go.transform, false);
-                Inset((RectTransform)icon.transform, Border + IconPad);
+                Inset((RectTransform)icon.transform, Border + Mathf.Max(IconPad, size * IconPadRatio));
                 var image = icon.GetComponent<Image>();
                 image.sprite = item.Icon;
                 image.preserveAspect = true;
                 image.raycastTarget = false;
                 if (item.Icon == null) image.color = new Color(1f, 0.8f, 0.3f);
-                go.AddComponent<TooltipTrigger>().Text = Tooltip(item) + (onClick != null ? "\n눌러서 고른다" : "");
+                string hint = onClick != null && onRightClick != null ? "\n클릭: 고르기 · 우클릭: 버리기"
+                    : onClick != null ? "\n눌러서 고른다" : onRightClick != null ? "\n우클릭: 버리기" : "";
+                go.AddComponent<TooltipTrigger>().Text = Tooltip(item) + hint;
             }
             if (onClick != null && item != null)
             {
@@ -74,14 +82,26 @@ namespace GN3.UI
                 button.transition = Selectable.Transition.None;
                 button.onClick.AddListener(onClick);
             }
+            if (onRightClick != null && item != null) go.AddComponent<SlotRightClick>().OnRightClick = onRightClick;
             return border;
+        }
+
+        /// <summary>칸 우클릭(Button은 왼쪽 클릭만 받는다).</summary>
+        private class SlotRightClick : MonoBehaviour, IPointerClickHandler
+        {
+            public UnityAction OnRightClick;
+
+            public void OnPointerClick(PointerEventData eventData)
+            {
+                if (eventData.button == PointerEventData.InputButton.Right) OnRightClick?.Invoke();
+            }
         }
 
         /// <summary>
         /// capacity칸 격자(채운 칸 → 빈 칸). perLine칸마다 줄을 바꾼다. onClick(i): i번째 채운 칸을 눌렀을 때. 돌려주는 목록 = 채운 칸 테두리들.
         /// </summary>
         public static List<Image> CreateGrid(Transform parent, IReadOnlyList<LootItem> units, int capacity, int perLine, float size, float gap,
-            System.Action<int> onClick = null)
+            System.Action<int> onClick = null, System.Action<int> onRightClick = null)
         {
             var go = new GameObject("BagGrid", typeof(RectTransform), typeof(GridLayoutGroup), typeof(LayoutElement));
             go.transform.SetParent(parent, false);
@@ -104,7 +124,9 @@ namespace GN3.UI
             {
                 var item = i < units.Count ? units[i] : null;
                 int index = i;
-                filled.Add(CreateSlot(go.transform, item, size, item != null && onClick != null ? () => onClick(index) : (UnityAction)null));
+                filled.Add(CreateSlot(go.transform, item, size,
+                    item != null && onClick != null ? () => onClick(index) : (UnityAction)null,
+                    item != null && onRightClick != null ? () => onRightClick(index) : (UnityAction)null));
             }
             return filled.Take(units.Count).ToList();
         }
@@ -114,6 +136,62 @@ namespace GN3.UI
         {
             int lines = Mathf.Max(1, (count + perLine - 1) / Mathf.Max(1, perLine));
             return lines * size + (lines - 1) * gap;
+        }
+
+        /// <summary>칸 목록을 대원 순서대로 각자 빈 칸 수만큼 나눈다(BagCatalog.Split).</summary>
+        public static List<List<LootItem>> Split(IReadOnlyList<LootItem> units, IReadOnlyList<Mercenary> members) => BagCatalog.Split(units, members);
+
+        /// <summary>용병 가방 카드 높이(CreateMercBagCard와 같은 계산).</summary>
+        public static float CardHeight(Mercenary merc, int itemCount, float slotSize, int perLine, float gap) =>
+            Mathf.Max(PortraitSize(slotSize), GridHeight(Mathf.Max(merc.Bag.Slots, itemCount), perLine, slotSize, gap)) + CardPad * 2f;
+
+        private static int PortraitSize(float slotSize) => Mathf.RoundToInt(Mathf.Clamp(slotSize, 40f, 56f));
+
+        /// <summary>
+        /// 용병 한 명의 가방 카드: [초상] [이름 / 가방 이름 · n/m칸] [칸 격자(채운 칸 → 빈 칸)].
+        /// onClick(i): i번째 채운 칸을 눌렀을 때. selected: 흰 테두리로 보일 칸(-1 없음).
+        /// </summary>
+        public static GameObject CreateMercBagCard(Transform parent, Mercenary merc, IReadOnlyList<LootItem> items,
+            float slotSize, int perLine, float gap, System.Action<int> onClick = null, int selected = -1, System.Action<int> onRightClick = null)
+        {
+            var card = new GameObject("BagCard_" + merc.Name, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            card.transform.SetParent(parent, false);
+            var background = card.GetComponent<Image>();
+            background.color = CardColor;
+            background.raycastTarget = false;
+            var h = card.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset((int)CardPad, (int)CardPad, (int)CardPad, (int)CardPad);
+            h.spacing = CardSpacing;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = h.childForceExpandHeight = false;
+            card.GetComponent<LayoutElement>().minHeight = CardHeight(merc, items.Count, slotSize, perLine, gap);
+
+            CharacterPortraitUI.Create(card.transform, merc.Appearance, PortraitSize(slotSize));
+
+            var info = new GameObject("Info", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
+            info.transform.SetParent(card.transform, false);
+            var infoLayout = info.GetComponent<LayoutElement>();
+            infoLayout.minWidth = infoLayout.preferredWidth = CardInfoWidth;
+            infoLayout.flexibleWidth = 0f; // 글자 줄이 늘어나려 해도 칸 격자가 정보 바로 옆에 붙게
+            var v = info.GetComponent<VerticalLayoutGroup>();
+            v.spacing = 2f;
+            v.childAlignment = TextAnchor.MiddleLeft;
+            v.childControlWidth = v.childControlHeight = true;
+            v.childForceExpandWidth = true;
+            v.childForceExpandHeight = false;
+            var name = ShopListUI.CreateText(info.transform, $"<b>{merc.Name}</b>", 16, TextAnchor.MiddleLeft, UITheme.TitleText);
+            name.supportRichText = true;
+            name.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var bag = merc.Bag;
+            int used = Mathf.Min(items.Count, bag.Slots);
+            var bagText = ShopListUI.CreateText(info.transform, $"{bag.Name}\n<color=#ffd36b>{used}/{bag.Slots}칸</color>", 13, TextAnchor.MiddleLeft, UITheme.MutedText);
+            bagText.supportRichText = true;
+            bagText.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+            var borders = CreateGrid(card.transform, items, bag.Slots, perLine, slotSize, gap, onClick, onRightClick);
+            if (selected >= 0 && selected < borders.Count) borders[selected].color = SelectedBorder;
+            return card;
         }
 
         /// <summary>"가방 밖" 칩 줄: 아이콘 ×n(재료·동전 주머니). 없으면 null.</summary>
@@ -160,6 +238,58 @@ namespace GN3.UI
         public static string Tooltip(LootItem item) =>
             $"<b>{item.Name}</b>" + (item.HasGrade ? $" <color={LootGrades.HexOf(item.Grade)}>{item.GradeTag}</color>" : "")
             + $"\n팔면 개당 {item.Price}G";
+
+        /// <summary>
+        /// 장비칸 하나(용병 정보의 무기·가방): 칸 네모(CreateSlot과 같은 모양) + 아래 부위 이름. icon null이면 빈 칸.
+        /// onClick이 있으면 칸이 눌린다.
+        /// </summary>
+        public static GameObject CreateEquipSlot(Transform parent, string label, Sprite icon, string tooltip, float size, UnityAction onClick = null)
+        {
+            var column = new GameObject("Equip_" + label, typeof(RectTransform), typeof(VerticalLayoutGroup));
+            column.transform.SetParent(parent, false);
+            var v = column.GetComponent<VerticalLayoutGroup>();
+            v.spacing = 2f;
+            v.childAlignment = TextAnchor.UpperCenter;
+            v.childControlWidth = v.childControlHeight = true;
+            v.childForceExpandWidth = v.childForceExpandHeight = false;
+
+            var slot = new GameObject("Slot", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            slot.transform.SetParent(column.transform, false);
+            var layout = slot.GetComponent<LayoutElement>();
+            layout.minWidth = layout.preferredWidth = size;
+            layout.minHeight = layout.preferredHeight = size;
+            slot.GetComponent<Image>().color = icon != null ? new Color(1f, 1f, 1f, 0.6f) : EmptyBorder;
+            slot.AddComponent<TooltipTrigger>().Text = tooltip;
+            if (onClick != null)
+            {
+                var button = slot.AddComponent<Button>();
+                button.transition = Selectable.Transition.None;
+                button.onClick.AddListener(onClick);
+            }
+
+            var back = new GameObject("Back", typeof(RectTransform), typeof(Image));
+            back.transform.SetParent(slot.transform, false);
+            Inset((RectTransform)back.transform, Border);
+            var backImage = back.GetComponent<Image>();
+            backImage.color = SlotColor;
+            backImage.raycastTarget = false;
+
+            if (icon != null)
+            {
+                var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+                iconGo.transform.SetParent(slot.transform, false);
+                Inset((RectTransform)iconGo.transform, Border + Mathf.Max(IconPad, size * IconPadRatio));
+                var image = iconGo.GetComponent<Image>();
+                image.sprite = icon;
+                image.preserveAspect = true;
+                image.raycastTarget = false;
+            }
+
+            var text = ShopListUI.CreateText(column.transform, label, size >= LargeSlot ? 14 : 12, TextAnchor.MiddleCenter, UITheme.BodyText);
+            text.font = UITheme.Font;
+            text.raycastTarget = false;
+            return column;
+        }
 
         private static void Inset(RectTransform rect, float inset)
         {

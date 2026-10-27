@@ -5,6 +5,9 @@ using UnityEngine.UI;
 
 namespace GN3.UI
 {
+    /// <summary>알림 종류: 왼쪽 띠 색과 떠 있는 시간이 다르다. Error는 우편함에 남기지 않는다(누른 순간의 안내라 쌓이면 진짜 소식이 묻힌다).</summary>
+    public enum ToastKind { Info, Good, Warn, Error }
+
     /// <summary>
     /// 화면 왼쪽 아래에 잠깐 떴다 사라지는 알림(파견 출발·귀환, 보상, 회복, 습격, 골드 부족 등).
     /// 최대 4줄을 아래에서 위로 쌓고, 각 줄은 3초 뒤 서서히 사라진다. 판은 글씨 길이에 맞추고(최대 Width), 클릭을 막지 않는다.
@@ -14,6 +17,7 @@ namespace GN3.UI
     {
         private const int MaxLines = 4;
         private const float LifeSeconds = 3f;
+        private const float LongLifeSeconds = 4.5f; // 주의·오류는 읽을 시간을 더
         private const float FadeSeconds = 0.6f;
         private const float Width = 520f; // 알림 판 최대 폭(짧은 알림은 글씨 길이만큼)
         private const int PaddingX = 16;
@@ -28,10 +32,25 @@ namespace GN3.UI
         /// </summary>
         public static void Show(string message) => Show(message, true);
 
-        public static void Show(string message, bool mail)
+        public static void Show(string message, bool mail) => Show(message, mail, Classify(message));
+
+        // "골드가 부족합니다"·"출전할 수 없습니다"·"창고가 가득 찼습니다"처럼 누른 것이 안 된 안내는 오류로 본다
+        private static readonly string[] ErrorEndings = { "부족합니다", "수 없습니다", "가득 찼습니다", "없습니다" };
+
+        private static ToastKind Classify(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return ToastKind.Info;
+            int cut = message.IndexOfAny(new[] { '(', ':', '.' }); // "골드가 부족합니다 (필요 …)"는 괄호 앞까지 본다
+            string head = (cut > 0 ? message.Substring(0, cut) : message).TrimEnd();
+            foreach (var ending in ErrorEndings)
+                if (head.EndsWith(ending)) return ToastKind.Error;
+            return ToastKind.Info;
+        }
+
+        public static void Show(string message, bool mail, ToastKind kind)
         {
             if (string.IsNullOrEmpty(message)) return;
-            if (mail) Mailbox.Post(MailKind.Notice, message);
+            if (mail && kind != ToastKind.Error) Mailbox.Post(MailKind.Notice, message);
             // Play 밖(에디터 도구·테스트 코드)에서는 띄우지 않는다: 코루틴이 돌지 않아 사라지지 않는 알림이 편집 씬에 남는다.
             if (!Application.isPlaying) return;
             // 날짜 건너뛰기 중엔 띄우지 않고 세기만 한다(끝나면 FlushHeld가 한 줄로). 우편함·하루 보고서엔 그대로 남는다.
@@ -41,7 +60,7 @@ namespace GN3.UI
                 return;
             }
             if (_instance == null) _instance = Create();
-            _instance.Add(message);
+            _instance.Add(message, kind);
         }
 
         private static int _heldCount;
@@ -60,7 +79,7 @@ namespace GN3.UI
             _heldCount = 0;
             if (count <= 0 || !Application.isPlaying) return;
             if (_instance == null) _instance = Create();
-            _instance.Add($"{period} 동안 알림 {count}건 · 우편함에서 확인");
+            _instance.Add($"{period} 동안 알림 {count}건 · 우편함에서 확인", ToastKind.Info);
         }
 
         private static ToastLog Create()
@@ -92,7 +111,15 @@ namespace GN3.UI
             return toast;
         }
 
-        private void Add(string message)
+        private static Color StripeColor(ToastKind kind) => kind switch
+        {
+            ToastKind.Good => new Color(0.45f, 0.82f, 0.4f),
+            ToastKind.Warn => new Color(0.94f, 0.65f, 0.29f),
+            ToastKind.Error => new Color(0.88f, 0.35f, 0.29f),
+            _ => new Color(1f, 1f, 1f, 0f),
+        };
+
+        private void Add(string message, ToastKind kind)
         {
             while (_lines.Count >= MaxLines)
             {
@@ -111,6 +138,23 @@ namespace GN3.UI
             padding.childControlWidth = true;
             padding.childControlHeight = true;
             line.GetComponent<CanvasGroup>().blocksRaycasts = false;
+
+            // 종류 띠(왼쪽 끝 4px): 성공 초록 · 주의 주황 · 오류 빨강. 보통 알림은 띠 없음.
+            if (kind != ToastKind.Info)
+            {
+                var stripe = new GameObject("Kind", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+                stripe.transform.SetParent(line.transform, false);
+                stripe.GetComponent<LayoutElement>().ignoreLayout = true;
+                var stripeRect = (RectTransform)stripe.transform;
+                stripeRect.anchorMin = new Vector2(0f, 0f);
+                stripeRect.anchorMax = new Vector2(0f, 1f);
+                stripeRect.pivot = new Vector2(0f, 0.5f);
+                stripeRect.offsetMin = new Vector2(4f, 6f);
+                stripeRect.offsetMax = new Vector2(8f, -6f);
+                var stripeImage = stripe.GetComponent<Image>();
+                stripeImage.color = StripeColor(kind);
+                stripeImage.raycastTarget = false;
+            }
 
             var textGO = new GameObject("Text", typeof(RectTransform), typeof(Text), typeof(Shadow));
             textGO.transform.SetParent(line.transform, false);
@@ -134,12 +178,12 @@ namespace GN3.UI
 
             line.transform.SetAsLastSibling(); // 새 알림이 맨 아래(가장 최근)
             _lines.Add(line);
-            StartCoroutine(Expire(line));
+            StartCoroutine(Expire(line, kind == ToastKind.Warn || kind == ToastKind.Error ? LongLifeSeconds : LifeSeconds));
         }
 
-        private IEnumerator Expire(GameObject line)
+        private IEnumerator Expire(GameObject line, float life)
         {
-            yield return new WaitForSecondsRealtime(LifeSeconds); // 2배속(timeScale)이어도 알림은 같은 시간 떠 있게
+            yield return new WaitForSecondsRealtime(life); // 배속(timeScale)이어도 알림은 같은 시간 떠 있게
             var group = line != null ? line.GetComponent<CanvasGroup>() : null;
             for (float t = 0f; t < FadeSeconds && group != null; t += Time.unscaledDeltaTime)
             {

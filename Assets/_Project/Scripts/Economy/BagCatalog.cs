@@ -63,8 +63,29 @@ namespace GN3.Economy
         /// <summary>저장 번호 → 가방(모르는 번호면 기본).</summary>
         public static BagItem ForTier(int tier) => All.FirstOrDefault(b => b.Tier == tier) ?? Basic;
 
-        /// <summary>파견대 가방 칸 합.</summary>
-        public static int CapacityOf(IEnumerable<Mercenaries.Mercenary> members) => members.Sum(m => m.Bag.Slots);
+        /// <summary>파견대 가방 빈 칸 합(가방에 남은 전리품만큼 덜 줍는다).</summary>
+        public static int CapacityOf(IEnumerable<Mercenaries.Mercenary> members) => members.Sum(m => m.BagFree);
+
+        /// <summary>(아이템, 개수) → 칸 단위 목록(칸을 쓰는 것만, 등급 높은 것·값 높은 것 먼저).</summary>
+        public static List<LootItem> Units(IEnumerable<(LootItem item, int count)> loot) =>
+            loot.Where(l => UsesSlot(l.item))
+                .OrderByDescending(l => l.item.HasGrade ? (int)l.item.Grade : -1).ThenByDescending(l => l.item.Price)
+                .SelectMany(l => Enumerable.Repeat(l.item, Mathf.Max(0, l.count))).ToList();
+
+        /// <summary>칸 목록을 대원 순서대로 각자 빈 칸 수만큼 나눈다(앞 대원 가방부터 채움). 넘치는 것은 마지막 대원 몫에 붙인다.</summary>
+        public static List<List<LootItem>> Split(IReadOnlyList<LootItem> units, IReadOnlyList<Mercenaries.Mercenary> members)
+        {
+            var result = new List<List<LootItem>>();
+            int start = 0;
+            for (int i = 0; i < members.Count; i++)
+            {
+                int take = members[i].BagFree;
+                if (i == members.Count - 1) take = Mathf.Max(take, units.Count - start);
+                result.Add(units.Skip(start).Take(take).ToList());
+                start += take;
+            }
+            return result;
+        }
 
         /// <summary>가방 칸을 쓰는 아이템인가: 건설 재료(따로 실어 온다)와 동전 주머니(줍는 대로 금화)는 안 쓴다.</summary>
         public static bool UsesSlot(LootItem item) => item != null && !item.Material && item != LootCatalog.CoinPouch;

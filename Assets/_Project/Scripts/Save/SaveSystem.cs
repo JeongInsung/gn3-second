@@ -278,6 +278,21 @@ namespace GN3.Save
                 health = merc.CurrentHealth,
                 weapon = merc.Weapon != null ? merc.Weapon.Name : "",
                 bag = merc.Bag.Tier,
+                bagItems = merc.BagContents.GroupBy(i => i.Name).Select(g => new LootSave { name = g.Key, count = g.Count() }).ToList(),
+                locked = merc.Locked,
+                recBattles = merc.Record.Battles,
+                recWins = merc.Record.Wins,
+                recKills = merc.Record.Kills,
+                recInjuries = merc.Record.Injuries,
+                recIllnesses = merc.Record.Illnesses,
+                recScoreSum = merc.Record.ScoreSum,
+                recBestScore = merc.Record.BestScore,
+                recClears = merc.Record.SaveClears(),
+                recRecent = merc.Record.Recent.Select(r => new BattleRecordSave
+                {
+                    day = r.Day, quest = r.Quest, level = r.Level, win = r.Win, score = r.Score,
+                    damage = r.Damage, kills = r.Kills, healing = r.Healing, fallen = r.Fallen,
+                }).ToList(),
                 fatigue = merc.Fatigue,
                 morale = merc.Morale,
                 researchHours = merc.ResearchHours,
@@ -315,6 +330,7 @@ namespace GN3.Save
                     remainingHours = q.RemainingHours,
                     outboundHours = expedition.OutboundHours,
                     returnHoursLeft = expedition.ReturnHoursLeft,
+                    autoOnArrival = expedition.AutoOnArrival,
                 };
                 foreach (var m in expedition.Members.Where(m => m.IsAlive))
                 {
@@ -339,6 +355,7 @@ namespace GN3.Save
             data.affinities = Affinity.SaveEntries();
             data.questClears = QuestClearHistory.SaveEntries();
             data.forestLevel = ForestProgress.UnlockedLevel;
+            data.forestBossDefeated = ForestProgress.BossDefeated;
             data.leaving = MercenaryCondition.SaveLeaving();
             data.contracts = Contracts.SaveEntries();
             data.storageWeapons = GuildStorage.WeaponNames();
@@ -538,6 +555,15 @@ namespace GN3.Save
             merc.RestoreResearch(m.researchHours, m.researchBonus);
             merc.RestoreState(m.health, weapon);
             merc.SetBag(GN3.Economy.BagCatalog.ForTier(m.bag)); // 예전 저장은 0 = 낡은 주머니
+            merc.Locked = m.locked;
+            merc.Record.Restore(m.recBattles, m.recWins, m.recKills, m.recInjuries, m.recIllnesses, m.recScoreSum, m.recBestScore, m.recClears,
+                m.recRecent?.Select(r => new MercenaryRecord.Entry
+                {
+                    Day = r.day, Quest = r.quest, Level = r.level, Win = r.win, Score = r.score,
+                    Damage = r.damage, Kills = r.kills, Healing = r.healing, Fallen = r.fallen,
+                }));
+            if (m.bagItems != null)
+                merc.RestoreBag(m.bagItems.SelectMany(s => Enumerable.Repeat(GN3.Economy.LootCatalog.Find(s.name), Math.Max(0, s.count))));
             if (version < 4)
             {
                 merc.MatchLegacyPower(LegacyRng); // 재능 능력치 배율이 빠진 만큼 성장으로 메운다
@@ -584,6 +610,7 @@ namespace GN3.Save
                 var expedition = new Expedition(quest, members, leader, squads, leader2);
                 expedition.RestoreState(hours ? e.outboundHours : e.outboundDays * Quest.HoursPerDay, e.returning,
                     hours ? e.returnHoursLeft : e.returnDaysLeft * Quest.HoursPerDay);
+                expedition.AutoOnArrival = e.autoOnArrival;
                 ExpeditionLog.Instance.Restore(expedition);
             }
 
@@ -608,7 +635,7 @@ namespace GN3.Save
                 market = data.market.Select(m => FromSave(m, classes, data.version)).Where(m => m != null).ToList();
             MarketListings.Restore(market, data.marketNextDay, data.marketOrigins);
 
-            ForestProgress.Restore(data.forestLevel);
+            ForestProgress.Restore(data.forestLevel, data.forestBossDefeated);
             MercenaryCondition.RestoreLeaving(data.leaving);
             Contracts.Restore(data.contracts);
             GuildStorage.Restore(data.storageWeapons, data.storageItems);

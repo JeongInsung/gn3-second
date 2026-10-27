@@ -25,10 +25,29 @@ namespace GN3.Quests
             return true;
         }
 
+        /// <summary>숲의 주인 앤트킹(Lv5 의뢰 마지막 라운드)을 한 번이라도 쓰러뜨렸는가.</summary>
+        public static bool BossDefeated { get; private set; }
+
+        /// <summary>Lv5 의뢰를 이겼을 때(ExpeditionBattle). 처음이면 true(축하 알림).</summary>
+        public static bool MarkBossDefeated()
+        {
+            if (BossDefeated) return false;
+            BossDefeated = true;
+            OnChanged?.Invoke();
+            return true;
+        }
+
+        /// <summary>지금 목표 한 줄(게시판·길드 툴팁): 다음 레벨을 여는 법, 다 열렸으면 앤트킹, 쓰러뜨렸으면 완료.</summary>
+        public static string GoalText =>
+            UnlockedLevel < MaxLevel ? $"은월의 숲 Lv{UnlockedLevel}/{MaxLevel} · 다음 목표: Lv{UnlockedLevel} [도전] 의뢰를 깨면 Lv{UnlockedLevel + 1} 개방"
+            : !BossDefeated ? $"은월의 숲 Lv{MaxLevel}/{MaxLevel} · 최종 목표: 숲의 주인 앤트킹 토벌"
+            : $"은월의 숲 Lv{MaxLevel}/{MaxLevel} · 숲의 주인 앤트킹 토벌 완료";
+
         /// <summary>저장 파일에서 불러올 때. 예전 저장엔 값이 없어(0) Lv1부터.</summary>
-        public static void Restore(int saved)
+        public static void Restore(int saved, bool bossDefeated = false)
         {
             UnlockedLevel = Math.Clamp(saved, 1, MaxLevel);
+            BossDefeated = bossDefeated;
             OnChanged?.Invoke();
         }
 
@@ -37,6 +56,7 @@ namespace GN3.Quests
         private static void ResetForPlaySession()
         {
             UnlockedLevel = 1;
+            BossDefeated = false;
             OnChanged = null;
         }
     }

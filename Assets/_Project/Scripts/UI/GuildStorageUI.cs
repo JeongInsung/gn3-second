@@ -16,6 +16,8 @@ namespace GN3.UI
         private const string PanelKeyword = "창고";
 
         private BuildingPanel _panel;
+        private bool _sellAllArmed; // "모두 팔기"를 한 번 눌러 확인을 기다리는 중(창을 다시 열거나 다른 것을 팔면 풀린다)
+        private LootItem _armedMaterial; // 건설 재료 [모두]를 한 번 누른 줄
 
         private void Awake() => BuildingPanel.Opened += HandleOpened;
         private void OnDestroy() => BuildingPanel.Opened -= HandleOpened;
@@ -29,12 +31,22 @@ namespace GN3.UI
         {
             if (building == null || !building.DisplayName.Contains(PanelKeyword)) return;
             _panel = panel;
+            _sellAllArmed = false;
+            _armedMaterial = null;
             if (_facilitiesNext)
             {
                 _facilitiesNext = false;
                 ShowFacilities();
             }
-            else ShowStorage();
+            else
+            {
+                ShowStorage();
+                FirstTimeTips.Show(FirstTimeTips.Storage, "길드 창고",
+                    "원정에서 주운 전리품은 용병 가방에 남는다 — [가방 비우기]로 창고에 넣어야 팔거나 제작·건설에 쓸 수 있다.\n" +
+                    "가방이 차 있으면 다음 원정에서 그만큼 덜 줍는다.\n" +
+                    "[모두 팔기]는 정가다. 암거래 상인이 마을에 오면 더 비싸게 판다.\n" +
+                    "건설 재료는 [모두 팔기]에 섞이지 않는다(건설에 쓰인다).");
+            }
         }
 
         // ---------- 길드 시설 ----------
@@ -122,12 +134,34 @@ namespace GN3.UI
                 16, TextAnchor.MiddleLeft, UITheme.BodyText);
             title.fontStyle = FontStyle.Bold;
             title.gameObject.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
-            var sellAll = ShopListUI.CreateButton(header.transform, "모두 팔기", () =>
+            // 마을에 있는 용병 가방을 한 번에 비워 창고로(전리품은 원정이 끝나도 가방에 남는다)
+            var carriers = ShopListUI.MercsInVillage().Where(m => m.BagContents.Count > 0).ToList();
+            int carried = carriers.Sum(m => m.BagContents.Count);
+            var stashAll = ShopListUI.CreateButton(header.transform, carried > 0 ? $"가방 비우기 ({carried})" : "가방 비우기", () =>
             {
+                _sellAllArmed = false;
+                int total = carriers.Sum(LootBag.StashFrom);
+                if (total > 0) ToastLog.Show($"가방 {carriers.Count}명에서 전리품 {total}개를 창고에 넣었습니다");
+                ShowStorage();
+            }, 150f);
+            stashAll.interactable = carried > 0;
+            stashAll.gameObject.AddComponent<TooltipTrigger>().Text = "마을에 있는 용병들의 가방을 모두 비워 창고에 넣는다 (파견 중인 용병은 빼고)";
+
+            // 모두 팔기: 실수로 귀한 것까지 팔지 않게 두 번 누른다(첫 클릭은 받을 금액을 보여 준다)
+            var sellAll = ShopListUI.CreateButton(header.transform, _sellAllArmed ? $"정말? +{LootBag.TotalValue}G" : "모두 팔기", () =>
+            {
+                if (!_sellAllArmed)
+                {
+                    _sellAllArmed = true;
+                    _armedMaterial = null;
+                    ShowStorage();
+                    return;
+                }
+                _sellAllArmed = false;
                 int gold = LootBag.SellAll();
                 if (gold > 0) ToastLog.Show($"전리품을 모두 팔았습니다 (+{gold}G)");
                 ShowStorage();
-            }, 120f);
+            }, 140f);
             sellAll.interactable = LootBag.KindCount > 0;
             if (BlackMarket.IsHere && LootBag.KindCount > 0) // 일반 판매는 정가 — 와 있는 날엔 더 비싸게 팔 곳을 알려 준다
                 ShopListUI.CreateEmptyRow(_panel, "암거래 상인이 마을에 와 있습니다 — 상인에게 팔면 더 비싸게 받습니다");
@@ -171,11 +205,21 @@ namespace GN3.UI
                 ShopListUI.CreateIcon(row.transform, item.Icon);
                 ShopListUI.CreateTwoLineLabel(row.transform, $"{item.Name} ×{count}", $"개당 {item.Price}G에 팝니다");
                 ShopListUI.CreateButton(row.transform, "1개 팔기", () => Sell(item, 1), 90f);
+                // 건설에 쓰는 재료라 한 번에 다 팔지 않게 두 번 누른다
+                var material = item;
+                bool armed = _armedMaterial == material;
+                ShopListUI.CreateButton(row.transform, armed ? "정말?" : "모두", () =>
+                {
+                    if (!armed) { _armedMaterial = material; _sellAllArmed = false; ShowStorage(); return; }
+                    Sell(material, LootBag.Count(material));
+                }, 70f);
             }
         }
 
         private void Sell(LootItem loot, int n)
         {
+            _sellAllArmed = false;
+            _armedMaterial = null;
             int sold = System.Math.Min(n, LootBag.Count(loot));
             int gold = LootBag.Sell(loot, n);
             if (gold > 0) ToastLog.Show($"{loot.Name} {sold}개를 팔았습니다 (+{gold}G)");
@@ -207,7 +251,7 @@ namespace GN3.UI
 
                 var target = merc;
                 var button = ShopListUI.CreateButton(row.transform, "장착", () => Equip(weapon, target));
-                button.interactable = merc.Weapon != weapon;
+                ShopListUI.SetBlocked(button, merc.Weapon != weapon ? null : "이미 이 무기를 들고 있습니다.");
             }
 
             ShopListUI.EndList(_panel);
@@ -240,7 +284,7 @@ namespace GN3.UI
                 ShopListUI.CreateTwoLineLabel(row.transform, $"{merc.Name} ({merc.Class.ClassName})", $"들고 있는 무기: {merc.Weapon.Name}");
                 var target = merc;
                 var button = ShopListUI.CreateButton(row.transform, "맡기기", () => Deposit(target));
-                button.interactable = !GuildStorage.IsFull;
+                ShopListUI.SetBlocked(button, GuildStorage.IsFull ? $"창고가 가득 찼습니다 ({GuildStorage.Count} / {GuildStorage.Capacity}칸)." : null);
             }
 
             ShopListUI.EndList(_panel);
@@ -291,7 +335,7 @@ namespace GN3.UI
                 ShopListUI.CreateTwoLineLabel(row.transform, merc.Name, $"체력 {merc.CurrentHealth} / {merc.CurrentStats.MaxHealth}");
                 var target = merc;
                 var button = ShopListUI.CreateButton(row.transform, "사용", () => Use(item, target));
-                button.interactable = item.CanHeal(merc);
+                ShopListUI.SetBlocked(button, item.CanHeal(merc) ? null : "이 약으로 나을 곳이 없습니다 (체력 가득·해당 증상 없음).");
             }
 
             ShopListUI.EndList(_panel);
@@ -307,7 +351,9 @@ namespace GN3.UI
             if (!GuildStorage.Remove(item)) return;
             int healed = item.Apply(merc);
             ToastLog.Show($"{merc.Name}에게 {item.Name} 사용 (체력 +{healed}, 창고)");
-            ShowStorage();
+            // 같은 약이 남았으면 대상 목록에 머문다(여러 명을 이어서 치료)
+            if (GuildStorage.Items.Contains(item)) ShowUseTargets(item);
+            else ShowStorage();
         }
     }
 }

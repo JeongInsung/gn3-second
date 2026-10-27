@@ -103,10 +103,11 @@ namespace GN3.Quests
             public int DirectReputation;
             public string Summary;
             public List<MemberReport> Members = new List<MemberReport>();
-            /// <summary>쓰러뜨린 적에게서 챙긴 전리품(승리했을 때만, LootBag에 들어갔다).</summary>
+            /// <summary>쓰러뜨린 적에게서 챙긴 전리품(칸을 쓰는 것은 대원 가방에, 재료는 창고에 들어갔다 — StowLoot).</summary>
             public List<(LootItem item, int count)> Loot = new List<(LootItem, int)>();
-            public int BagCapacity;   // 파견대 가방 칸 합(BagCatalog) — 결과 화면 가방 칸
+            public int BagCapacity;   // 파견대 가방 빈 칸 합(BagCatalog) — 결과 화면 가방 칸
             public int BagLeft;       // 가방이 모자라 두고 온 개수(자동 전투만, 직접 전투는 시체 창에서 이미 골랐다)
+            public int BagLost;       // 쓰러진 대원의 가방과 함께 잃은 개수
         }
 
         private static readonly System.Random LootRng = new System.Random();
@@ -119,14 +120,63 @@ namespace GN3.Quests
             public int MaxHealth;
             public bool Fallen;
             public List<string> Gains = new List<string>(); // "공격 +3" 등
+            public int Score;      // 이번 전투 평점 점수 0~100(BattleRating — 등급은 Grade)
+            public bool Mvp;       // 이번 판 최고 점수
+            public string Stats;   // "피해 320 · 받은 피해 140 · 처치 3 · 치유 0"(결과 화면 툴팁)
+        }
+
+        /// <summary>
+        /// 챙긴 전리품을 넣는다: 칸을 쓰는 것은 대원 가방에(전투 가방 창과 같은 순서 — BagCatalog.Split, 원정이 끝나도 남는다),
+        /// 칸을 안 쓰는 재료는 창고에·동전 주머니는 금화로(LootBag.Add). 쓰러진 대원 몫은 그 가방과 함께 잃는다(BagLost).
+        /// </summary>
+        private static void StowLoot(Report report, IReadOnlyList<Mercenary> fighters)
+        {
+            LootBag.Add(report.Loot.Where(l => !BagCatalog.UsesSlot(l.item)));
+            var units = BagCatalog.Units(report.Loot);
+            LootBag.MarkSeen(units);
+            var shares = BagCatalog.Split(units, fighters);
+            int stowed = 0;
+            for (int i = 0; i < fighters.Count; i++)
+                if (fighters[i].IsAlive) stowed += fighters[i].AddToBag(shares[i]);
+            report.BagLost = units.Count - stowed;
+        }
+
+        /// <summary>
+        /// 대원마다 이번 전투 평점(BattleRating)을 매겨 보고서에 넣고 경력(Mercenary.Record)에 남긴다. 최고 점수는 MVP.
+        /// 편지 한 줄을 돌려준다: "평점: 브렌 A- · 카이런 B (MVP 브렌)".
+        /// </summary>
+        private static string RateFighters(Report report, Battle battle, Quest quest)
+        {
+            var team = battle.Combatants;
+            if (team == null || team.Count == 0) return null;
+            var parts = new List<string>();
+            MemberReport best = null;
+            for (int i = 0; i < battle.Fighters.Count && i < team.Count; i++)
+            {
+                var merc = battle.Fighters[i];
+                var unit = team[i];
+                int score = BattleRating.Score(unit, team, battle.Victory);
+                var member = report.Members.FirstOrDefault(r => r.Merc == merc);
+                if (member != null)
+                {
+                    member.Score = score;
+                    member.Stats = BattleRating.Describe(unit);
+                    if (best == null || score > best.Score) best = member;
+                }
+                merc.Record.AddBattle(GameClock.CurrentDay, quest.Title, quest.Difficulty, battle.Victory, score,
+                    unit.DamageDealt, unit.Kills, unit.HealingDone, !merc.IsAlive);
+                parts.Add($"{merc.Name} {BattleRating.Grade(score)}");
+            }
+            if (best != null && report.Members.Count > 1) best.Mvp = true; // 혼자면 MVP 표시는 없다
+            return "평점: " + string.Join(" · ", parts) + (best != null && best.Mvp ? $" (MVP {best.Merc.Name})" : "");
         }
 
         public static Report ConcludeReport(Expedition expedition, Battle battle, bool alertShown = false)
         {
             var report = new Report { Victory = battle.Victory };
             var quest = expedition.Quest;
-            // 직접 전투는 전투 씬이 쓴 칸(살아서 싸우러 나간 대원) 그대로
-            report.BagCapacity = battle.PreLooted != null ? BagCatalog.CapacityOf(battle.Fighters) : BagCatalog.CapacityOf(expedition.Members);
+            // 살아서 싸우러 나간 대원의 빈 칸(직접 전투는 전투 씬이 쓴 칸 그대로, 나눠 담을 때도 같은 대원 — StowLoot)
+            report.BagCapacity = BagCatalog.CapacityOf(battle.Fighters);
             var fallen = new List<string>();
             var fallenMercs = new List<Mercenary>();
             var damage = new List<string>(); // 결과 창 "피해: 브렌 26 → 17 · …"
@@ -192,15 +242,25 @@ namespace GN3.Quests
                 if (quest.MaterialReward.Count > 0)
                     report.Loot = report.Loot.Concat(quest.MaterialReward).GroupBy(l => l.item)
                         .Select(g => (g.Key, g.Sum(l => l.count))).ToList();
-                LootBag.Add(report.Loot);
+                StowLoot(report, battle.Fighters);
                 if (report.Loot.Count > 0) summary += $" · 전리품: {LootCatalog.Describe(report.Loot)}";
                 if (bagLeft > 0) summary += $" · 가방이 모자라 {bagLeft}개는 두고 왔다";
+                if (report.BagLost > 0) summary += $" · 쓰러진 대원의 가방과 함께 {report.BagLost}개를 잃었다";
                 QuestClearHistory.RecordClear(quest.Region, quest.Difficulty); // 이 레벨은 다음 게시판에서 덜 나오고, 덜 깬 레벨이 더 자주 나온다
                 if (ForestProgress.TryUnlockNext(quest.Difficulty))
                 {
                     summary += $" · 은월의 숲 Lv{ForestProgress.UnlockedLevel} 개방!";
                     ToastLog.Show($"은월의 숲 Lv{ForestProgress.UnlockedLevel}이 열렸습니다!" +
-                                  (ForestProgress.UnlockedLevel == ForestProgress.MaxLevel ? " 숲의 주인 앤트킹이 기다립니다." : ""), true);
+                                  (ForestProgress.UnlockedLevel == ForestProgress.MaxLevel ? " 숲의 주인 앤트킹이 기다립니다." : ""), true, ToastKind.Good);
+                }
+                // Lv5 의뢰(마지막 라운드가 앤트킹)를 처음 이겼다: 최종 목표 달성
+                if (quest.Difficulty >= ForestProgress.MaxLevel && ForestProgress.MarkBossDefeated())
+                {
+                    summary += " · 숲의 주인 앤트킹 토벌!";
+                    ToastLog.Show("숲의 주인 앤트킹을 쓰러뜨렸습니다! 은월의 숲에 평화가 찾아왔습니다.", false, ToastKind.Good);
+                    Mailbox.Post(MailKind.Alert, "앤트킹 토벌",
+                        $"{Josa.IGa(Guild.CurrentName)} 은월의 숲의 주인 앤트킹을 쓰러뜨렸습니다.\n마을 사람들이 길드의 이름을 오래 기억할 것입니다.\n\n" +
+                        $"함께한 용병: {string.Join(", ", battle.Fighters.Select(f => f.IsAlive ? f.Name : $"{f.Name}(전사)"))}", important: true);
                 }
             }
             else
@@ -213,8 +273,9 @@ namespace GN3.Quests
                 if (battle.PreLooted != null && battle.PreLooted.Count > 0)
                 {
                     report.Loot = GroupLoot(battle.PreLooted);
-                    LootBag.Add(report.Loot);
+                    StowLoot(report, battle.Fighters);
                     summary += $" · 챙긴 전리품: {LootCatalog.Describe(report.Loot)}";
+                    if (report.BagLost > 0) summary += $" · 쓰러진 대원의 가방과 함께 {report.BagLost}개를 잃었다";
                 }
             }
 
@@ -229,6 +290,8 @@ namespace GN3.Quests
                 var member = report.Members.FirstOrDefault(r => r.Merc == merc);
                 if (member != null) member.Gains.AddRange(gains);
             }
+            string ratingLine = RateFighters(report, battle, quest);
+
             var survivorsList = expedition.Members.Where(m => m.IsAlive).ToList();
             MercenaryCondition.AfterBattle(survivorsList, battle.Victory, fallenMercs); // 피로·사기(친밀도 보정 포함)
             // 함께 살아 돌아온 사람끼리 친밀도가 바뀐다(승리면 오르고, 실패면 성격이 안 맞는 사이는 내려간다).
@@ -255,6 +318,7 @@ namespace GN3.Quests
             string body = (summary.StartsWith(prefix) ? summary.Substring(prefix.Length) : summary).Replace(" · ", "\n");
             if (report.Loot.Count > 0) body += $"\n가방 {BagCatalog.SlotsUsed(report.Loot)}/{report.BagCapacity}칸"; // 칸을 안 쓰는 재료·동전 주머니는 빼고 센다
             body += "\n\n" + (damage.Count > 0 ? "피해: " + string.Join(" · ", damage) : "피해 없음");
+            if (ratingLine != null) body += "\n" + ratingLine; // 대원별 평점(BattleRating)
             if (levelUps.Count > 0) body += "\n\n" + string.Join("\n", levelUps);
             var mail = Mailbox.Post(MailKind.QuestResult,
                 battle.Victory ? $"{quest.Title} — 임무 완료!" : $"{quest.Title} — 임무 실패...", body, important: true);

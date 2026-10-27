@@ -8,19 +8,20 @@ using UnityEngine;
 namespace GN3.Economy
 {
     /// <summary>
-    /// 떠돌이 상인: 며칠(MinGapDays~MaxGapDays)마다 아침에 마을에 와서 그날 하루 머물며 건설 재료 몇 가지(StockKinds)를
-    /// 비싸게(판값 × PriceFactor), 남은 수량만큼 판다. 오면 우편·알림이 오고, 마을 가운데쯤에 서 있는 상인을 누르면
+    /// 재료 상인(예전 이름 떠돌이 상인, 2026-10-27): 며칠(MinGapDays~MaxGapDays)마다 아침에 마을에 와서 그날 하루 머물며 건설 재료 몇 가지(StockKinds)를
+    /// 판값 × PriceFactor에, 남은 수량만큼 판다. 오면 우편·알림이 오고, 마을 가운데쯤에 서 있는 상인을 누르면
     /// 상점 창(MerchantShopUI)이 열린다(VillagePartyPresenter). 다음 날 떠난다. 저장 파일에 같이 들어간다(SaveSystem).
     /// </summary>
     public static class TravelingMerchant
     {
-        public const int PriceFactor = 3;
+        public const string DisplayName = "재료 상인";
+        public const int PriceFactor = 2;
         private const int MinGapDays = 4;
         private const int MaxGapDays = 6;
         private const int FirstVisitDays = 3; // 새 게임은 사흘 뒤 첫 방문
-        private const int StockKinds = 4;
-        private const int MinStock = 3;
-        private const int MaxStock = 6;
+        private const int StockKinds = 6;
+        private const int MinStock = 5;
+        private const int MaxStock = 10;
 
         private static int _hereDay = -1;   // 와 있는 날(-1이면 없음)
         private static int _nextDay = -1;   // 다음에 올 날(-1이면 아직 안 정함)
@@ -44,7 +45,7 @@ namespace GN3.Economy
             if (i < 0 || _stock[i].count <= 0 || !Wallet.TrySpend(PriceOf(item))) return false;
             _stock[i] = (item, _stock[i].count - 1);
             LootBag.Add(new[] { (item, 1) });
-            ToastLog.Show($"떠돌이 상인에게서 {item.Name} 1개를 샀습니다 (−{PriceOf(item)}G)", false);
+            ToastLog.Show($"{DisplayName}에게서 {item.Name} 1개를 샀습니다 (−{PriceOf(item)}G)", false);
             OnChanged?.Invoke();
             return true;
         }
@@ -64,8 +65,8 @@ namespace GN3.Economy
             foreach (var item in LootCatalog.Materials.OrderBy(_ => _rng.Next()).Take(StockKinds))
                 _stock.Add((item, _rng.Next(MinStock, MaxStock + 1)));
             string goods = string.Join(" · ", _stock.Select(s => s.item.Name));
-            Mailbox.Post(MailKind.Event, "떠돌이 상인이 왔습니다", $"오늘 하루만 마을에 머뭅니다. 마을 가운데의 상인을 누르면 물건을 볼 수 있습니다.\n파는 것: {goods}");
-            ToastLog.Show("떠돌이 상인이 마을에 왔습니다(오늘 하루). 상인을 눌러 건설 재료를 살 수 있습니다.", true);
+            Mailbox.Post(MailKind.Event, $"{DisplayName}이 왔습니다", $"오늘 하루만 마을에 머뭅니다. 마을 가운데의 상인을 누르면 건설 재료를 볼 수 있습니다.\n파는 것: {goods}");
+            ToastLog.Show($"{DisplayName}이 마을에 왔습니다(오늘 하루). 상인을 눌러 건설 재료를 살 수 있습니다.", true);
             OnChanged?.Invoke();
         }
 

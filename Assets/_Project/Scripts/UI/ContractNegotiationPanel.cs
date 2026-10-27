@@ -416,7 +416,10 @@ namespace GN3.UI
             }
             int weeks = Mathf.CeilToInt(_offer.LengthDays / 7f);
             string deadline = _neg.RivalDeadline > 0 ? $"<color=#e07050>  다른 길드 기한: 제안 {_neg.RivalDeadline}번</color>" : "";
-            _summaryText.text = (_agreed != null ? "<color=#f0c050>[합의 완료]</color>  " : "") + $"지금 낼 돈: 계약금 {_offer.SigningFee}G (보유 {Wallet.Gold}G){deadline}\n" +
+            // 길드 주급 총액: 지금 → 이 계약 후(재계약이면 이 용병의 지금 주급을 빼고 새 주급을 더한다)
+            int payroll = MercenaryCondition.TotalWeeklyWage();
+            int after = payroll - (_renewal ? MercenaryCondition.WeeklyWage(_merc) : 0) + _offer.WeeklyWage;
+            _summaryText.text = (_agreed != null ? "<color=#f0c050>[합의 완료]</color>  " : "") + $"계약금 {_offer.SigningFee}G (보유 {Wallet.Gold}G) · 길드 주급 {payroll} → {after}G/주{deadline}\n" +
                                 $"계약 기간 주급 합계 약 {_offer.WeeklyWage * weeks}G ({weeks}주) · {GameCalendar.Format(GameClock.CurrentDay + _offer.LengthDays)}까지";
             RefreshMood();
 
@@ -557,11 +560,16 @@ namespace GN3.UI
 
             // 버튼
             float by = -582f;
-            MakeButton(p, "그만두기", Close, new Vector2(30f, by), new Vector2(120f, 44f));
+            var quit = MakeButton(p, "그만두기", Close, new Vector2(30f, by), new Vector2(120f, 44f));
             _walkAwayButton = MakeButton(p, "자리 뜨기", WalkAway, new Vector2(160f, by), new Vector2(120f, 44f));
             _acceptCounterButton = MakeButton(p, "역제안 받아들이기", AcceptCounter, new Vector2(Width - 650f, by), new Vector2(310f, 44f));
             _finalButton = MakeButton(p, "최종 제안", FinalOffer, new Vector2(Width - 330f, by), new Vector2(140f, 44f));
             _proposeButton = MakeButton(p, "제안하기", Propose, new Vector2(Width - 180f, by), new Vector2(150f, 44f));
+            // 되돌릴 수 없거나 위험한 버튼은 누르기 전에 무슨 일이 생기는지
+            quit.gameObject.AddComponent<TooltipTrigger>().Text = "협상을 멈추고 창을 닫는다.\n오늘 안에 다시 열면 하던 데서 이어진다(날이 바뀌면 처음부터).";
+            _walkAwayButton.gameObject.AddComponent<TooltipTrigger>().Text = "일어서는 척한다(한 번만).\n붙잡으면 요구가 지난 제안 쪽으로 내려오지만, 놓아 주면 협상이 깨진다.";
+            _finalButton.gameObject.AddComponent<TooltipTrigger>().Text = "\"이게 마지막입니다\"(한 번만).\n마지노선 이상이면 받아들일 수 있지만, 모자라면 대개 협상이 깨진다.";
+            _proposeButton.gameObject.AddComponent<TooltipTrigger>().Text = "지금 조건으로 제안한다. 차이가 크면 기분이 상한다.";
             _doubtButton = MakeButton(p, "증거를 대 보시죠", DoubtRival, new Vector2(Width - 530f, by), new Vector2(240f, 44f));
             _acknowledgeButton = MakeButton(p, "그렇군요", AcknowledgeRival, new Vector2(Width - 280f, by), new Vector2(250f, 44f));
             _confirmButton = MakeButton(p, "계약 확정하기", Confirm, new Vector2(Width - 300f, by), new Vector2(270f, 44f));

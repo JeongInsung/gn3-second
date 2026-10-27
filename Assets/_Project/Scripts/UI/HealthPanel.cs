@@ -110,6 +110,10 @@ namespace GN3.UI
             _panel.SetActive(true);
             _panel.transform.SetAsLastSibling();
             Refresh();
+            FirstTimeTips.Show(FirstTimeTips.Health, "건강·피로·사기",
+                $"피로는 파견하면 오르고 마을에서 쉬면 내린다. {Mercenaries.Mercenary.TiredFatigue} 이상이면 능력치가 깎이고, {Mercenaries.Mercenary.ExhaustedFatigue} 이상(지침)이면 파견·훈련을 못 간다.\n" +
+                $"사기가 {Mercenaries.Mercenary.LowMorale} 미만이면 능력치가 깎이고 오래 낮으면 길드를 떠날 수 있다. 주급을 못 주면 크게 떨어진다.\n" +
+                "부상·질병은 시간이 지나면 낫지만, 중한 것(중)은 파견을 막고 오래 두면 위험하다 — 병원에 입원시키자.");
         }
 
         public void Hide() => _panel.SetActive(false);
@@ -174,7 +178,7 @@ namespace GN3.UI
             }
             if (merc.HasAilment)
             {
-                lines.Add($"회복: 병원 시간당 {Hospital.ProgressPerHour * 100f:0}% · 마을 시간당 {Ailments.NaturalProgressPerHour * 100f:0}% (종류마다 배율) · 파견 중엔 낫지 않음");
+                lines.Add($"회복: 병원 시간당 {Hospital.ProgressPerHour * 100f:0}% · 마을 시간당 {Ailments.NaturalRatePerHour * 100f:0}%{(Ailments.AidTentActive ? "(의무 천막)" : "")} (종류마다 배율) · 파견 중엔 낫지 않음");
                 if (Hospital.IsAdmitted(merc)) lines.Add($"쌓인 치료비 {Hospital.Fee(merc)}G (퇴원할 때 냄)");
             }
             return string.Join("\n", lines);
@@ -225,11 +229,20 @@ namespace GN3.UI
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = new Vector2(Pad, -top);
             rect.sizeDelta = new Vector2(Width - Pad * 2f, 22f);
-            foreach (var (x, w, title) in new[] { (NameX, 150f, "이름"), (HealthX, 190f, "체력"), (FatigueX, 44f, "피로"),
-                         (MoraleX, 44f, "사기"), (AilmentX, 200f, "부상·질병"), (PlaceX, 105f, "위치") })
+            // 머리말에 마우스를 올리면 수치가 뜻하는 것(색만 보고 짐작하지 않게)
+            foreach (var (x, w, title, tip) in new[]
+                     {
+                         (NameX, 150f, "이름", null),
+                         (HealthX, 190f, "체력", "지금 체력 / 최대 체력"),
+                         (FatigueX, 44f, "피로", $"피로 0~100 (마을에서 쉬면 준다)\n{Mercenary.TiredFatigue} 이상: 공격·방어 -10% (주황)\n{Mercenary.ExhaustedFatigue} 이상: 지침 — 공격·방어 -25%, 파견·훈련 불가 (빨강)"),
+                         (MoraleX, 44f, "사기", $"사기 0~100\n{Mercenary.LowMorale} 미만: 공격·방어 -10%, 오래 낮으면 떠날 수 있다 (빨강)"),
+                         (AilmentX, 200f, "부상·질병", "이름 옆 %는 회복 진행도(100%면 낫는다)\n(중): 중한 상태 — 파견 불가, 병원 치료 권장"),
+                         (PlaceX, 105f, "위치", null),
+                     })
             {
                 var text = CreateText("Col", 13, header.transform, $"<color={Dim}>{title}</color>");
                 Place(text.rectTransform, x, w, 22f);
+                AddTip(text, tip);
             }
         }
 
@@ -290,7 +303,9 @@ namespace GN3.UI
         private void CreateChip(Transform row, Mercenary merc, Ailment ailment, float x)
         {
             var def = ailment.Def;
-            var label = CreateText("Ailment", 12, row, $"<color={(def.isSevere ? Bad : "#ffffff")}>{def.displayName}</color> <color={Dim}>{Mathf.RoundToInt(ailment.Progress * 100f)}%</color>");
+            // 중한 상태는 빨강 + "(중)"(색을 못 봐도 알게), %는 회복 진행도
+            string severe = def.isSevere ? "(중)" : "";
+            var label = CreateText("Ailment", 12, row, $"<color={(def.isSevere ? Bad : "#ffffff")}>{def.displayName}{severe}</color> <color={Dim}>회복 {Mathf.RoundToInt(ailment.Progress * 100f)}%</color>");
             Place(label.rectTransform, x, ChipWidth, 30f, 0f); // 막대까지 덮는 높이라 칸 어디에 올려도 툴팁이 뜬다
             label.alignment = TextAnchor.UpperLeft;
             label.horizontalOverflow = HorizontalWrapMode.Overflow;

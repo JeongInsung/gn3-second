@@ -100,6 +100,8 @@ namespace GN3.Battle
         private GameObject _lootChoicePanel;
         private Button _lootTakeButton;  // 고른 게 남은 가방 칸보다 많으면 막는다
         private Text _lootChoiceNote;    // "가방이 n칸 모자랍니다"
+        private Button _lootSwapButton;  // 모자란 만큼 가방의 싼 것을 버리고 가져가기(버릴 것이 고른 것보다 쌀 때만)
+        private List<LootItem> _lootSwapDrops = new List<LootItem>();
 
         // 가방: 파견대 가방 칸 합(BagCatalog)만큼만 들고 온다. 쓴 칸 = 챙긴 것 개수(건설 재료·동전 주머니 빼고 — BagCatalog.UsesSlot).
         private int _bagCapacity;
@@ -108,9 +110,9 @@ namespace GN3.Battle
         private const float LootChoiceWidth = 380f, LootChoiceRowHeight = 42f, LootChoiceIcon = 34f;
         private const float LootChoiceMargin = 24f;       // 화면 오른쪽 끝에서
         private const float LootChoiceUnpickedAlpha = 0.35f;
-        // 가방 창(B·오른쪽 위 [가방] 버튼): 대원마다 가방 칸을 그리고, 챙긴 것을 칸 순서대로 채운다. 칸을 골라 [버리기]로 비운다.
-        private const float BagWindowWidth = 380f, BagSlotSize = 30f, BagSlotGap = 4f;
-        private const int BagSlotsPerLine = 10;
+        // 가방 창(B·오른쪽 위 [가방] 버튼, 화면 위 가운데): 대원마다 큰 칸 가방 카드(BagSlotsUI.CreateMercBagCard), 챙긴 것을 칸 순서대로 채운다.
+        // 칸을 골라 [버리기]로 비운다.
+        private const float BagWindowWidth = 900f, BagWindowTop = -100f;
         private Button _bagButton;
         private Text _bagButtonText;
         private GameObject _bagWindow;
@@ -130,7 +132,9 @@ namespace GN3.Battle
         private readonly Dictionary<FieldUnit, UnitView> _views = new Dictionary<FieldUnit, UnitView>();
         private readonly List<UnitView> _drawOrder = new List<UnitView>();
         private bool _picking;      // 스킬 대상 고르는 중
-        private bool _focusPicking; // 분대 명령 '집중 공격'의 대상 고르는 중(일시정지 중)
+        private bool _focusPicking; // 분대 명령 '집중 공격'의 대상 고르는 중
+        private Button _resultBackButton; // 결과 화면 [마을로 돌아가기](Enter·Space)
+        private float _resultBackAt;
         private bool _resultShown;
         private float _overSince = -1f;
         private AudioSource _music;     // 전투 브금(설정 창의 음악 볼륨을 따른다) // 전투가 끝난(한쪽이 다 쓰러진) 시각 — ResultDelaySeconds 뒤 결과창
@@ -663,6 +667,11 @@ namespace GN3.Battle
             if (_resultShown)
             {
                 foreach (var v in _views.Values) UpdateUnitView(v); // 마지막에 쓰러진 유닛도 끝까지 넘어가게(그림만)
+                // 결과 화면: Enter·Space로 [마을로 돌아가기]
+                var key = Keyboard.current;
+                if (_resultBackButton != null && key != null && Time.unscaledTime - _resultBackAt > 0.6f // 뜨자마자 누르던 키로 넘어가지 않게
+                    && (key.enterKey.wasPressedThisFrame || key.numpadEnterKey.wasPressedThisFrame || key.spaceKey.wasPressedThisFrame))
+                    _resultBackButton.onClick.Invoke();
                 return;
             }
             UpdateLooting();
@@ -723,7 +732,8 @@ namespace GN3.Battle
             if (kb == null) return;
             if (kb.qKey.wasPressedThisFrame) PressSkill();
             if (kb.escapeKey.wasPressedThisFrame) { _picking = false; _focusPicking = false; }
-            if (_paused)
+            // 분대 명령 1~4: 멈추지 않아도 바로(일시정지 화면 버튼과 같은 명령·쿨타임)
+            if (!_resultShown && !_salvaging)
             {
                 if (kb.digit1Key.wasPressedThisFrame || kb.numpad1Key.wasPressedThisFrame) PressSquadOrder(SquadOrder.Rally);
                 if (kb.digit2Key.wasPressedThisFrame || kb.numpad2Key.wasPressedThisFrame) PressSquadOrder(SquadOrder.Retreat);
@@ -1394,7 +1404,7 @@ namespace GN3.Battle
         }
 
         /// <summary>
-        /// 가방 창(오른쪽 위, [가방] 버튼 아래): 제목 "가방 n/m" → 대원마다 "이름 · 가방 이름 n칸" + 그 대원 칸(챙긴 것을 대원 순서대로 채움) →
+        /// 가방 창(화면 위 가운데 — 오른쪽 시체 창과 겹치지 않게): 제목 "가방 n/m" → 대원마다 큰 칸 가방 카드(챙긴 것을 대원 순서대로 채움) →
         /// 가방 밖(재료·동전 주머니) → [버리기] [닫기]. 칸을 누르면 고르고, [버리기]로 하나 버린다. 전투는 멈추지 않는다.
         /// </summary>
         private void BuildBagWindow()
@@ -1404,8 +1414,8 @@ namespace GN3.Battle
             panel.transform.SetParent(_canvas.transform, false);
             _bagWindow = panel;
             var rect = (RectTransform)panel.transform;
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 1f);
-            rect.anchoredPosition = new Vector2(-LootChoiceMargin, -164f);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, BagWindowTop);
             rect.sizeDelta = new Vector2(BagWindowWidth, 0f);
             panel.GetComponent<Image>().color = new Color(0.1f, 0.09f, 0.11f, 0.94f);
             var layout = panel.GetComponent<VerticalLayoutGroup>();
@@ -1422,26 +1432,22 @@ namespace GN3.Battle
 
             var units = BagSlotsUI.Units(_lootedItems);
             if (_bagSelected >= units.Count) _bagSelected = -1;
+            var shares = BagSlotsUI.Split(units, _fighters); // 앞 대원 가방 빈 칸부터 차례로 채운다
             int start = 0;
-            foreach (var merc in _fighters)
+            for (int m = 0; m < _fighters.Count; m++)
             {
-                int slots = merc.Bag.Slots;
-                var label = CreateText(panel.transform, $"{merc.Name}  <color=#a3937c>{merc.Bag.Name} {slots}칸</color>", 14, TextAnchor.MiddleLeft, UITheme.BodyText);
-                label.supportRichText = true;
-                label.gameObject.AddComponent<LayoutElement>().minHeight = 18f;
-                var mine = units.Skip(start).Take(slots).ToList(); // 앞 대원 가방부터 차례로 채운다
-                int offset = start;
-                var borders = BagSlotsUI.CreateGrid(panel.transform, mine, slots, BagSlotsPerLine, BagSlotSize, BagSlotGap, i => SelectBagSlot(offset + i));
-                for (int i = 0; i < borders.Count; i++)
-                    if (offset + i == _bagSelected) borders[i].color = BagSlotsUI.SelectedBorder;
-                start += slots;
+                // 지난 원정부터 가방에 남아 있던 것이 앞 칸, 이번에 챙긴 몫이 그 뒤(남아 있던 것은 고르거나 버릴 수 없다)
+                int offset = start, kept = _fighters[m].BagContents.Count, count = shares[m].Count;
+                var items = _fighters[m].BagContents.Concat(shares[m]).ToList();
+                int selected = _bagSelected >= offset && _bagSelected < offset + count ? _bagSelected - offset + kept : -1;
+                BagSlotsUI.CreateMercBagCard(panel.transform, _fighters[m], items, BagSlotsUI.LargeSlot, BagSlotsUI.LargePerLine, BagSlotsUI.LargeGap,
+                    i => { if (i >= kept) SelectBagSlot(offset + i - kept); }, selected, i => { if (i >= kept) DropBagItem(offset + i - kept); });
+                start += count;
             }
-            if (units.Count > start) // 칸보다 많이 들 일은 없지만, 혹시 넘치면 마지막 줄에 붙여 보인다
-                BagSlotsUI.CreateGrid(panel.transform, units.Skip(start).ToList(), 0, BagSlotsPerLine, BagSlotSize, BagSlotGap, i => SelectBagSlot(start + i));
-            BagSlotsUI.CreateOutsideRow(panel.transform, _lootedItems, 24f);
+            BagSlotsUI.CreateOutsideRow(panel.transform, _lootedItems, 28f);
 
             string selectedName = _bagSelected >= 0 ? units[_bagSelected].Name : null;
-            var note = CreateText(panel.transform, selectedName != null ? $"고른 칸: {selectedName}" : units.Count > 0 ? "칸을 눌러 고르면 버릴 수 있다" : "아직 챙긴 것이 없다",
+            var note = CreateText(panel.transform, selectedName != null ? $"고른 칸: {selectedName}" : units.Count > 0 ? "칸을 눌러 골라 [버리기] · 우클릭하면 바로 버린다" : "아직 챙긴 것이 없다",
                 13, TextAnchor.MiddleLeft, UITheme.MutedText);
             note.gameObject.AddComponent<LayoutElement>().minHeight = 18f;
 
@@ -1467,19 +1473,28 @@ namespace GN3.Battle
         }
 
         /// <summary>고른 칸의 아이템 하나를 버린다(시체는 이미 털려 되돌아가지 않는다). 칸이 비면 다시 시체를 뒤질 수 있다.</summary>
-        private void DropSelectedBagItem()
+        private void DropSelectedBagItem() => DropBagItem(_bagSelected);
+
+        /// <summary>index번째 칸(BagSlotsUI.Units 순서)의 아이템 하나를 버린다(우클릭·[버리기]).</summary>
+        private void DropBagItem(int index)
         {
             var units = BagSlotsUI.Units(_lootedItems);
-            if (_bagSelected < 0 || _bagSelected >= units.Count) return;
-            var item = units[_bagSelected];
+            if (index < 0 || index >= units.Count) return;
+            RemoveOneLooted(units[index]);
+            _bagSelected = -1;
+            RefreshBag();
+            UpdateLootChoiceState(); // 칸이 비면 뜬 시체 창의 [가져가기]가 다시 열린다
+        }
+
+        /// <summary>챙긴 것에서 그 아이템 하나를 빼고 로그를 남긴다.</summary>
+        private void RemoveOneLooted(LootItem item)
+        {
             int at = _lootedItems.FindIndex(l => l.item == item && l.count > 0);
             if (at < 0) return;
             var (_, count) = _lootedItems[at];
             if (count > 1) _lootedItems[at] = (item, count - 1);
             else _lootedItems.RemoveAt(at);
             AppendLog($"<color=#a3937c>{Josa.EulReul(item.Name)} 버렸다</color>");
-            _bagSelected = -1;
-            RefreshBag();
         }
 
         /// <summary>고른 것 중 남은 가방 칸에 드는 만큼만(값 높은 것부터) 가져간다.</summary>
@@ -1513,12 +1528,49 @@ namespace GN3.Battle
             int need = BagCatalog.SlotsUsed(_lootChoiceShown.Loot.Where((_, i) => _lootChoiceShown.Picked[i]));
             int over = need - BagFree;
             if (_lootTakeButton != null) _lootTakeButton.interactable = over <= 0;
+            _lootSwapDrops = over > 0 ? SwapDrops(_lootChoiceShown, over) : new List<LootItem>();
+            if (_lootSwapButton != null)
+            {
+                bool canSwap = _lootSwapDrops.Count > 0;
+                _lootSwapButton.gameObject.SetActive(canSwap);
+                if (canSwap)
+                {
+                    _lootSwapButton.GetComponentInChildren<Text>().text = $"싼 것 {_lootSwapDrops.Count}개 버리고 가져가기";
+                    var tip = _lootSwapButton.GetComponent<TooltipTrigger>();
+                    if (tip == null) tip = _lootSwapButton.gameObject.AddComponent<TooltipTrigger>();
+                    tip.Text = "가방에서 버릴 것:\n" + string.Join("\n", _lootSwapDrops.Select(d => $"{d.Name} ({d.Price}G)"));
+                }
+            }
             if (_lootChoiceNote != null)
             {
-                _lootChoiceNote.text = over > 0 ? $"가방이 {over}칸 모자랍니다 — 덜 골라 주세요" : "";
+                _lootChoiceNote.text = over > 0
+                    ? $"가방이 {over}칸 모자랍니다 — 덜 고르거나" + (_lootSwapDrops.Count > 0 ? " 싼 것과 바꾸세요" : " 가방 창(B)에서 버리세요")
+                    : "";
                 _lootChoiceNote.gameObject.SetActive(over > 0);
             }
             RefreshLootChoiceTitle();
+        }
+
+        /// <summary>
+        /// 모자란 over칸만큼 가방에서 버릴 것: 가방의 가장 싼 것 over개. 그 하나하나가 이번에 고른 칸 쓰는 것 중 가장 싼 것보다 싸야 한다
+        /// (더 비싼 걸 버리고 싼 걸 줍는 일은 없게). 안 되면 빈 목록.
+        /// </summary>
+        private List<LootItem> SwapDrops(LootChoice choice, int over)
+        {
+            var picked = choice.Loot.Where((l, i) => choice.Picked[i] && BagCatalog.UsesSlot(l.item)).Select(l => l.item).ToList();
+            if (picked.Count == 0) return new List<LootItem>();
+            int cheapestPicked = picked.Min(p => p.Price);
+            var drops = BagSlotsUI.Units(_lootedItems).OrderBy(u => u.Price).Take(over).ToList();
+            return drops.Count == over && drops.All(d => d.Price < cheapestPicked) ? drops : new List<LootItem>();
+        }
+
+        /// <summary>[싼 것 n개 버리고 가져가기]: 가방의 싼 것을 버리고 고른 것을 모두 챙긴다.</summary>
+        private void SwapAndTake()
+        {
+            if (_lootChoiceShown == null || _lootSwapDrops.Count == 0) return;
+            foreach (var item in _lootSwapDrops) RemoveOneLooted(item);
+            _lootSwapDrops = new List<LootItem>();
+            ResolveLootChoice(true);
         }
 
         /// <summary>떠 있는 창을 치우고 대기열의 다음 시체 창을 띄운다(없으면 닫힌 채로).</summary>
@@ -1581,6 +1633,10 @@ namespace GN3.Battle
 
             _lootChoiceNote = CreateText(panel.transform, "", 14, TextAnchor.MiddleLeft, new Color(0.95f, 0.45f, 0.4f));
             _lootChoiceNote.gameObject.AddComponent<LayoutElement>().minHeight = 20f;
+
+            // 가방이 모자랄 때만 보이는 교체 버튼(창 폭 전체, 버튼 줄 위)
+            _lootSwapButton = ShopListUI.CreateButton(panel.transform, "싼 것 버리고 가져가기", SwapAndTake, LootChoiceWidth - 28f);
+            UIThemeApplier.ApplyNow(_lootSwapButton.transform);
 
             var buttons = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
             buttons.transform.SetParent(panel.transform, false);
@@ -2193,8 +2249,8 @@ namespace GN3.Battle
             _pauseOverlay.SetActive(false);
         }
 
-        // ---------- 분대 명령(일시정지 중) ----------
-        // 멈춘 화면 아래쪽 버튼 4개(단축키 1~4). 조종 중인 분대장의 분대에만 먹히고, 명령마다 쿨타임이 있다(FieldBattleSession).
+        // ---------- 분대 명령 ----------
+        // 단축키 1~4는 싸우는 중에도 바로 먹고, 멈춘 화면 아래쪽엔 같은 버튼 4개(쿨타임 표시). 조종 중인 분대장의 분대에만 먹히고, 명령마다 쿨타임이 있다(FieldBattleSession).
 
         private static readonly string[] SquadOrderNames = { "집결", "후퇴", "전진", "집중 공격" };
         private static readonly string[] SquadOrderHelp = { "분대장 곁에 모여 지킴", "뒤로 물러나 지킴", "모두 적에게 돌격", "적 하나를 다 같이" };
@@ -2225,7 +2281,13 @@ namespace GN3.Battle
         private void PressSquadOrder(SquadOrder order)
         {
             EventSystem.current?.SetSelectedGameObject(null); // 버튼이 선택된 채 남아 Space에 다시 눌리지 않게
-            if (!_paused || !_session.SquadOrderReady(order)) return;
+            if (_resultShown || _salvaging || _deploying) return;
+            if (!_session.SquadOrderReady(order))
+            {
+                float cd = _session.SquadOrderCooldown(order);
+                if (cd > 0f) AppendLog($"<color=#a3937c>{SquadOrderNames[(int)order]}: {Mathf.CeilToInt(cd)}초 뒤 다시 내릴 수 있다</color>");
+                return;
+            }
             _picking = false;
             switch (order)
             {
@@ -2441,6 +2503,15 @@ namespace GN3.Battle
             var clickImage = clickGO.GetComponent<Image>();
             clickImage.raycastTarget = true;
             clickGO.AddComponent<BattleClickTarget>().OnClick = e => OnUnitClicked(unit, e);
+            if (!unit.IsPlayerSide) // 적에 마우스를 올리면 이름·등급·체력·공격 방식(체력은 계속 갱신)
+            {
+                string rank = tier >= 2 ? "보스" : tier == 1 ? "정예" : "일반";
+                var stats = unit.Combatant.Stats;
+                clickGO.AddComponent<TooltipTrigger>();
+                clickGO.AddComponent<LiveTooltip>().Build = () =>
+                    $"<b>{unit.Combatant.Name}</b> ({rank})\n체력 {Mathf.Max(0, unit.Combatant.CurrentHealth)}/{stats.MaxHealth} · 공격 {stats.Attack} · 방어 {stats.Defense}\n" +
+                    (unit.IsMelee ? "근접 공격" : "원거리 공격");
+            }
             if (unit.IsPlayerSide)
             {
                 var drag = clickGO.AddComponent<BattleDragTarget>();
@@ -2673,10 +2744,13 @@ namespace GN3.Battle
             int rows = report.Members.Count;
             // 가방(챙긴 것이 있을 때 — 지기 전에 뒤져 챙긴 것도): 머리줄 + 가방 칸 격자 + 가방 밖 줄. 높이만큼 구분선·대원 목록을 아래로 민다
             var loot = report.Loot ?? new List<(LootItem item, int count)>();
-            var units = BagSlotsUI.Units(loot);
             bool hasOutside = BagSlotsUI.Outside(loot).Count > 0;
-            float gridHeight = BagSlotsUI.GridHeight(Mathf.Max(report.BagCapacity, units.Count), ResultBagPerLine, ResultBagSlot, ResultBagGap);
-            float bagHeight = ResultBagHeader + 6f + gridHeight + (hasOutside ? 6f + ResultBagOutside : 0f);
+            // 대원마다 큰 칸 가방 카드: 이미 가방에 담긴 뒤라(ExpeditionBattle.StowLoot) 지금 든 것 그대로, 쓰러진 대원은 잃어서 빈 가방
+            var bagShares = _fighters.Select(f => f.IsAlive ? f.BagContents.ToList() : new List<LootItem>()).ToList();
+            float cardsHeight = 0f;
+            for (int m = 0; m < _fighters.Count; m++)
+                cardsHeight += BagSlotsUI.CardHeight(_fighters[m], bagShares[m].Count, ResultBagSlot, ResultBagPerLine, ResultBagGap) + ResultBagCardGap;
+            float bagHeight = ResultBagHeader + 6f + cardsHeight + (hasOutside ? 6f + ResultBagOutside : 0f);
             float lootExtra = loot.Count > 0 ? bagHeight + 8f : 0f;
             float membersTop = -196f - lootExtra;
             float height = -membersTop + ResultRowHeight * rows + 124f;
@@ -2684,7 +2758,7 @@ namespace GN3.Battle
             panel.AddComponent<CanvasGroup>();
             var panelRect = (RectTransform)panel.transform;
             panelRect.anchorMin = panelRect.anchorMax = panelRect.pivot = new Vector2(0.5f, 0.5f);
-            panelRect.sizeDelta = new Vector2(ResultWidth, height);
+            panelRect.sizeDelta = new Vector2(loot.Count > 0 ? ResultBagWidth : ResultWidth, height); // 가방 카드가 들어가게 넓힌다
             var panelImage = panel.GetComponent<Image>();
             panelImage.sprite = UITheme.Panel;
             panelImage.type = Image.Type.Sliced;
@@ -2740,7 +2814,8 @@ namespace GN3.Battle
                 direct.fontStyle = FontStyle.Normal;
             }
 
-            // 가방: "가방 n/m칸" + 칸 격자(채운 칸은 등급 색 테두리 아이콘, 마우스를 올리면 이름·값) + 가방 밖(재료·동전). 길드 창고에서 판다.
+            // 가방: "가방 n/m칸" + 칸 격자(채운 칸은 등급 색 테두리 아이콘, 마우스를 올리면 이름·값) + 가방 밖(재료·동전).
+            // 전리품은 대원 가방에 남고, 마을에서 가방 창의 [창고에 넣기]로 꺼내 판다.
             if (loot.Count > 0)
             {
                 var bag = new GameObject("Bag", typeof(RectTransform), typeof(VerticalLayoutGroup));
@@ -2748,17 +2823,24 @@ namespace GN3.Battle
                 PlaceTop((RectTransform)bag.transform, -172f, bagHeight, ResultPad);
                 var bagLayout = bag.GetComponent<VerticalLayoutGroup>();
                 bagLayout.childAlignment = TextAnchor.UpperCenter;
-                bagLayout.spacing = 6f;
+                bagLayout.spacing = ResultBagCardGap;
                 bagLayout.childControlWidth = bagLayout.childControlHeight = true;
-                bagLayout.childForceExpandWidth = bagLayout.childForceExpandHeight = false;
-                string left = report.BagLeft > 0 ? $"  <color=#a3937c>· 칸이 모자라 {report.BagLeft}개는 두고 왔다</color>" : "";
+                bagLayout.childForceExpandWidth = true;
+                bagLayout.childForceExpandHeight = false;
+                string left = (report.BagLeft > 0 ? $"  <color=#a3937c>· 칸이 모자라 {report.BagLeft}개는 두고 왔다</color>" : "")
+                    + (report.BagLost > 0 ? $"  <color=#a3937c>· 쓰러진 대원의 가방과 함께 {report.BagLost}개를 잃었다</color>" : "");
                 var header = CreateText(bag.transform, $"<b>가방</b>  <color=#ffd36b>{BagCatalog.SlotsUsed(loot)}/{report.BagCapacity}칸</color>{left}",
                     16, TextAnchor.MiddleCenter, UITheme.BodyText);
                 header.supportRichText = true;
                 header.horizontalOverflow = HorizontalWrapMode.Overflow;
                 header.gameObject.AddComponent<LayoutElement>().minHeight = ResultBagHeader;
-                BagSlotsUI.CreateGrid(bag.transform, units, report.BagCapacity, ResultBagPerLine, ResultBagSlot, ResultBagGap);
+                for (int m = 0; m < _fighters.Count; m++)
+                    BagSlotsUI.CreateMercBagCard(bag.transform, _fighters[m], bagShares[m], ResultBagSlot, ResultBagPerLine, ResultBagGap);
                 BagSlotsUI.CreateOutsideRow(bag.transform, loot, ResultBagOutside - 4f);
+                FirstTimeTips.Show(FirstTimeTips.BattleLoot, "전리품과 가방",
+                    "챙긴 전리품은 대원 가방에 담겨 마을까지 그대로 남는다(건설 재료는 창고로, 동전 주머니는 바로 금화로).\n" +
+                    "팔거나 제작·건설에 쓰려면 길드 창고의 [가방 비우기]나 가방 창의 [창고에 넣기]로 꺼내자.\n" +
+                    "가방이 차 있으면 다음 원정에서 그만큼 덜 줍는다. 쓰러진 대원의 가방은 함께 잃는다.");
             }
 
             // 구분선
@@ -2795,6 +2877,9 @@ namespace GN3.Battle
             backRect.anchoredPosition = new Vector2(0f, 24f);
             backRect.sizeDelta = new Vector2(240f, 48f);
             backButton.onClick.AddListener(() => SceneManager.LoadScene("MainScene"));
+            _resultBackButton = backButton;
+            _resultBackAt = Time.unscaledTime;
+            backButton.gameObject.AddComponent<TooltipTrigger>().Text = "마을로 돌아가기 (Enter · Space)";
 
             StartCoroutine(RiseIn(panelRect));
             if (victory && report.Gold > 0) StartCoroutine(CountUp(goldValue, report.Gold));
@@ -2845,9 +2930,10 @@ namespace GN3.Battle
         };
 
         private const float LootGradeOutline = 1.5f; // 아이콘 둘레 등급 색 테두리 두께
-        // 결과 화면 가방(BagSlotsUI): 한 줄 14칸
-        private const int ResultBagPerLine = 14;
-        private const float ResultBagSlot = 34f, ResultBagGap = 4f;
+        // 결과 화면 가방(BagSlotsUI 용병별 카드): 한 줄 10칸(가장 큰 가방), 칸 44
+        private const int ResultBagPerLine = 10;
+        private const float ResultBagSlot = 44f, ResultBagGap = 4f, ResultBagCardGap = 6f;
+        private const float ResultBagWidth = 760f;   // 가방이 있으면 결과 판을 이만큼 넓힌다(카드 폭 ≈ 초상 44 + 정보 112 + 칸 476 + 여백)
         private const float ResultBagHeader = 22f;   // "가방 n/m칸" 줄
         private const float ResultBagOutside = 28f;  // 가방 밖(재료·동전) 줄
 
@@ -2884,7 +2970,19 @@ namespace GN3.Battle
             nameRect.anchorMin = nameRect.anchorMax = new Vector2(0f, 0.5f);
             nameRect.pivot = new Vector2(0f, 0.5f);
             nameRect.anchoredPosition = new Vector2(50f, 0f);
-            nameRect.sizeDelta = new Vector2(150f, 26f);
+            nameRect.sizeDelta = new Vector2(104f, 26f);
+
+            // 평점 등급(BattleRating): 이름과 체력선 사이. 마우스를 올리면 활약 수치
+            var grade = CreateText(row.transform, BattleRating.RichGrade(m.Score), 18, TextAnchor.MiddleCenter, UITheme.BodyText);
+            grade.supportRichText = true;
+            grade.fontStyle = FontStyle.Bold;
+            grade.raycastTarget = true;
+            var gradeRect = grade.rectTransform;
+            gradeRect.anchorMin = gradeRect.anchorMax = new Vector2(0f, 0.5f);
+            gradeRect.pivot = new Vector2(0f, 0.5f);
+            gradeRect.anchoredPosition = new Vector2(156f, 0f);
+            gradeRect.sizeDelta = new Vector2(48f, 30f);
+            grade.gameObject.AddComponent<TooltipTrigger>().Text = $"평점 {BattleRating.Grade(m.Score)} ({m.Score}점){(m.Mvp ? " · MVP" : "")}\n{m.Stats}";
 
             // 가는 체력선: 남은 체력(색) + 이번 전투에서 잃은 부분(옅은 빨강). 숫자는 툴팁으로.
             float max = Math.Max(1, m.MaxHealth);
@@ -2911,6 +3009,7 @@ namespace GN3.Battle
                 : $"체력 {m.HealthAfter} / {m.MaxHealth}";
 
             string result = m.Fallen ? "전사" : m.Gains.Count > 0 ? "▲ " + string.Join(", ", m.Gains) : "";
+            if (m.Mvp) result = result.Length > 0 ? $"MVP · {result}" : "MVP"; // 이번 판 최고 평점
             var resultText = CreateText(row.transform, result, 15, TextAnchor.MiddleRight, m.Fallen ? DefeatColor : GainColor);
             resultText.fontStyle = FontStyle.Bold;
             resultText.raycastTarget = false;

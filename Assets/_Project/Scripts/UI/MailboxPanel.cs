@@ -29,16 +29,17 @@ namespace GN3.UI
         private const float TabWidth = 110f;
         private const float TabSpacing = 6f;
 
-        private enum Tab { All, Important }
+        private enum Tab { All, Important, Pending, Report, Notice }
         private static readonly (Tab Tab, string Label)[] Tabs =
         {
-            (Tab.All, "전체"), (Tab.Important, "중요"),
+            (Tab.All, "전체"), (Tab.Important, "중요"), (Tab.Pending, "선택 대기"), (Tab.Report, "보고"), (Tab.Notice, "알림"),
         };
 
         private static MailboxPanel _instance;
 
         private GameObject _panel;
         private Text _title;
+        private Text _autoAllLabel; // [모두 자동 (n)] 글자 — 도착 편지 수
         private readonly List<Text> _tabLabels = new List<Text>();
         private readonly List<GameObject> _tabFrames = new List<GameObject>(); // 고른 탭의 흰 테두리
         private RectTransform _list;
@@ -126,15 +127,43 @@ namespace GN3.UI
         private static bool InTab(Mailbox.Mail mail, Tab tab) => tab switch
         {
             Tab.Important => mail.Important,
+            Tab.Pending => mail.IsPendingChoice,
+            Tab.Report => mail.Kind == MailKind.Report || mail.Kind == MailKind.QuestResult,
+            Tab.Notice => mail.Kind == MailKind.Notice,
             _ => true,
         };
+
+        /// <summary>[모두 자동]: 자동/직접을 고르지 않은 도착 편지를 모두 자동 진행(사건 선택지는 그대로).</summary>
+        private void AutoAll()
+        {
+            var arrivals = Mailbox.All.Where(m => m.IsPendingChoice && !m.IsPendingEvent && m.Expedition != null).Select(m => m.Expedition).ToList();
+            foreach (var expedition in arrivals) MailActions.AutoFight(expedition);
+            if (arrivals.Count > 0) ToastLog.Show($"도착한 파견 {arrivals.Count}개를 자동으로 진행했습니다", false);
+        }
+
+        private void ClearRead()
+        {
+            int removed = Mailbox.RemoveRead();
+            ToastLog.Show(removed > 0 ? $"읽은 편지 {removed}통을 지웠습니다" : "지울 편지가 없습니다 (선택 대기·확인 안 한 중요 편지는 남깁니다)", false);
+        }
 
         private void Refresh()
         {
             _title.text = $"우편함 (안 읽음 {Mailbox.UnreadCount})";
+            int autoCount = Mailbox.All.Count(m => m.IsPendingChoice && !m.IsPendingEvent && m.Expedition != null);
+            _autoAllLabel.text = autoCount > 0 ? $"모두 자동 ({autoCount})" : "모두 자동";
+            var autoButton = _autoAllLabel.GetComponentInParent<Button>();
+            ShopListUI.SetBlocked(autoButton, autoCount > 0 ? null : "자동/직접을 기다리는 도착 편지가 없습니다.");
+            if (autoCount > 0)
+            {
+                var tip = autoButton.GetComponent<TooltipTrigger>() ?? autoButton.gameObject.AddComponent<TooltipTrigger>();
+                tip.Text = "자동/직접을 기다리는 도착 편지를 모두 자동 진행한다(사건 선택지는 따로 고른다)";
+            }
             for (int i = 0; i < Tabs.Length; i++)
             {
-                var (tab, label) = Tabs[i];
+                var (tab, baseLabel) = Tabs[i];
+                int pending = tab == Tab.Pending ? Mailbox.PendingChoiceCount : 0;
+                string label = pending > 0 ? $"{baseLabel} {pending}" : baseLabel;
                 bool on = tab == _tab;
                 _tabLabels[i].text = on ? $"<color={UITheme.SelectedTextHex}><b>{label}</b></color>" : label;
                 _tabFrames[i].SetActive(on);
@@ -151,7 +180,8 @@ namespace GN3.UI
             if (_selected != null && !Mailbox.All.Contains(_selected)) _selected = null;
 
             _readRows.Clear();
-            var mails = Mailbox.All.Where(m => InTab(m, _tab)).Reverse().Take(MaxRows).ToList();
+            var inTab = Mailbox.All.Where(m => InTab(m, _tab)).ToList();
+            var mails = Enumerable.Reverse(inTab).Take(MaxRows).ToList();
             if (mails.Count == 0) CreateEmptyRow();
             RectTransform selectedRow = null;
             foreach (var mail in mails)
@@ -160,6 +190,11 @@ namespace GN3.UI
                 if (mail != _selected) continue;
                 selectedRow = row;
                 CreateExpanded(mail);
+            }
+            if (inTab.Count > mails.Count) // 말없이 숨기지 않게
+            {
+                var more = CreateText(_list, $"이전 편지 {inTab.Count - mails.Count}통은 생략했습니다 ([읽은 것 지우기]로 정리)", 13, TextAnchor.MiddleCenter, UITheme.MutedText);
+                more.gameObject.AddComponent<LayoutElement>().minHeight = RowHeight;
             }
             LayoutRebuilder.ForceRebuildLayoutImmediate(_list);
             UIThemeApplier.ApplyNow(_list);
@@ -308,8 +343,13 @@ namespace GN3.UI
 
             _title = CreateText(_panel.transform, "", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             _title.fontStyle = FontStyle.Bold;
-            Place(_title.rectTransform, new Vector2(20f, -14f), new Vector2(360f, 34f));
+            Place(_title.rectTransform, new Vector2(20f, -14f), new Vector2(230f, 34f));
+            // 오른쪽 위 버튼 줄(오른쪽부터): 모두 읽음 ← 읽은 것 지우기 ← 모두 자동(도착 편지)
             CreateButton(_panel.transform, "모두 읽음", () => Mailbox.MarkAllRead(), new Vector2(Width - 166f, -12f), new Vector2(110f, 32f));
+            var clear = CreateButton(_panel.transform, "읽은 것 지우기", ClearRead, new Vector2(Width - 296f, -12f), new Vector2(124f, 32f));
+            clear.transform.parent.gameObject.AddComponent<TooltipTrigger>().Text = "읽고 처리가 끝난 편지를 지운다(선택 대기·확인 안 한 중요 편지는 남긴다)";
+            _autoAllLabel = CreateButton(_panel.transform, "모두 자동", AutoAll, new Vector2(Width - 426f, -12f), new Vector2(124f, 32f), new Color(0.25f, 0.55f, 0.35f, 1f));
+            _autoAllLabel.supportRichText = false;
             UITheme.CreateCloseX(_panel.transform, Hide); // 닫기는 다른 창처럼 오른쪽 위 X
 
             // 탭

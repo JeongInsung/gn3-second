@@ -88,6 +88,9 @@ namespace GN3.World
 
             if (IsHovered)
             {
+                // 건물 위에 이름(무슨 건물인지 누르기 전에)
+                var top = _collider.bounds;
+                GN3.UI.WorldHoverLabel.Show(displayName, new Vector3(top.center.x, top.max.y, 0f));
                 float alpha = Mathf.Lerp(0.75f, 1f, (Mathf.Sin(Time.unscaledTime * pulseSpeed) + 1f) * 0.5f);
                 if (outline != null)
                 {

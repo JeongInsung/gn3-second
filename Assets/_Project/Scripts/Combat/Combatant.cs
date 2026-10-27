@@ -30,6 +30,33 @@ namespace GN3.Combat
             CurrentHealth = Math.Min(Stats.MaxHealth, CurrentHealth + amount);
         }
 
+        // ---------- 이번 전투 활약(평점 — BattleRating). 자동·직접 전투 모두 CombatResolver·치유 스킬이 쌓는다 ----------
+
+        public int DamageDealt { get; private set; }
+        public int DamageTaken { get; private set; }
+        public int Kills { get; private set; }
+        public int HealingDone { get; private set; }
+
+        /// <summary>한 번 맞힘: 때린 쪽 피해·처치, 맞은 쪽 받은 피해.</summary>
+        public static void RecordHit(Combatant attacker, Combatant target, int damage, bool defeated)
+        {
+            if (damage <= 0 && !defeated) return;
+            if (attacker != null && attacker != target)
+            {
+                attacker.DamageDealt += damage;
+                if (defeated) attacker.Kills++;
+            }
+            if (target != null) target.DamageTaken += damage;
+        }
+
+        /// <summary>healer가 target을 고쳤다: 실제로 오른 체력만 센다(가득 찬 체력에 쓴 몫은 빼고).</summary>
+        public static void RecordHeal(Combatant healer, int healthBefore, Combatant target)
+        {
+            if (healer == null || target == null) return;
+            int healed = target.CurrentHealth - healthBefore;
+            if (healed > 0) healer.HealingDone += healed;
+        }
+
         // ---------- 독(CombatResolver.TickPoison이 깎는다) ----------
 
         /// <summary>독 한 번에 받는 피해.</summary>
