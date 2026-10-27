@@ -72,9 +72,7 @@ namespace GN3.UI
         private static void Fill()
         {
             BuildDetailPopup.Hide();
-            _panel.Show("건설", _decorTab
-                ? $"금화와 재료를 들여 마을에 장식품을 놓습니다. 재료는 원정에서 몬스터가 떨어뜨립니다(길드 창고에서 확인). (보유 {Wallet.Gold}G)"
-                : $"보유 {Wallet.Gold}G");
+            _panel.Show("건설", $"보유 {Wallet.Gold}G");
             ShopListUI.BeginList(_panel);
             RefreshMoveButton();
 
@@ -93,7 +91,6 @@ namespace GN3.UI
                     foreach (var entry in entries) CreateDecorRow(entry);
                 else CreateBuildingGrid(rank, entries);
             }
-            CreateNextRankHint();
             ShopListUI.EndList(_panel);
         }
 
@@ -115,27 +112,6 @@ namespace GN3.UI
             text.fontStyle = FontStyle.Bold;
         }
 
-        /// <summary>
-        /// 맨 아래 흐린 안내: 이 탭에 새것이 열리는 다음 등급("명성 50을 모아 돌빛 용병단이 되면 새 건물이 열립니다").
-        /// 무엇이 열리는지는 밝히지 않는다. 길드 홀이 있어야 오르는 등급이면 길드 홀을 짓도록 안내한다.
-        /// </summary>
-        private static void CreateNextRankHint()
-        {
-            int next = -1;
-            for (int rank = Guild.Rank + 1; rank < Guild.Ranks.Length && next < 0; rank++)
-                if (EntriesFor(rank).Count > 0) next = rank;
-            if (next < 0) return;
-            string what = _decorTab ? "새 장식품" : "새 건물";
-            string hint = !Guild.IsGuild && next > Guild.MercenaryBandMaxRank
-                ? $"길드 홀을 지어 정식 길드가 되고 {Guild.RankName(next)}(명성 {Guild.Ranks[next].Required})에 오르면 {what}이 열립니다."
-                : $"명성 {Guild.Ranks[next].Required}을 모아 {Josa.IGa(Guild.RankName(next))} 되면 {what}이 열립니다.";
-            var row = ShopListUI.CreateRow(_panel, "NextRankHint");
-            var layout = row.GetComponent<UnityEngine.UI.LayoutElement>();
-            layout.minHeight = layout.preferredHeight = RankRowHeight;
-            ShopListUI.CreateText(row.transform, hint, 14, TextAnchor.MiddleLeft, UITheme.MutedText)
-                .gameObject.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
-        }
-
         private static bool _decorTab; // 마지막에 본 탭(창을 다시 열면 그대로)
 
         private static void CreateTab(Transform parent, string label, bool decor)
@@ -151,13 +127,14 @@ namespace GN3.UI
                 text.color = UITheme.MutedText; // 다른 탭은 흐린 글씨
                 return;
             }
-            // 지금 탭: 누를 수 없게 하되 흐려지지 않고 금색 굵은 글씨로 밝게
+            // 지금 탭: 누를 수 없게 하되 흐려지지 않고 금색 굵은 글씨 + 흰 테두리(다른 창 탭과 같은 표시)
             button.interactable = false;
             var colors = button.colors;
             colors.disabledColor = Color.white;
             button.colors = colors;
-            text.color = UITheme.TitleText;
+            text.color = ColorUtility.TryParseHtmlString(UITheme.SelectedTextHex, out var gold) ? gold : UITheme.TitleText;
             text.fontStyle = FontStyle.Bold;
+            UITheme.CreateSelectFrame(button.transform);
         }
 
         /// <summary>장식 줄: 그림 · 이름·비용·놓은 수 · 설명·재료 · [놓기].</summary>
@@ -170,7 +147,7 @@ namespace GN3.UI
             if (icon != null) ShopListUI.CreateIcon(row.transform, icon);
 
             int placed = VillageLayout.Built.Keys.Count(k => BuildingCatalog.DecorForKey(k) == entry);
-            string rowTitle = $"{entry.Name} · {entry.Cost}G" + (placed > 0 ? $"  (놓은 수 {placed})" : "");
+            string rowTitle = $"{entry.Name} · {(entry.Cost > 0 || entry.Materials.Length > 0 ? $"{entry.Cost}G" : "무료")}" + (placed > 0 ? $"  (놓은 수 {placed})" : "");
             ShopListUI.CreateTwoLineLabel(row.transform, rowTitle, Subtitle(entry, true));
 
             string block = icon == null ? "그림이 준비되지 않았습니다." : BuildingCatalog.Block(entry, true);
@@ -208,8 +185,11 @@ namespace GN3.UI
             var spot = slots.FirstOrDefault(s => !s.Built);
             var renderer = (spot ?? slots[0]).Renderer;
             var sprite = renderer != null ? renderer.sprite : null;
-            string block = BuildingCatalog.Block(entry, spot != null);
-            string status = spot == null ? "완료"
+            bool canBuildMore = spot != null || entry.Repeatable; // 반복 건물(용병 텐트)은 몇 채든
+            string block = BuildingCatalog.Block(entry, canBuildMore);
+            int builtCount = BuildingCatalog.BuiltCount(entry);
+            string status = entry.Repeatable ? (builtCount > 0 ? $"{builtCount}채 · 자리 {builtCount * BuildingCatalog.TentBeds}" : "첫 채 무료")
+                : spot == null ? "완료"
                 : entry.House ? $"{slots.Count(s => s.Built)}/{slots.Count}채" : null;
 
             var card = new GameObject("Card_" + entry.Id, typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(UnityEngine.UI.Button), typeof(UnityEngine.UI.VerticalLayoutGroup));
@@ -242,9 +222,10 @@ namespace GN3.UI
 
             var target = entry;
             string title = status != null ? $"{entry.Name}  ({status})" : entry.Name;
-            var materials = spot != null ? entry.Materials : null; // 다 지었으면 필요한 것 칸 없이
+            var materials = canBuildMore ? BuildingCatalog.MaterialsOf(entry) : null; // 다 지었으면 필요한 것 칸 없이(용병 텐트는 첫 채 무료)
+            int cost = BuildingCatalog.CostOf(entry);
             card.GetComponent<UnityEngine.UI.Button>().onClick.AddListener(() =>
-                BuildDetailPopup.Show(title, sprite, target.Cost, materials, block, spot == null ? "완료" : "짓기", () =>
+                BuildDetailPopup.Show(title, sprite, cost, materials, block, canBuildMore ? "짓기" : "완료", () =>
                 {
                     BuildDetailPopup.Hide();
                     _panel.Close();

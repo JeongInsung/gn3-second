@@ -80,6 +80,86 @@ namespace GN3.UI
             : size <= 19 ? HeadingSize
             : TitleSize;
 
+        // ---------- 고른 것 표시(2026-10-26 통일) ----------
+        // 고른 줄·탭은 배경색을 바꾸지 않고 흰 테두리로, 고른 탭 글씨는 SelectedTextHex 굵게(도감·근처 길드·건설·우편함·관계·파티 구성).
+
+        /// <summary>고른 탭 글씨 색(굵게 같이 쓴다).</summary>
+        public const string SelectedTextHex = "#f0c060";
+        /// <summary>흐린 글씨(서식 태그용 — MutedText와 같은 색). 창마다 따로 두지 말고 이것을 쓴다.</summary>
+        public const string MutedHex = "#a3937c";
+
+        private static Sprite _frameSprite;
+
+        /// <summary>
+        /// 부모를 가득 채우는 테두리(위·아래·왼·오른쪽 막대 넷)를 만들어 돌려준다. 기본은 흰색 2px — 고른 줄·탭 표시.
+        /// 자기 그림이라 테마가 색을 바꾸지 않고, 누름은 막지 않으며, 레이아웃 그룹 안이어도 배치에 끼지 않는다(ignoreLayout).
+        /// </summary>
+        public static GameObject CreateSelectFrame(Transform parent, float thickness = 2f, Color? color = null)
+        {
+            if (_frameSprite == null) // Play가 끝나면 런타임 스프라이트가 파괴되므로 다시 만든다
+            {
+                _frameSprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+                _frameSprite.name = "SelectFrameWhite";
+            }
+            var frame = new GameObject("SelectFrame", typeof(RectTransform), typeof(UnityEngine.UI.LayoutElement));
+            frame.transform.SetParent(parent, false);
+            frame.GetComponent<UnityEngine.UI.LayoutElement>().ignoreLayout = true;
+            var rect = (RectTransform)frame.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            var c = color ?? Color.white;
+            Edge(frame.transform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, thickness), c);
+            Edge(frame.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, thickness), c);
+            Edge(frame.transform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(thickness, 0f), c);
+            Edge(frame.transform, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(thickness, 0f), c);
+            return frame;
+        }
+
+        /// <summary>창 오른쪽 위 닫기 X(32×32, 붉은 버튼 — MainMenuBootstrapper.CreateCloseButton과 같은 모양). 레이아웃 그룹 안이어도 배치에 끼지 않는다.</summary>
+        public static UnityEngine.UI.Button CreateCloseX(Transform parent, UnityEngine.Events.UnityAction onClick)
+        {
+            var go = new GameObject("CloseButton", typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(UnityEngine.UI.Button), typeof(UnityEngine.UI.LayoutElement));
+            go.transform.SetParent(parent, false);
+            go.GetComponent<UnityEngine.UI.LayoutElement>().ignoreLayout = true;
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
+            rect.anchoredPosition = new Vector2(-8f, -8f);
+            rect.sizeDelta = new Vector2(32f, 32f);
+            go.GetComponent<UnityEngine.UI.Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
+            var label = new GameObject("Text", typeof(RectTransform), typeof(UnityEngine.UI.Text));
+            label.transform.SetParent(go.transform, false);
+            var labelRect = (RectTransform)label.transform;
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
+            var text = label.GetComponent<UnityEngine.UI.Text>();
+            text.text = "X";
+            text.font = Font;
+            text.fontSize = 18;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.color = Color.white;
+            var button = go.GetComponent<UnityEngine.UI.Button>();
+            button.onClick.AddListener(onClick);
+            return button;
+        }
+
+        private static void Edge(Transform parent, Vector2 min, Vector2 max, Vector2 pivot, Vector2 size, Color color)
+        {
+            var go = new GameObject("Edge", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            go.transform.SetParent(parent, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = min;
+            rect.anchorMax = max;
+            rect.pivot = pivot;
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = size;
+            var image = go.GetComponent<UnityEngine.UI.Image>();
+            image.sprite = _frameSprite;
+            image.color = color;
+            image.raycastTarget = false;
+        }
+
         private static Sprite _panel, _button, _inset;
 
         public static Sprite Panel => _panel != null ? _panel : _panel = BuildPanel();

@@ -14,6 +14,7 @@ namespace GN3.World
         public string Name;
         public string Title;       // 보스 칭호(없으면 null)
         public string Sheet;       // 전투 그림(Resources/Battle/Monsters) — 대기 시트 첫 장을 쓴다. 초상이 있으면 Portrait.
+        public string FallbackSheet; // Sheet가 아직 없을 때 대신 쓸 시트(고블린 목수 → 검 고블린)
         public bool Portrait;      // true면 BattleMonsterSprite.PortraitFor(Ent)
         public string Habitat;
         public string Description;
@@ -23,7 +24,7 @@ namespace GN3.World
     }
 
     /// <summary>
-    /// 몬스터 도감: 은월의 숲 몬스터 6종과 지금까지 쓰러뜨린 수. 한 마리라도 쓰러뜨리면 그 칸의 정보가 열린다(BestiaryPanel).
+    /// 몬스터 도감: 은월의 숲 몬스터 9종과 지금까지 쓰러뜨린 수. 한 마리라도 쓰러뜨리면 그 칸의 정보가 열린다(BestiaryPanel).
     /// 퀘스트 전투(승패 상관없이)와 이동 중 습격에서 쓰러진 적을 센다. QuestClearHistory와 같은 패턴(static + 저장/불러오기).
     /// </summary>
     public static class Bestiary
@@ -44,6 +45,23 @@ namespace GN3.World
             Description = "고블린 무리 셋 중 하나꼴로 섞여 있는 활잡이. 무리 뒤에 숨어 화살을 날린다.",
             Traits = new[] { "뒷줄에서 멀리 쏜다", "가까이 붙으면 약하다" },
             Loot = LootCatalog.TableFor("고블린 궁수"),
+        };
+
+        public static readonly BestiaryEntry GoblinCarpenter = new BestiaryEntry
+        {
+            Region = Forest, Id = "고블린 목수", Name = "고블린 목수", Sheet = "goblin_carpenter_idle",
+            Habitat = "은월의 숲 Lv1~",
+            Description = "고블린 무리의 울타리·덫을 만드는 일꾼. 늘 목재와 연장을 짊어지고 다닌다.",
+            Traits = new[] { "망치로 내려찍는다", "목재·쇠못·밧줄·밀랍을 꼭 떨어뜨린다" },
+            Loot = LootCatalog.TableFor("고블린 목수"),
+        };
+
+        public static readonly BestiaryEntry GoblinShield = new BestiaryEntry
+        {
+            Region = Forest, Id = "고블린 방패병", Name = "고블린 방패병", Sheet = "goblin_shield_idle", Habitat = "은월의 숲 Lv1~",
+            Description = "녹슨 투구와 둥근 나무 방패로 무장한 고블린. 무리 맨 앞에 서서 동료들의 방패가 되어 준다.",
+            Traits = new[] { "무리 맨 앞에 선다", "공격을 방패로 막아 피해를 줄인다", "방패로 밀어친다(힘은 약하다)" },
+            Loot = LootCatalog.TableFor("고블린 방패병"),
         };
 
         public static readonly BestiaryEntry GoblinRider = new BestiaryEntry
@@ -70,6 +88,14 @@ namespace GN3.World
             Loot = LootCatalog.TableFor("독버섯"),
         };
 
+        public static readonly BestiaryEntry StumpEnt = new BestiaryEntry
+        {
+            Region = Forest, Id = "그루터기 엔트", Name = "그루터기 엔트", Sheet = "stump_ent_idle", Habitat = "은월의 숲 Lv2~",
+            Description = "베어 낸 나무 그루터기에 숲의 기운이 깃들어 일어난 것. 느리지만 이끼 낀 몸이 바위처럼 단단하다.",
+            Traits = new[] { "느리게 다가온다", "아주 단단하다", "긴 팔을 휘둘러 친다" },
+            Loot = LootCatalog.TableFor("그루터기 엔트"),
+        };
+
         public static readonly BestiaryEntry EntKing = new BestiaryEntry
         {
             Region = Forest, Id = "앤트킹", Name = "앤트킹", Title = "은월의 숲의 주인", Sheet = "ent_idle", Portrait = true,
@@ -82,7 +108,7 @@ namespace GN3.World
         };
 
         /// <summary>도감 순서.</summary>
-        public static readonly BestiaryEntry[] All = { Goblin, GoblinArcher, GoblinRider, Wolf, Mushroom, EntKing };
+        public static readonly BestiaryEntry[] All = { Goblin, GoblinArcher, GoblinCarpenter, GoblinShield, GoblinRider, Wolf, Mushroom, StumpEnt, EntKing };
 
         /// <summary>도감 탭이 될 지역(All 순서대로, 중복 없이). 새 지역 몬스터를 All에 더하면 탭이 늘어난다.</summary>
         public static string[] Regions => All.Select(e => e.Region).Distinct().ToArray();
@@ -91,9 +117,6 @@ namespace GN3.World
 
         private static readonly Dictionary<string, int> _kills = new Dictionary<string, int>();
         private static readonly Dictionary<string, Combat.MonsterRank> _best = new Dictionary<string, Combat.MonsterRank>(); // 칸마다 쓰러뜨린 가장 높은 개체 등급
-
-        /// <summary>도감 공통 한 줄(개체값 설명).</summary>
-        public const string IndividualNote = "같은 몬스터라도 개체마다 세기가 다르다 — 강한·우두머리 개체는 더 세고 전리품을 잘 떨어뜨린다.";
 
         public static Combat.MonsterRank BestRank(BestiaryEntry entry) =>
             _best.TryGetValue(entry.Id, out var rank) ? rank : Combat.MonsterRank.Normal;
@@ -105,16 +128,21 @@ namespace GN3.World
         public static int DiscoveredCount => All.Count(IsDiscovered);
 
         /// <summary>적 이름 → 도감 칸. 판별 순서는 전리품 표(LootCatalog.TableFor)·전투 그림과 같다.
-        /// 자동 전투엔 고블린 근접·궁수 구분이 없어 전리품처럼 셋 중 하나를 궁수로 친다.</summary>
+        /// 자동 전투엔 고블린 근접·궁수·목수·방패병 구분이 없어 전리품처럼 나눠 친다(LootCatalog.SplitGoblin).</summary>
         public static BestiaryEntry KindOf(string enemyName, System.Random rng)
         {
             string name = enemyName ?? "";
             if (name.Contains("늑대기수")) return GoblinRider;
+            if (RegionInfo.IsStump(name)) return StumpEnt; // 이름에 "엔트"가 있어도 보스가 아니다
             if (RegionInfo.IsEnt(name)) return EntKing;
             if (name.Contains("늑대") || name.Contains("울프")) return Wolf;
             if (name.Contains("버섯")) return Mushroom;
+            if (name.Contains("목수")) return GoblinCarpenter;
+            if (name.Contains("방패병")) return GoblinShield;
             if (name.Contains("궁수")) return GoblinArcher;
-            return rng != null && rng.NextDouble() < LootCatalog.AutoArcherChance ? GoblinArcher : Goblin;
+            if (rng == null) return Goblin;
+            var (archer, carpenter, shield) = LootCatalog.SplitGoblin(name, rng);
+            return archer ? GoblinArcher : carpenter ? GoblinCarpenter : shield ? GoblinShield : Goblin;
         }
 
         private static readonly System.Random Rng = new System.Random();
@@ -125,8 +153,7 @@ namespace GN3.World
             bool any = false;
             foreach (var name in killedEnemyNames)
             {
-                bool hasArcherName = name != null && name.Contains("궁수");
-                var entry = KindOf(name, archerSplit && !hasArcherName ? Rng : null);
+                var entry = KindOf(name, archerSplit ? Rng : null); // 이름에 궁수·목수가 있으면 KindOf가 굴리지 않는다
                 var rank = Combat.MonsterIV.RankOf(name);
                 if (Kills(entry) == 0 || rank > BestRank(entry)) _best[entry.Id] = rank;
                 _kills[entry.Id] = Kills(entry) + 1;

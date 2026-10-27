@@ -27,10 +27,21 @@ namespace GN3.Quests
             /// <summary>직접 전투: 시체를 뒤져 챙긴 전리품(BattleUIController). 있으면 처치 목록으로 굴리지 않고 이것만 받는다(지든 이기든).
             /// 자동 전투는 null(처치한 적마다 굴림).</summary>
             public List<(LootItem item, int count)> PreLooted;
+            /// <summary>직접 전투(BattleUIController)로 치렀다 — 이기면 보상·명성·성장을 더 받는다(DirectGoldBonus 등).</summary>
+            public bool Direct;
             public bool Victory => Result.Outcome == BattleOutcome.TeamAVictory;
         }
 
         private static readonly System.Random Rng = new System.Random();
+
+        // 직접 전투 승리 보상(2026-10-26): 직접 전투는 적이 더 세고(FieldBattleSession 체력 ×1.3·공격 ×1.15·공격 속도 ×1.3)
+        // 전리품도 뒤진 시체 몫만 받아 자동 전투보다 손해였다 → 난도는 그대로 두고 이기면 더 준다.
+        public const float DirectGoldBonus = 1.5f;
+        public const float DirectRepBonus = 1.5f;
+        public const float DirectGrowthBonus = 1.25f;
+
+        /// <summary>직접 전투로 이겼을 때 더 받는 몫(기본값 × (배율 − 1), 반올림).</summary>
+        public static int DirectExtra(int baseAmount, float bonus) => (int)System.Math.Round(baseAmount * (bonus - 1f));
 
         private static List<(LootItem item, int count)> GroupLoot(IEnumerable<(LootItem item, int count)> loot) =>
             loot.GroupBy(l => l.item).Select(g => (g.Key, g.Sum(l => l.count))).ToList();
@@ -88,10 +99,14 @@ namespace GN3.Quests
             public int WavesCleared;  // 다 잡은 라운드 수
             public int WaveCount = 1;
             public float ReturnHours; // 귀환까지(생존자가 없으면 0)
+            public int DirectGold;    // 직접 전투 보너스로 더 받은 금화·명성(Gold·Reputation에 이미 들어 있다)
+            public int DirectReputation;
             public string Summary;
             public List<MemberReport> Members = new List<MemberReport>();
             /// <summary>쓰러뜨린 적에게서 챙긴 전리품(승리했을 때만, LootBag에 들어갔다).</summary>
             public List<(LootItem item, int count)> Loot = new List<(LootItem, int)>();
+            public int BagCapacity;   // 파견대 가방 칸 합(BagCatalog) — 결과 화면 가방 칸
+            public int BagLeft;       // 가방이 모자라 두고 온 개수(자동 전투만, 직접 전투는 시체 창에서 이미 골랐다)
         }
 
         private static readonly System.Random LootRng = new System.Random();
@@ -110,6 +125,8 @@ namespace GN3.Quests
         {
             var report = new Report { Victory = battle.Victory };
             var quest = expedition.Quest;
+            // 직접 전투는 전투 씬이 쓴 칸(살아서 싸우러 나간 대원) 그대로
+            report.BagCapacity = battle.PreLooted != null ? BagCatalog.CapacityOf(battle.Fighters) : BagCatalog.CapacityOf(expedition.Members);
             var fallen = new List<string>();
             var fallenMercs = new List<Mercenary>();
             var damage = new List<string>(); // 결과 창 "피해: 브렌 26 → 17 · …"
@@ -144,6 +161,13 @@ namespace GN3.Quests
             {
                 int reward = Pricing.QuestReward(quest);
                 int rep = (int)System.Math.Round(Guild.VictoryReputation(questGrade) * VillageCharm.ReputationMultiplier); // 마을 매력 단계만큼 더
+                if (battle.Direct)
+                {
+                    report.DirectGold = DirectExtra(reward, DirectGoldBonus);
+                    report.DirectReputation = DirectExtra(rep, DirectRepBonus);
+                    reward += report.DirectGold;
+                    rep += report.DirectReputation;
+                }
                 string joint = "";
                 if (quest.IsJoint) // 연합 의뢰: 보상 40%는 함께한 길드 몫
                 {
@@ -152,18 +176,25 @@ namespace GN3.Quests
                     reward = ours;
                 }
                 Wallet.Add(reward);
-                summary = $"{quest.Title} — 임무 완료! 보상 +{reward}G{joint} · 명성 +{rep}";
+                string directNote = battle.Direct && report.DirectGold > 0 ? $" (직접 전투 보너스 +{report.DirectGold}G·명성 +{report.DirectReputation})" : "";
+                summary = $"{quest.Title} — 임무 완료! 보상 +{reward}G{joint} · 명성 +{rep}{directNote}";
                 Guild.Add(rep);
                 report.Gold = reward;
                 report.Reputation = rep;
                 // 전리품: 쓰러뜨린 적마다 굴려 전리품 가방에(퇴각·전멸하면 못 챙긴다)
                 report.Loot = battle.PreLooted != null ? GroupLoot(battle.PreLooted) : LootCatalog.Roll(killed, LootRng, archerSplit: !battle.NamedArchers);
+                // 대원 가방 칸만큼만 들고 온다(값 높은 것부터 — BagCatalog). 직접 전투는 시체 창에서 이미 칸 안으로 골랐다.
+                int bagLeft = 0;
+                if (battle.PreLooted == null)
+                    report.Loot = BagCatalog.Fit(report.Loot, report.BagCapacity, out bagLeft);
+                report.BagLeft = bagLeft;
                 // 부탁한 마을 사람이 준 건설 재료 묶음(Quest.MaterialReward)도 같은 가방·보고서에
                 if (quest.MaterialReward.Count > 0)
                     report.Loot = report.Loot.Concat(quest.MaterialReward).GroupBy(l => l.item)
                         .Select(g => (g.Key, g.Sum(l => l.count))).ToList();
                 LootBag.Add(report.Loot);
                 if (report.Loot.Count > 0) summary += $" · 전리품: {LootCatalog.Describe(report.Loot)}";
+                if (bagLeft > 0) summary += $" · 가방이 모자라 {bagLeft}개는 두고 왔다";
                 QuestClearHistory.RecordClear(quest.Region, quest.Difficulty); // 이 레벨은 다음 게시판에서 덜 나오고, 덜 깬 레벨이 더 자주 나온다
                 if (ForestProgress.TryUnlockNext(quest.Difficulty))
                 {
@@ -189,7 +220,7 @@ namespace GN3.Quests
 
             // 살아남은 파견원 성장: 승리 1 + 0.5×퀘스트 등급, 실패는 절반(× 나이 배율, GrowthTuning.BattleGrowth).
             var levelUps = new List<string>();
-            float growth = GrowthTuning.BattleGrowth((int)questGrade, battle.Victory);
+            float growth = GrowthTuning.BattleGrowth((int)questGrade, battle.Victory) * (battle.Direct && battle.Victory ? DirectGrowthBonus : 1f);
             foreach (var merc in expedition.Members.Where(m => m.IsAlive))
             {
                 var gains = merc.AddGrowth(growth);
@@ -222,6 +253,7 @@ namespace GN3.Quests
             // 제목이 이미 "퀘스트 — 임무 완료!"라 본문 첫 줄의 퀘스트 이름은 빼고 "임무 완료! 보상 …"부터.
             string prefix = quest.Title + " — ";
             string body = (summary.StartsWith(prefix) ? summary.Substring(prefix.Length) : summary).Replace(" · ", "\n");
+            if (report.Loot.Count > 0) body += $"\n가방 {BagCatalog.SlotsUsed(report.Loot)}/{report.BagCapacity}칸"; // 칸을 안 쓰는 재료·동전 주머니는 빼고 센다
             body += "\n\n" + (damage.Count > 0 ? "피해: " + string.Join(" · ", damage) : "피해 없음");
             if (levelUps.Count > 0) body += "\n\n" + string.Join("\n", levelUps);
             var mail = Mailbox.Post(MailKind.QuestResult,

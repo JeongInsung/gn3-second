@@ -43,7 +43,7 @@ namespace GN3.UI
         private void ShowFacilities()
         {
             _panel.Title.text = "길드 시설";
-            if (_panel.Description != null) _panel.Description.text = "금화와 마정석으로 시설을 증축하면 바로 효과가 납니다. 시설마다 3단계까지.";
+            if (_panel.Description != null) _panel.Description.text = "";
             ShopListUI.BeginList(_panel);
             foreach (var f in GuildFacilities.All)
             {
@@ -129,6 +129,8 @@ namespace GN3.UI
                 ShowStorage();
             }, 120f);
             sellAll.interactable = LootBag.KindCount > 0;
+            if (BlackMarket.IsHere && LootBag.KindCount > 0) // 일반 판매는 정가 — 와 있는 날엔 더 비싸게 팔 곳을 알려 준다
+                ShopListUI.CreateEmptyRow(_panel, "암거래 상인이 마을에 와 있습니다 — 상인에게 팔면 더 비싸게 받습니다");
 
             if (LootBag.KindCount == 0)
             {
@@ -136,11 +138,17 @@ namespace GN3.UI
                 return;
             }
 
-            foreach (var (loot, count) in LootBag.Entries.Where(e => !e.item.Material).ToList())
+            // 등급 높은 것부터, 같은 등급은 값 높은 것부터
+            var entries = LootBag.Entries.Where(e => !e.item.Material)
+                .OrderByDescending(e => e.item.Grade).ThenByDescending(e => e.item.Price).ToList();
+            foreach (var (loot, count) in entries)
             {
                 var row = ShopListUI.CreateRow(_panel, "Loot_" + loot.Name);
                 ShopListUI.CreateIcon(row.transform, loot.Icon);
-                ShopListUI.CreateTwoLineLabel(row.transform, $"{loot.Name} ×{count}" + (loot.Rare ? "  (드묾)" : ""), // 이 글자는 색 태그를 그리지 않는다
+                var gradeOutline = row.transform.GetChild(row.transform.childCount - 1).gameObject.AddComponent<UnityEngine.UI.Outline>(); // 아이콘 둘레 등급 색
+                gradeOutline.effectColor = LootGrades.ColorOf(loot.Grade);
+                gradeOutline.effectDistance = new Vector2(1.5f, -1.5f);
+                ShopListUI.CreateTwoLineLabel(row.transform, $"{loot.Name} ×{count}  {loot.GradeTag}", // 이 글자는 색 태그를 그리지 않는다
                     $"개당 {loot.Price}G · 모두 {loot.Price * count}G");
                 ShopListUI.CreateButton(row.transform, "1개 팔기", () => Sell(loot, 1), 90f);
                 ShopListUI.CreateButton(row.transform, "모두", () => Sell(loot, LootBag.Count(loot)), 70f);

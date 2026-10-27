@@ -179,8 +179,9 @@ namespace GN3.World
                 PlaceConfirmPanel.Show($"{Josa.EulReul(_entry.Name)} 여기로 옮기겠습니까?", "무료", "옮기기", anchor, ok, CloseConfirm);
             else
             {
-                string materials = BuildMaterials.Text(_entry.Materials);
-                string cost = materials.Length > 0 ? $"{_entry.Cost}G · {materials}" : $"{_entry.Cost}G";
+                int gold = BuildingCatalog.CostOf(_entry); // 용병 텐트는 첫 채 무료
+                string materials = BuildMaterials.Text(BuildingCatalog.MaterialsOf(_entry));
+                string cost = materials.Length > 0 ? (gold > 0 ? $"{gold}G · {materials}" : materials) : gold > 0 ? $"{gold}G" : "무료";
                 string verb = _entry.Decor ? "놓기" : "짓기";
                 PlaceConfirmPanel.Show($"{Josa.EulReul(_entry.Name)} 여기에 {(_entry.Decor ? "놓겠습니까" : "짓겠습니까")}?", cost, verb, anchor, ok, CloseConfirm);
             }
@@ -225,13 +226,14 @@ namespace GN3.World
                 Cancel();
                 return;
             }
-            if (!Wallet.TrySpend(_entry.Cost)) return;
-            BuildMaterials.Consume(_entry.Materials); // Block이 방금 재료를 확인했다
+            int cost = BuildingCatalog.CostOf(_entry); // 용병 텐트는 첫 채 무료 — 짓기 전에 센다
+            if (!Wallet.TrySpend(cost)) return;
+            BuildMaterials.Consume(BuildingCatalog.MaterialsOf(_entry)); // Block이 방금 재료를 확인했다
             if (_entry.Replaces != null) VillageLayout.RemoveBuilding(_entry.Replaces);
             VillageLayout.Add(_slot.Key, position);
 
             var entry = _entry;
-            string line = $"{Josa.EulReul(entry.Name)} {(entry.Decor ? "놓았습니다" : "지었습니다")}. (−{entry.Cost}G)";
+            string line = $"{Josa.EulReul(entry.Name)} {(entry.Decor ? "놓았습니다" : "지었습니다")}." + (cost > 0 ? $" (−{cost}G)" : "");
             if (!entry.Decor) DailyLog.Add(line); // 장식품(울타리 조각 등)까지 적으면 일지가 너무 길어진다
             var slot = _slot;
             string replaced = entry.Replaces;

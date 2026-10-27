@@ -9,8 +9,8 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 근처 길드 창(왼쪽 위 "근처 길드" 버튼): 왼쪽에 명성 순위(우리 길드 포함), 오른쪽에 고른 길드의 성향·단계·관계·소속 용병·소식.
-    /// 줄에 마우스를 올리면 자세한 설명(GuildPanel처럼 짧은 줄 + 툴팁). 선물·영입·판매·대여는 여기서 한다.
+    /// 근처 길드 창(왼쪽 위 "근처 길드" 버튼): 왼쪽에 명성 순위(우리 길드 포함), 오른쪽에 고른 길드의 성향·단계·관계(+선물),
+    /// 거래 탭 [소속 용병][팔기][빌려주기][교역]과 그 목록, 아래 최근 소식 3줄. 자세한 설명은 줄·버튼에 마우스를 올리면 툴팁으로.
     /// 끌어 옮길 수 있고 X·ESC로 닫는다. BestiaryPanel과 같은 틀.
     /// </summary>
     public class RivalGuildsPanel : MonoBehaviour
@@ -19,13 +19,18 @@ namespace GN3.UI
         private const float Height = 690f;
         private const float ListX = 20f, ListWidth = 340f, ListTop = 64f, RowHeight = 80f;
         private const float DetailX = 380f, DetailWidth = 640f;
-        private const float RosterTop = 262f, RosterBottom = 512f;
+        private const float TabTop = 172f, TabWidth = 152f, TabGap = 8f;
+        private const float RosterTop = 240f, RosterBottom = 570f; // 아래 소식 3줄이 창 테두리에 닿지 않게
+        private const int NewsLines = 3;
         private const float BarWidth = 260f;
-        private const string Muted = "#a3937c";
-        private const string Hint = "  <color=#7a7064>(?)</color>";
+        private const string Muted = UITheme.MutedHex;
+        private const string TabOn = UITheme.SelectedTextHex;
+        private static readonly Color TabOnTint = Color.white;
+        private static readonly Color TabOffTint = new Color(0.62f, 0.6f, 0.58f, 1f);
         private static readonly Color RowColor = new Color(1f, 1f, 1f, 0.05f);
-        private static readonly Color RowSelected = new Color(0.95f, 0.72f, 0.3f, 0.22f);
-        private static readonly Color OurRow = new Color(0.4f, 0.6f, 0.9f, 0.16f);
+        private static readonly Color OurRow = new Color(0.4f, 0.6f, 0.9f, 0.16f); // 우리 길드 줄(맨 위 고정) — 선택 표시는 흰 테두리
+        private const float OurGap = 6f;     // 우리 길드 줄과 근처 길드 목록 사이
+        private const float FrameWidth = 2f; // 고른 길드 줄의 흰 테두리 두께
 
         public static RivalGuildsPanel Instance { get; private set; }
 
@@ -33,7 +38,9 @@ namespace GN3.UI
         private Font _font;
         private Sprite _white;
         private Text _place;
-        private readonly List<(Image back, Text label, TooltipTrigger tip, Button button)> _rows = new List<(Image, Text, TooltipTrigger, Button)>();
+        // 왼쪽 목록: [0] 우리 길드(맨 위 고정), [1..] 근처 길드(명성 순). frame = 고른 줄의 흰 테두리
+        private readonly List<(Image back, Text label, TooltipTrigger tip, Button button, GameObject frame)> _rows =
+            new List<(Image, Text, TooltipTrigger, Button, GameObject)>();
         private Text _name, _info, _relationLabel, _rosterTitle, _news;
         private TooltipTrigger _infoTip, _relationTip;
         private RectTransform _relationFill;
@@ -114,25 +121,32 @@ namespace GN3.UI
             var selected = Selected;
             _selectedId = selected?.Id;
 
-            for (int i = 0; i < _rows.Count; i++)
+            // 맨 위: 우리 길드(순위와 상관없이 고정, 누를 수 없음)
             {
-                var (back, label, tip, button) = _rows[i];
-                back.gameObject.SetActive(i < ranking.Count);
-                if (i >= ranking.Count) continue;
-                var (name, reputation, g) = ranking[i];
-                var rank = Guild.Ranks[Guild.RankFor(reputation)];
+                var (back, label, tip, button, frame) = _rows[0];
+                back.color = OurRow;
+                frame.SetActive(false);
                 button.onClick.RemoveAllListeners();
-                if (g == null)
-                {
-                    back.color = OurRow;
-                    label.text = $"<b>{i + 1}. {name}</b>\n<color={Muted}>{Guild.CurrentName} · 명성 {reputation} · 용병 {PlayerParty.Instance.Members.Count}명</color>";
-                    tip.Text = $"<b>우리 길드</b> — {Guild.CurrentName}\n임무에 성공해 명성을 올리면 순위가 오른다.\n근처 길드도 매일 의뢰를 맡아 명성이 오르내린다.";
-                    continue;
-                }
-                back.color = g == selected ? RowSelected : RowColor;
-                label.text = $"<b>{i + 1}. {g.Name}</b>  <color={RivalGuilds.RelationColor(g.Relation)}>{RivalGuilds.RelationLabel(g.Relation)}</color>\n" +
+                label.text = $"<b>우리 길드</b>  {RivalGuilds.OurPlace}위\n<color={Muted}>{Guild.CurrentName} · 명성 {Guild.Reputation} · 용병 {PlayerParty.Instance.Members.Count}명</color>";
+                tip.Text = $"<b>우리 길드</b> — {Guild.CurrentName}\n임무에 성공해 명성을 올리면 순위가 오른다.\n근처 길드도 매일 의뢰를 맡아 명성이 오르내린다.";
+            }
+
+            // 그 아래: 근처 길드(명성 순 — 번호는 우리를 포함한 전체 순위). 고른 길드는 흰 테두리.
+            var others = ranking.Select((r, place) => (r.Name, r.Reputation, r.Guild, Place: place + 1)).Where(r => r.Guild != null).ToList();
+            for (int i = 1; i < _rows.Count; i++)
+            {
+                var (back, label, tip, button, frame) = _rows[i];
+                bool has = i - 1 < others.Count;
+                back.gameObject.SetActive(has);
+                if (!has) continue;
+                var (_, reputation, g, place) = others[i - 1];
+                var rank = Guild.Ranks[Guild.RankFor(reputation)];
+                back.color = RowColor;
+                frame.SetActive(g == selected);
+                label.text = $"<b>{place}. {g.Name}</b>  <color={RivalGuilds.RelationColor(g.Relation)}>{RivalGuilds.RelationLabel(g.Relation)}</color>\n" +
                              $"<color={Muted}>{rank.Name} · 명성 {reputation} · 용병 {g.Roster.Count}명</color>";
                 tip.Text = GuildTooltip(g);
+                button.onClick.RemoveAllListeners();
                 var id = g.Id;
                 button.onClick.AddListener(() => Select(id));
             }
@@ -152,16 +166,16 @@ namespace GN3.UI
         {
             var rank = g.RankInfo;
             _name.text = g.Name;
-            _info.text = $"성향 {g.Info.Label} · {rank.Name} · 명성 {g.Reputation} · 금화 약 {Mathf.RoundToInt(g.Gold / 100f) * 100}G{Hint}\n" +
-                         $"<color={Muted}>소속 용병 {g.Roster.Count}명 · 전투력 합 {g.TotalPower} · 진행 중 의뢰 {g.Jobs.Count}건</color>";
+            _info.text = $"성향 {g.Info.Label} · {rank.Name} · 명성 {g.Reputation}";
             string jobs = g.Jobs.Count == 0 ? "지금 맡은 의뢰가 없다."
                 : string.Join("\n", g.Jobs.Select(j => $"· {j.Title} — {RivalGuilds.ShortDate(j.EndDay)}에 끝남"));
-            _infoTip.Text = $"<b>성향 {g.Info.Label}</b>\n{g.Info.Description}\n\n<b>단계</b> {rank.Name}: {Guild.UnlockText(rank)}\n\n<b>진행 중 의뢰</b>\n{jobs}";
+            _infoTip.Text = $"<b>성향 {g.Info.Label}</b>\n{g.Info.Description}\n\n소속 용병 {g.Roster.Count}명 · 전투력 합 {g.TotalPower} · 금화 약 {Mathf.RoundToInt(g.Gold / 100f) * 100}G" +
+                            $"\n\n<b>단계</b> {rank.Name}: {Guild.UnlockText(rank)}\n\n<b>진행 중 의뢰</b>\n{jobs}";
 
             float t = (g.Relation - RivalGuilds.MinRelation) / (float)(RivalGuilds.MaxRelation - RivalGuilds.MinRelation);
             _relationFill.sizeDelta = new Vector2(BarWidth * t, _relationFill.sizeDelta.y);
             _relationFillImage.color = HexColor(RivalGuilds.RelationColor(g.Relation));
-            _relationLabel.text = $"관계  <color={RivalGuilds.RelationColor(g.Relation)}><b>{RivalGuilds.RelationLabel(g.Relation)}</b> {g.Relation}</color>{Hint}";
+            _relationLabel.text = $"관계  <color={RivalGuilds.RelationColor(g.Relation)}><b>{RivalGuilds.RelationLabel(g.Relation)}</b> {g.Relation}</color>";
             _relationTip.Text = $"<b>관계 {RivalGuilds.RelationLabel(g.Relation)}</b>\n{RivalGuilds.RelationEffect(g.Relation)}\n\n" +
                                 "적대 -50 · 경쟁 -15 · 중립 · 우호 15 · 동맹 50\n선물·용병 판매·대여·연합 의뢰로 오르고, 용병을 빼 오면 내려간다.\n일주일마다 1씩 중립 쪽으로 돌아간다.";
 
@@ -174,23 +188,22 @@ namespace GN3.UI
             foreach (var row in _rosterRows) Destroy(row);
             _rosterRows.Clear();
             if (_mode == ListMode.Trade && (_tradeTarget == null || !g.Roster.Contains(_tradeTarget))) _mode = ListMode.Roster;
-            if (_mode == ListMode.Roster)
+            // 목록 위 한 줄: 맞교환 중이면 무엇과 바꾸는지, 소속 용병 탭이면 빌려준 우리 용병(있을 때만). 그 밖엔 탭이 말해 준다.
+            if (_mode == ListMode.Trade)
+                _rosterTitle.text = $"<b>{Josa.WaGwa(_tradeTarget.Name)} 맞바꿀 우리 용병</b>  <color={Muted}>{_tradeTarget.Class.ClassName} · 전투력 {_tradeTarget.CombatPower}</color>";
+            else if (_mode == ListMode.Roster)
             {
                 var lent = Loans.LentOut.Where(l => l.GuildId == g.Id).Select(l => $"{l.Merc.Name} {Mathf.Max(0, l.EndDay - GameClock.CurrentDay)}일").ToList();
-                _rosterTitle.text = $"<b>소속 용병</b>  <color={Muted}>{g.Roster.Count}명 · 줄을 누르면 정보</color>" +
-                                    (lent.Count > 0 ? $"  <color=#6ab8ff>빌려준 우리 용병: {string.Join(", ", lent)}</color>" : "");
+                _rosterTitle.text = lent.Count > 0 ? $"<color=#6ab8ff>빌려준 우리 용병: {string.Join(", ", lent)}</color>" : "";
+            }
+            else _rosterTitle.text = "";
+            if (_mode == ListMode.Roster)
+            {
                 foreach (var merc in g.Roster.OrderByDescending(m => m.CombatPower))
                     _rosterRows.Add(CreateRosterRow(g, merc, true));
             }
             else
             {
-                _rosterTitle.text = _mode switch
-                {
-                    ListMode.Barter => $"<b>{Josa.WaGwa(g.Name)} 교역</b>  <color={Muted}>전리품 하나 → {RivalDeals.BarterMaterial(g).Name} · 오늘 남은 {RivalDeals.BartersLeft(g)}번</color>",
-                    ListMode.Sell => $"<b>{g.Name}에 팔 우리 용병</b>  <color={Muted}>위약금 없이 계약째 넘긴다</color>",
-                    ListMode.Lend => $"<b>{g.Name}에 빌려줄 우리 용병</b>  <color={Muted}>{Loans.LoanDays}일 · 그동안 파티 자리는 비워 둔다</color>",
-                    _ => $"<b>{_tradeTarget.Name}({_tradeTarget.Class.ClassName} · 전투력 {_tradeTarget.CombatPower})와 맞바꿀 우리 용병</b>",
-                };
                 if (_mode == ListMode.Barter)
                 {
                     var loot = LootBag.Entries.Where(e => !e.item.Material && e.count > 0).ToList();
@@ -204,7 +217,7 @@ namespace GN3.UI
             LayoutRebuilder.ForceRebuildLayoutImmediate(_roster);
 
             _news.text = "<b>소식</b>\n" + (g.News.Count == 0 ? $"<color={Muted}>아직 소식이 없다.</color>"
-                : string.Join("\n", g.News.Take(5).Select(n => $"<color={Muted}>{RivalGuilds.ShortDate(n.Day)}</color>  {n.Text}")));
+                : string.Join("\n", g.News.Take(NewsLines).Select(n => $"<color={Muted}>{RivalGuilds.ShortDate(n.Day)}</color>  {n.Text}")));
         }
 
         private void Select(string id)
@@ -236,34 +249,31 @@ namespace GN3.UI
 
         // ---------- 거래 버튼(관계·이적·대여) ----------
 
-        /// <summary>상세 위 버튼 줄(선물 오른쪽): 길드와의 거래.</summary>
+        /// <summary>거래 탭 줄: [소속 용병][팔기][빌려주기][교역]. 고른 탭은 밝게, 막힌 탭은 흐리게(툴팁에 이유). 맞교환은 소속 용병 탭에 속한다.</summary>
         private void DrawActions(RivalGuild g)
         {
             bool hostile = RivalGuilds.IsHostile(g);
-            SetAction(0, _mode == ListMode.Sell ? "> 팔기 목록" : "우리 용병 팔기", () => SetMode(_mode == ListMode.Sell ? ListMode.Roster : ListMode.Sell), !hostile,
-                hostile ? "적대 관계라 거래하지 않는다." : "우리 용병을 이 길드에 판다(위약금 없음, 관계 +3).\n소속 용병 줄의 [맞교환]으로 1:1로 바꿀 수도 있다.");
             bool canLend = g.Relation > -15;
-            SetAction(1, _mode == ListMode.Lend ? "> 빌려주기 목록" : "우리 용병 빌려주기", () => SetMode(_mode == ListMode.Lend ? ListMode.Roster : ListMode.Lend), canLend,
-                canLend ? $"우리 용병을 {Loans.LoanDays}일 빌려주고 하루 대여료를 받는다(관계 +4). 돌아올 때 조금 자라 있다." : "경쟁·적대 관계라 우리 용병을 받지 않는다.");
-            // 소속 용병 목록일 때는 그 자리가 [교역](전리품 → 재료), 다른 목록일 때는 [소속 용병 보기]
-            if (_mode == ListMode.Roster)
-            {
-                string barter = RivalDeals.BarterBlock(g);
-                var material = RivalDeals.BarterMaterial(g);
-                SetAction(2, "전리품 교역", () => SetMode(ListMode.Barter), barter == null,
-                    barter ?? $"남는 전리품을 이 길드의 건설 재료로 바꾼다(오늘 {material.Name}, 남은 {RivalDeals.BartersLeft(g)}번 · 관계 +{RivalDeals.BarterRelation}).");
-            }
-            else SetAction(2, "소속 용병 보기", () => SetMode(ListMode.Roster), true, "이 길드 소속 용병 목록으로 돌아간다.");
+            string barter = RivalDeals.BarterBlock(g);
+            var material = RivalDeals.BarterMaterial(g);
+            SetTab(0, $"소속 용병 {g.Roster.Count}", ListMode.Roster, true, "이 길드 소속 용병. 줄을 누르면 정보, 버튼으로 영입·대여·맞교환.");
+            SetTab(1, "팔기", ListMode.Sell, !hostile,
+                hostile ? "적대 관계라 거래하지 않는다." : $"우리 용병을 이 길드에 판다(위약금 없이 계약째, 관계 +{RivalDeals.SellRelation}).");
+            SetTab(2, "빌려주기", ListMode.Lend, canLend,
+                canLend ? $"우리 용병을 {Loans.LoanDays}일 빌려주고 하루 대여료를 받는다(관계 +4). 그동안 파티 자리는 비워 둔다." : "경쟁·적대 관계라 우리 용병을 받지 않는다.");
+            SetTab(3, "교역", ListMode.Barter, barter == null,
+                barter ?? $"남는 전리품을 이 길드의 건설 재료로 바꾼다(오늘 {material.Name}, 남은 {RivalDeals.BartersLeft(g)}번 · 관계 +{RivalDeals.BarterRelation}).");
         }
 
-        private void SetAction(int i, string label, UnityEngine.Events.UnityAction onClick, bool interactable, string tooltip, bool visible = true)
+        private void SetTab(int i, string label, ListMode mode, bool interactable, string tooltip)
         {
             var (button, text) = _actions[i];
-            button.gameObject.SetActive(visible);
-            text.text = label;
+            bool on = _mode == mode || (mode == ListMode.Roster && _mode == ListMode.Trade);
+            text.text = on ? $"<color={TabOn}><b>{label}</b></color>" : label;
+            button.GetComponent<Image>().color = on ? TabOnTint : TabOffTint;
             button.interactable = interactable;
             button.onClick.RemoveAllListeners();
-            button.onClick.AddListener(onClick);
+            button.onClick.AddListener(() => SetMode(mode));
             button.GetComponent<TooltipTrigger>().Text = tooltip;
         }
 
@@ -319,7 +329,7 @@ namespace GN3.UI
             h.childControlWidth = true;
             h.childControlHeight = true;
 
-            string text = item == null ? $"<color={Muted}>바꿀 전리품이 없다. 원정에서 몬스터를 쓰러뜨리면 생긴다.</color>"
+            string text = item == null ? $"<color={Muted}>바꿀 전리품이 없습니다</color>"
                 : $"<b>{item.Name}</b> ×{count}  <color={Muted}>개당 {item.Price}G</color>\n" +
                   $"<size=13><color=#f0a54a>→ {RivalDeals.BarterMaterial(g).Name} {RivalDeals.BarterAmount(g, item)}개</color></size>";
             var label = CreateFlowText(row.transform, text, 15);
@@ -427,39 +437,37 @@ namespace GN3.UI
             _place.alignment = TextAnchor.UpperRight;
             _place.color = UITheme.MutedText;
 
-            // 왼쪽 순위(근처 길드 4 + 우리 길드)
+            // 왼쪽 목록: 맨 위 우리 길드(고정) + 간격 + 근처 길드 4(명성 순)
             for (int i = 0; i < 5; i++)
             {
                 var row = new GameObject("Row" + i, typeof(RectTransform), typeof(Image), typeof(Button), typeof(TooltipTrigger));
                 row.transform.SetParent(_panel.transform, false);
-                Place(row.GetComponent<RectTransform>(), ListX, -(ListTop + i * RowHeight), ListWidth, RowHeight - 6f);
+                float top = ListTop + i * RowHeight + (i > 0 ? OurGap : 0f);
+                Place(row.GetComponent<RectTransform>(), ListX, -top, ListWidth, RowHeight - 6f);
                 var back = row.GetComponent<Image>();
                 back.sprite = _white;
                 back.color = RowColor;
                 var label = CreateText("Label", 17, row.transform, "", 12f, -12f, ListWidth - 24f, RowHeight - 20f);
                 label.lineSpacing = 1.15f;
-                _rows.Add((back, label, row.GetComponent<TooltipTrigger>(), row.GetComponent<Button>()));
+                _rows.Add((back, label, row.GetComponent<TooltipTrigger>(), row.GetComponent<Button>(), HiddenFrame(row.transform)));
             }
-            var help = CreateText("Help", 15, _panel.transform,
-                "명성은 의뢰에 성공하면 오르고 실패하면 깎인다.\n근처 길드도 매일 의뢰를 맡고, 같은 시장에서 용병을 고용하며, 우리 게시판 의뢰를 가로채기도 한다.",
-                ListX, -(ListTop + 5 * RowHeight + 8f), ListWidth, 160f);
-            help.color = UITheme.MutedText;
 
-            // 오른쪽 상세
+            // 오른쪽 상세: 이름 · 한 줄 정보(자세한 건 툴팁)
             _name = CreateText("Name", 24, _panel.transform, "", DetailX, -ListTop, DetailWidth, 34f);
             _name.fontStyle = FontStyle.Bold;
             _name.color = UITheme.TitleText;
-            _info = CreateText("Info", 16, _panel.transform, "", DetailX, -(ListTop + 40f), DetailWidth, 48f);
+            _info = CreateText("Info", 16, _panel.transform, "", DetailX, -(ListTop + 40f), DetailWidth, 24f);
             _info.raycastTarget = true;
             _infoTip = _info.gameObject.AddComponent<TooltipTrigger>();
 
-            // 관계 막대
-            _relationLabel = CreateText("Relation", 16, _panel.transform, "", DetailX, -(ListTop + 96f), 260f, 24f);
+            // 관계 줄: 라벨 · 막대 · [선물]
+            const float relationTop = ListTop + 76f;
+            _relationLabel = CreateText("Relation", 16, _panel.transform, "", DetailX, -relationTop, 190f, 24f);
             _relationLabel.raycastTarget = true;
             _relationTip = _relationLabel.gameObject.AddComponent<TooltipTrigger>();
             var barBack = new GameObject("RelationBar", typeof(RectTransform), typeof(Image));
             barBack.transform.SetParent(_panel.transform, false);
-            Place(barBack.GetComponent<RectTransform>(), DetailX + 270f, -(ListTop + 101f), BarWidth, 14f);
+            Place(barBack.GetComponent<RectTransform>(), DetailX + 200f, -(relationTop + 5f), BarWidth, 14f);
             var barImage = barBack.GetComponent<Image>();
             barImage.sprite = _white;
             barImage.color = new Color(0f, 0f, 0f, 0.45f);
@@ -476,18 +484,18 @@ namespace GN3.UI
             midImage.sprite = _white;
             midImage.color = new Color(1f, 1f, 1f, 0.5f);
 
-            // 버튼 줄: 선물 + 거래
-            _giftButton = CreateButton("Gift", DetailX, -(ListTop + 132f), 140f, Gift, out _giftText,
+            _giftButton = CreateButton("Gift", DetailX + DetailWidth - 140f, -(relationTop - 7f), 140f, Gift, out _giftText,
                 $"{RivalGuilds.GiftCost}G를 보내 관계를 올린다(하루 한 번). 성향에 따라 오르는 폭이 다르다.");
-            for (int i = 0; i < 3; i++)
+
+            // 거래 탭: [소속 용병][팔기][빌려주기][교역] (DrawActions가 이름·막힘·고른 탭을 맞춘다)
+            for (int i = 0; i < 4; i++)
             {
-                var button = CreateButton("Action" + i, DetailX + 150f + i * 160f, -(ListTop + 132f), 150f, null, out var label, "");
-                button.gameObject.SetActive(false);
+                var button = CreateButton("Tab" + i, DetailX + i * (TabWidth + TabGap), -TabTop, TabWidth, null, out var label, "");
                 _actions.Add((button, label));
             }
 
-            // 소속 용병(스크롤)
-            _rosterTitle = CreateText("RosterTitle", 16, _panel.transform, "", DetailX, -(RosterTop - 30f), DetailWidth, 24f);
+            // 목록 위 한 줄(맞교환 대상·빌려준 용병) + 목록(스크롤)
+            _rosterTitle = CreateText("RosterTitle", 15, _panel.transform, "", DetailX, -(RosterTop - 24f), DetailWidth, 22f);
             var content = new GameObject("Roster", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
             content.transform.SetParent(_panel.transform, false);
             _roster = content.GetComponent<RectTransform>();
@@ -534,6 +542,14 @@ namespace GN3.UI
             var button = go.GetComponent<Button>();
             if (onClick != null) button.onClick.AddListener(onClick);
             return button;
+        }
+
+        /// <summary>고른 길드 줄에만 켜는 흰 테두리(UITheme.CreateSelectFrame — 처음엔 꺼 둔다).</summary>
+        private static GameObject HiddenFrame(Transform row)
+        {
+            var frame = UITheme.CreateSelectFrame(row, FrameWidth);
+            frame.SetActive(false);
+            return frame;
         }
 
         private static Color HexColor(string hex) => ColorUtility.TryParseHtmlString(hex, out var c) ? c : Color.white;

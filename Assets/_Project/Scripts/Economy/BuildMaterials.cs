@@ -9,7 +9,7 @@ namespace GN3.Economy
     /// </summary>
     public static class BuildMaterials
     {
-        /// <summary>새 게임에 들고 시작하는 재료(길드 천막 한 채 + 조금 남게).</summary>
+        /// <summary>새 게임에 들고 시작하는 재료(첫 건물 — 게시판·장식 등에 보탠다. 길드 천막·첫 용병 텐트는 무료).</summary>
         public static readonly (LootItem item, int count)[] StartingKit =
         {
             (LootCatalog.Cloth, 4), (LootCatalog.Rope, 3), (LootCatalog.Stake, 6), (LootCatalog.Log, 2),

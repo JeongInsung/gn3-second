@@ -92,8 +92,7 @@ namespace GN3.UI
                     : $"필요 인원: 정확히 {q.RequiredDispatchSize}명\n\n") +
                 (RivalDeals.JointLabel(q) is string joint ? $"<color=#6ab8ff>{joint}</color>\n" : "") + // 연합 의뢰
                 (RivalGuilds.TargetOf(q) is RivalGuild rival ? $"<color=#f0a54a>{Josa.IGa(rival.Name)} 이 의뢰를 노리고 있다 — 오늘 안 맡으면 내일 가져간다.</color>\n" : "") +
-                $"<color=#f0a54a>보상 {Pricing.QuestReward(q)}G{(q.MaterialReward.Count > 0 ? $" · {q.MaterialRewardText}" : "")}</color>\n" +
-                $"<color=#a3937c>얻는 재료(몬스터): {string.Join("·", q.DroppedMaterials.Select(m => m.Name))}</color>";
+                $"<color=#f0a54a>보상 {Pricing.QuestReward(q)}G{(q.MaterialReward.Count > 0 ? $" · {q.MaterialRewardText}" : "")}</color>\n" +                $"<color=#a3937c>얻는 재료(몬스터): {string.Join("·", q.DroppedMaterials.Select(m => m.Name))}</color>";
             _acceptButton.interactable = !_accepted && _onAccept != null;
             LayoutBody();
         }

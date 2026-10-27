@@ -22,6 +22,8 @@ namespace GN3.Save
 
         public int version = CurrentVersion;
         public string savedAt;
+        public List<string> lootSeen = new List<string>(); // 한 번이라도 얻은 아이템 이름(LootBag.HasSeen — 도감 "획득한 아이템")
+        public string gameId; // 게임(새로 시작한 판)마다 하나 — 저장 기록을 게임별로 나눈다(SaveSystem.GameId). 예전 저장은 비어 있다
 
         public int gold;
         public int day;
@@ -68,6 +70,12 @@ namespace GN3.Save
         public int merchantHereDay = -1;                                   // 떠돌이 상인이 와 있는 날(-1 없음)·다음에 올 날·남은 물건(TravelingMerchant)
         public int merchantNextDay = -1;
         public List<LootSave> merchantStock = new List<LootSave>();
+        public int blackMarketHereDay = -1;                                // 암거래 상인이 와 있는 날(-1 없음)·다음에 올 날·남은 돈(BlackMarket, 예전 저장엔 없어 -1 → 새로 정함)
+        public int blackMarketNextDay = -1;
+        public int blackMarketPurse;
+        public int brokerHereDay = -1;                                     // 의뢰 중개인이 와 있는 날(-1 없음)·다음에 올 날·남은 의뢰(QuestBroker)
+        public int brokerNextDay = -1;
+        public List<BoardQuestSave> brokerQuests = new List<BoardQuestSave>();
         public int rivalTargetIndex = -1;                                  // 근처 길드가 노리는 게시판 의뢰(questBoard 몇 번째)
         public string rivalTargetGuild;
     }
@@ -176,6 +184,7 @@ namespace GN3.Save
         public bool rarePassive;
         public int health;
         public string weapon; // 무기 이름(없으면 빈 문자열)
+        public int bag;       // 가방 번호(BagCatalog, 예전 저장엔 없어 0 = 낡은 주머니)
         public int fatigue;
         public int morale = 70; // 예전 저장엔 없어 기본값으로 읽힌다
         public List<AilmentSave> ailments = new List<AilmentSave>(); // 부상·질병(예전 저장엔 없어 빈 목록)
@@ -242,6 +251,7 @@ namespace GN3.Save
         public int allyCount;
         public List<WaveSave> waves = new List<WaveSave>();
         public List<LootSave> materialReward = new List<LootSave>(); // 성공하면 받는 건설 재료(Quest.MaterialReward)
+        public int expireDay = -1; // 의뢰 중개인 의뢰: 이 날까지 받을 수 있다(QuestBroker). 게시판 의뢰는 -1
     }
 
     [Serializable]

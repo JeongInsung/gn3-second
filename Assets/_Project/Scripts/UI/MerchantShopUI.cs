@@ -38,7 +38,7 @@ namespace GN3.UI
 
         private static void Fill()
         {
-            _panel.Show("떠돌이 상인", $"오늘 하루만 머뭅니다. 건설 재료를 비싸게 팝니다(판값의 {TravelingMerchant.PriceFactor}배). (보유 {Wallet.Gold}G)");
+            _panel.Show("떠돌이 상인", $"보유 {Wallet.Gold}G");
             ShopListUI.BeginList(_panel);
             foreach (var (item, count) in TravelingMerchant.Stock)
             {

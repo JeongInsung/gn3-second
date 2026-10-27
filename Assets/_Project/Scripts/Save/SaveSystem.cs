@@ -14,7 +14,10 @@ namespace GN3.Save
 {
     /// <summary>
     /// 진행 상황을 Application.persistentDataPath/save.json에 저장·불러온다(JsonUtility).
-    /// 저장할 때마다 같은 내용을 saves/에 시간 붙은 기록으로도 남긴다(자동·직접 각각 최근 HistoryKeep개). 불러오기 창(LoadGamePanel)이 그 목록에서 고른다.
+    /// 저장할 때마다 같은 내용을 saves/에 시간 붙은 기록으로도 남긴다. 불러오기 창(LoadGamePanel)이 그 목록에서 고른다.
+    /// 기록은 게임(새로 시작한 판, GameId)마다 따로 두어 자동·직접 각각 최근 HistoryKeep개, 그리고 7일마다의 자동 저장은
+    /// "주간 보관"으로 따로 HistoryKeep개 남긴다(2026-10-26 — 버그가 늦게 드러나도 그 전으로 돌아갈 수 있게, 새 게임이 예전 게임 기록을 밀어내지 않게).
+    /// 게임 구분 전 기록(파일 이름에 게임 표시 없음)은 "이전 기록"으로 묶고 지우지 않는다.
     /// 저장: 골드·일차·시각·명성·파티 용병(외형 포함)·진행 중인 파견. 시장·게시판은 불러온 뒤 새로 뽑는다.
     /// </summary>
     public static class SaveSystem
@@ -24,9 +27,22 @@ namespace GN3.Save
         private const int HistoryKeep = 10;
         private const string AutoTag = "auto";
         private const string ManualTag = "manual";
+        private const string WeeklyTag = "weekly";
+        private const int WeeklyEveryDays = 7;
+        public const string LegacyGameId = "legacy";
+
+        private static string _gameId;
+
+        /// <summary>지금 게임의 표시(g + 16진 7자리). 새 게임은 처음 저장할 때 정하고, 불러오면 그 저장의 것을 쓴다
+        /// (게임 구분 전 저장을 불러오면 새로 정한다 — 그 뒤 저장부터 한 게임으로 묶인다).</summary>
+        public static string GameId => _gameId ??= NewGameId();
+
+        private static string NewGameId() => "g" + Guid.NewGuid().ToString("N").Substring(0, 7);
 
         public static string FilePath => Path.Combine(Application.persistentDataPath, "save.json");
-        public static string HistoryFolder => Path.Combine(Application.persistentDataPath, "saves");
+        public static string HistoryFolder => HistoryFolderOverride ?? Path.Combine(Application.persistentDataPath, "saves");
+        /// <summary>검사용: 기록 폴더를 임시 폴더로 바꾼다(실제 저장 기록을 건드리지 않게). 평소엔 null.</summary>
+        internal static string HistoryFolderOverride;
 
         public static bool HasSave => File.Exists(FilePath);
 
@@ -38,6 +54,8 @@ namespace GN3.Save
         {
             public string Path;
             public bool IsAuto;
+            public bool IsWeekly;   // 7일마다 따로 남긴 주간 보관 저장
+            public string GameId;   // 어느 게임의 기록인가(게임 구분 전 기록은 LegacyGameId)
             public DateTime SavedAt;
             public string Description;
         }
@@ -80,18 +98,31 @@ namespace GN3.Save
 
         private static void WriteHistory(string json, bool auto)
         {
+            WriteHistoryFile(json, auto ? AutoTag : ManualTag);
+            if (auto && GameClock.CurrentDay % WeeklyEveryDays == 0) WriteHistoryFile(json, WeeklyTag); // 주간 보관
+        }
+
+        /// <summary>기록 하나를 쓰고, 같은 게임·같은 종류는 최근 HistoryKeep개만 남긴다(다른 게임 기록은 건드리지 않는다).</summary>
+        private static void WriteHistoryFile(string json, string tag)
+        {
             Directory.CreateDirectory(HistoryFolder);
-            string tag = auto ? AutoTag : ManualTag;
+            string prefix = $"save_{GameId}_";
             string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string path = Path.Combine(HistoryFolder, $"save_{stamp}_{tag}.json");
+            string path = Path.Combine(HistoryFolder, $"{prefix}{stamp}_{tag}.json");
             for (int n = 2; File.Exists(path); n++)
-                path = Path.Combine(HistoryFolder, $"save_{stamp}_{tag}_{n}.json");
+                path = Path.Combine(HistoryFolder, $"{prefix}{stamp}_{tag}_{n}.json");
             File.WriteAllText(path, json);
 
-            // 같은 종류는 최근 HistoryKeep개만 남긴다.
-            var old = new DirectoryInfo(HistoryFolder).GetFiles($"save_*_{tag}*.json")
+            var old = new DirectoryInfo(HistoryFolder).GetFiles($"{prefix}*_{tag}*.json")
                 .OrderByDescending(f => f.LastWriteTimeUtc).Skip(HistoryKeep);
             foreach (var file in old) file.Delete();
+        }
+
+        /// <summary>기록 파일 이름 → 게임 표시. "save_g1a2b3c4_20261026_051200_auto.json"이면 g1a2b3c4, 게임 구분 전 이름이면 LegacyGameId.</summary>
+        public static string GameIdOf(string fileName)
+        {
+            var parts = Path.GetFileNameWithoutExtension(fileName).Split('_');
+            return parts.Length > 1 && parts[1].Length == 8 && parts[1][0] == 'g' ? parts[1] : LegacyGameId;
         }
 
         /// <summary>기록 기능 이전의 save.json도 목록에 나오게: saves/가 비어 있으면 지금 save.json을 기록 하나로 복사한다(파일 시각 유지).</summary>
@@ -122,6 +153,8 @@ namespace GN3.Save
                 {
                     Path = file.FullName,
                     IsAuto = file.Name.Contains("_" + AutoTag),
+                    IsWeekly = file.Name.Contains("_" + WeeklyTag),
+                    GameId = GameIdOf(file.Name),
                     SavedAt = file.LastWriteTime,
                     Description = description,
                 });
@@ -159,11 +192,36 @@ namespace GN3.Save
             }
         }
 
+        /// <summary>게시판·의뢰 중개인에 붙어 있는 의뢰 한 장(아직 수락 전).</summary>
+        private static BoardQuestSave ToBoardSave(Quest q)
+        {
+            var b = new BoardQuestSave
+            {
+                title = q.Title, region = (int)q.Region, location = q.LocationName, enemy = q.EnemyName, enemyCount = q.EnemyCount,
+                difficulty = q.Difficulty, durationDays = q.DurationDays, requester = q.Requester, requestText = q.RequestText,
+                challenge = q.IsChallenge, allyGuildId = q.AllyGuildId, allyCount = q.AllyCount,
+            };
+            foreach (var w in q.Waves)
+                b.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
+            b.materialReward = SaveMaterials(q);
+            return b;
+        }
+
+        private static Quest FromBoardSave(BoardQuestSave b)
+        {
+            var q = new Quest(b.title, (Region)b.region, b.location, b.enemy, b.enemyCount, b.difficulty, b.durationDays,
+                b.waves != null && b.waves.Count > 0 ? b.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList() : null,
+                b.requester, b.requestText) { IsChallenge = b.challenge, AllyGuildId = b.allyGuildId, AllyCount = b.allyCount };
+            RestoreMaterials(q, b.materialReward);
+            return q;
+        }
+
         private static SaveData Capture()
         {
             var data = new SaveData
             {
                 savedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                gameId = GameId,
                 gold = Wallet.Gold,
                 day = GameClock.CurrentDay,
                 hour = GameClock.CurrentHour,
@@ -179,18 +237,7 @@ namespace GN3.Save
                 data.hasQuestBoard = true;
                 data.questBoardNextDay = QuestBoardListings.NextRefreshDay;
                 foreach (var q in QuestBoardListings.Current)
-                {
-                    var b = new BoardQuestSave
-                    {
-                        title = q.Title, region = (int)q.Region, location = q.LocationName, enemy = q.EnemyName, enemyCount = q.EnemyCount,
-                        difficulty = q.Difficulty, durationDays = q.DurationDays, requester = q.Requester, requestText = q.RequestText,
-                        challenge = q.IsChallenge, allyGuildId = q.AllyGuildId, allyCount = q.AllyCount,
-                    };
-                    foreach (var w in q.Waves)
-                        b.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
-                    b.materialReward = SaveMaterials(q);
-                    data.questBoard.Add(b);
-                }
+                    data.questBoard.Add(ToBoardSave(q));
             }
             if (MarketListings.Current != null)
             {
@@ -230,6 +277,7 @@ namespace GN3.Save
                 rarePassive = merc.HasRarePassive,
                 health = merc.CurrentHealth,
                 weapon = merc.Weapon != null ? merc.Weapon.Name : "",
+                bag = merc.Bag.Tier,
                 fatigue = merc.Fatigue,
                 morale = merc.Morale,
                 researchHours = merc.ResearchHours,
@@ -296,6 +344,7 @@ namespace GN3.Save
             data.storageWeapons = GuildStorage.WeaponNames();
             data.storageItems = GuildStorage.ItemNames();
             data.loot = LootBag.SaveEntries();
+            data.lootSeen = LootBag.SaveSeen();
             data.bestiaryKills = Bestiary.SaveEntries();
             data.bestiaryBest = Bestiary.SaveBest();
             data.facilities = GuildFacilities.SaveEntries();
@@ -306,6 +355,12 @@ namespace GN3.Save
             data.merchantHereDay = TravelingMerchant.HereDay;
             data.merchantNextDay = TravelingMerchant.SavedNextDay;
             data.merchantStock = TravelingMerchant.SaveStock();
+            data.blackMarketHereDay = BlackMarket.HereDay;
+            data.blackMarketNextDay = BlackMarket.SavedNextDay;
+            data.blackMarketPurse = BlackMarket.Purse;
+            data.brokerHereDay = QuestBroker.HereDay;
+            data.brokerNextDay = QuestBroker.SavedNextDay;
+            data.brokerQuests = QuestBroker.Quests.Select(q => { var b = ToBoardSave(q); b.expireDay = QuestBroker.ExpireDayOf(q); return b; }).ToList();
             CaptureRivals(data);
         }
 
@@ -424,6 +479,7 @@ namespace GN3.Save
         {
             var data = Read(path);
             if (data == null) return false;
+            _gameId = string.IsNullOrEmpty(data.gameId) ? NewGameId() : data.gameId; // 게임 구분 전 저장은 새 게임 표시로 이어 간다
 
             var classes = Resources.LoadAll<MercenaryClassSO>("MercenaryClasses");
             var mercs = new List<Mercenary>();
@@ -481,6 +537,7 @@ namespace GN3.Save
             }
             merc.RestoreResearch(m.researchHours, m.researchBonus);
             merc.RestoreState(m.health, weapon);
+            merc.SetBag(GN3.Economy.BagCatalog.ForTier(m.bag)); // 예전 저장은 0 = 낡은 주머니
             if (version < 4)
             {
                 merc.MatchLegacyPower(LegacyRng); // 재능 능력치 배율이 빠진 만큼 성장으로 메운다
@@ -544,10 +601,7 @@ namespace GN3.Save
             // 게시판·시장 목록: 레벨 개방 이벤트(ForestProgress.OnChanged)보다 먼저 되돌린다. 예전 저장엔 없어 처음 열 때 새로 뽑는다.
             List<Quest> board = null;
             if (data.hasQuestBoard)
-                board = data.questBoard.Select(b => new Quest(b.title, (Region)b.region, b.location, b.enemy, b.enemyCount, b.difficulty, b.durationDays,
-                    b.waves != null && b.waves.Count > 0 ? b.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList() : null,
-                    b.requester, b.requestText) { IsChallenge = b.challenge, AllyGuildId = b.allyGuildId, AllyCount = b.allyCount })
-                    .Select((q, i) => { RestoreMaterials(q, data.questBoard[i].materialReward); return q; }).ToList();
+                board = data.questBoard.Select(FromBoardSave).ToList();
             QuestBoardListings.Restore(board, data.questBoardNextDay);
             List<Mercenary> market = null;
             if (data.hasMarket)
@@ -559,16 +613,24 @@ namespace GN3.Save
             Contracts.Restore(data.contracts);
             GuildStorage.Restore(data.storageWeapons, data.storageItems);
             LootBag.Restore(data.loot);
+            LootBag.RestoreSeen(data.lootSeen);
             if (data.version < 11) LootBag.Add(BuildMaterials.StartingKit); // 재료가 생기기 전 저장: 길드 천막 한 채 분
             Bestiary.Restore(data.bestiaryKills, data.bestiaryBest);
             GuildFacilities.Restore(data.facilities);
             ForestLayout.Restore(data.felledTrees, data.fellsUsed, data.fellsDay); // 씬을 다시 맞추기(VillageLayout → Apply) 전에
             TravelingMerchant.Restore(data.merchantHereDay, data.merchantNextDay, data.merchantStock);
+            BlackMarket.Restore(data.blackMarketHereDay, data.blackMarketNextDay, data.blackMarketPurse);
+            QuestBroker.Restore(data.brokerHereDay, data.brokerNextDay, // 예전 저장은 -1 → 새 게임처럼 바로 온다
+                data.brokerQuests?.Select(FromBoardSave).ToList(), data.brokerQuests?.Select(b => b.expireDay).ToList());
             VillageLayout.Restore(data.buildings, data.version < 10);
             RestoreRivals(data, classes);
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForPlaySession() => OnLoaded = null;
+        private static void ResetForPlaySession()
+        {
+            OnLoaded = null;
+            _gameId = null; // 새 게임은 처음 저장할 때 새 표시
+        }
     }
 }

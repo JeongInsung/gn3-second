@@ -20,9 +20,8 @@ namespace GN3.UI
         private const float BodyTop = 144f;   // 판 위에서 첫 줄까지
         private const float RowHeight = 36f;
         private const int RowCount = 6;       // 인원 · 주급 · 지금 혜택 · 다음 단계 · 전체 단계 · 마을 매력
-        private const string Hint = "  <color=#7a7064>(?)</color>"; // 마우스를 올리면 설명이 있다는 표시
-        private const string Gold = "#f0c060";
-        private const string Dim = "#7a7064";
+        private const string Gold = UITheme.SelectedTextHex;
+        private const string Dim = UITheme.MutedHex; // 2026-10-26 #7a7064 → 다른 창과 같은 흐린 색
         private const string Red = "#e05a4a";
 
         public static GuildPanel Instance { get; private set; }
@@ -193,7 +192,7 @@ namespace GN3.UI
 
         private void SetRow(int i, string text, string tooltip)
         {
-            _rows[i].text = text + Hint;
+            _rows[i].text = text; // 자세한 설명은 툴팁(다른 창처럼 "(?)" 표시 없이)
             _tips[i].Text = tooltip;
         }
 

@@ -138,7 +138,7 @@ namespace GN3.UI
         {
             Current = building;
             Title.text = building.DisplayName;
-            Description.text = building.Description;
+            Description.text = ""; // 2026-10-26 건물 설명 문장은 보이지 않게(창 머리 안내 정리). 상점 등은 Opened에서 보유 금화 같은 값을 채운다
             if (Portrait != null)
             {
                 Portrait.sprite = building.Portrait;

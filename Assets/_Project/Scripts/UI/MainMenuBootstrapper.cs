@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
@@ -84,6 +85,7 @@ namespace GN3.UI
             PlaceConfirmPanel.Create(hud);                        // 건물을 놓으려고 클릭하면 "여기에 짓겠습니까?" 확인 창
             ForestFelling.Create(hud);                            // [건설] 창 "벌목" → 숲을 베어 재료(하루 몇 번)
             MerchantShopUI.Create(canvas.transform);              // 떠돌이 상인(마을에 와 있을 때 누르면) 상점 창
+            BlackMarketShopUI.Create(canvas.transform);           // 암거래 상인(와 있을 때 누르면) 전리품을 비싸게 파는 창
             new GameObject("HospitalShop", typeof(HospitalShop)); // 의약품 상점 패널에 치료 아이템 목록
             new GameObject("WeaponShop", typeof(WeaponShop));     // 대장간 패널에 무기 목록
             new GameObject("GuildStorageUI", typeof(GuildStorageUI)); // 길드 창 "창고" → 건물 패널에 창고 목록
@@ -127,10 +129,10 @@ namespace GN3.UI
                 Guild.OnChanged += rankUp =>
                 {
                     if (!rankUp) return;
-                    string line = $"길드 등급 상승! {Guild.CurrentName} — {Guild.UnlockText(Guild.Current)}";
+                    string line = $"길드 등급 상승! {Guild.CurrentName}"; // 해금 내용은 길드 등급 툴팁·길드 창에서
                     ToastLog.Show(line, false);
                     DailyLog.Add(line);
-                    Mailbox.Post(MailKind.Alert, $"길드 등급 상승! {Guild.CurrentName}", Guild.UnlockText(Guild.Current), important: true);
+                    Mailbox.Post(MailKind.Alert, line, $"길드 등급이 올랐습니다: {Guild.CurrentName}", important: true);
                 };
 
                 // 불러오면 시계·낮밤·시장·게시판을 새 상태에 맞춘다. 마을 건물이 달라졌으면 씬을 다시 불러 새 마을로 맞춘다.
@@ -236,16 +238,21 @@ namespace GN3.UI
                 smithy.SetInfo("대장간", "무기를 사서 용병에게 쥐여 줍니다. 맞는 직업이 들면 공격 보너스 ×1.5.");
             }
             var trainingHall = VillageProps.FindRenderer(TrainingHallSpritePrefix);
-            var barracks = trainingHall == null ? VillageProps.FindRenderer(BuildingCatalog.BarracksPrefix) : null;
-            if (trainingHall != null || barracks != null)
+            if (trainingHall != null)
             {
-                // 훈련소(없으면 간이 훈련소 군영 천막) → 건물 패널(TrainingHallUI가 이름에 "훈련소"가 들었는지 보고 목록을 채운다)
-                VillageProps.EnsureClickable(trainingHall ?? barracks)
-                    .SetInfo(trainingHall != null ? "훈련소" : "간이 훈련소", $"훈련할수록 능력치가 오릅니다. 직접 보내거나 스스로 찾아옵니다. (최대 {TrainingHall.Capacity}명)");
+                // 훈련소 → 건물 패널(TrainingHallUI가 이름에 "훈련소"가 들었는지 보고 목록을 채운다)
+                VillageProps.EnsureClickable(trainingHall)
+                    .SetInfo("훈련소", $"훈련할수록 능력치가 오릅니다. 직접 보내거나 스스로 찾아옵니다. (최대 {TrainingHall.Capacity}명)");
             }
-            var lodge = VillageProps.FindRenderer(BuildingCatalog.CampPrefix);
-            if (lodge != null)
-                VillageProps.EnsureClickable(lodge).SetInfo("용병 숙소", "여관이 생기기 전 용병들이 묵는 가죽 천막. 밤마다 야영보다 체력을 더 회복합니다.");
+            // 용병 텐트(군영 천막, 여러 채 — 복제한 것까지 모두) → 건물 패널(정보만)
+            int tentCount = VillageLayoutApplier.Slots.Count(s => s.Entry.Id == BuildingCatalog.TentId && s.Built);
+            foreach (var slot in VillageLayoutApplier.Slots.Where(s => s.Entry.Id == BuildingCatalog.TentId && s.Built))
+            {
+                if (slot.Renderer == null || !slot.Renderer.gameObject.activeInHierarchy) continue;
+                VillageProps.EnsureClickable(slot.Renderer).SetInfo("용병 텐트",
+                    $"여관이 생기기 전 용병들이 묵는 천막. 한 채에 {BuildingCatalog.TentBeds}명이 묵어 야영보다 체력을 더 회복합니다. " +
+                    $"(텐트 {tentCount}채 · 자리 {tentCount * BuildingCatalog.TentBeds})");
+            }
             var hospital = VillageProps.FindRenderer(HospitalSpritePrefix);
             Hospital.Available = hospital != null; // 병원 건물이 있어야 입원한다
             if (hospital != null)
@@ -503,7 +510,7 @@ namespace GN3.UI
 
         // 좌상단 메뉴 버튼바. 날짜·골드·명성 줄(DayControlBar)이 이 값으로 [퀘스트] 버튼 오른쪽 자리를 계산한다.
         private const float MenuBarMargin = 16f;
-        private const float MenuButtonWidth = 100f; // 버튼 6개(건설 추가)가 날짜 줄·오른쪽 배속 버튼과 겹치지 않게(120 → 100)
+        private const float MenuButtonWidth = 108f; // 아이콘 + 이름(2026-10-26 100 → 108). 날짜 줄이 이 폭만큼 밀려 124면 오른쪽 배속 버튼을 가렸다
         private const float MenuButtonHeight = 40f;
         private const float MenuSpacing = 8f;
         private const int MenuButtonCount = 6;
@@ -526,17 +533,28 @@ namespace GN3.UI
             layout.childControlWidth = true;
             layout.childControlHeight = true;
 
-            CreateMenuButton(barGO.transform, "용병시장", () => OpenPanel(marketPanel));
-            CreateMenuButton(barGO.transform, "파티 구성", () => OpenPanel(partyPanel));
-            CreateMenuButton(barGO.transform, "퀘스트", () => OpenPanel(questPanel));
-            CreateMenuButton(barGO.transform, "도감", BestiaryPanel.ShowGlobal); // 몬스터 도감 창
-            CreateMenuButton(barGO.transform, "근처 길드", RivalGuildsPanel.ShowGlobal); // 근처 길드 순위·관계·거래 창
-            CreateMenuButton(barGO.transform, "건설", BuildMenuPanel.ShowGlobal); // 마을에 건물 짓기(BuildPlacement)
+            // 아이콘: Resources/UIIcons/menu_*(tools/bake_menu_icons.py)
+            CreateMenuButton(barGO.transform, "용병시장", "UIIcons/menu_market", () => OpenPanel(marketPanel));
+            CreateMenuButton(barGO.transform, "파티 구성", "UIIcons/menu_party", () => OpenPanel(partyPanel));
+            CreateMenuButton(barGO.transform, "퀘스트", "UIIcons/menu_quest", () => OpenPanel(questPanel));
+            CreateMenuButton(barGO.transform, "도감", "UIIcons/menu_bestiary", BestiaryPanel.ShowGlobal); // 몬스터 도감 창
+            CreateMenuButton(barGO.transform, "근처 길드", "UIIcons/menu_guilds", RivalGuildsPanel.ShowGlobal); // 근처 길드 순위·관계·거래 창
+            CreateMenuButton(barGO.transform, "건설", "UIIcons/menu_build", BuildMenuPanel.ShowGlobal); // 마을에 건물 짓기(BuildPlacement)
         }
 
         private static void OpenPanel(GameObject panel) => PanelActivator.Open(panel);
 
-        private static void CreateMenuButton(Transform parent, string label, UnityEngine.Events.UnityAction onClick)
+        /// <summary>퀘스트 창을 연다(마을의 의뢰 중개인을 눌렀을 때).</summary>
+        public static void OpenQuestPanel()
+        {
+            if (_questPanel != null) OpenPanel(_questPanel);
+        }
+
+        private const float MenuIconSize = 24f;
+        private const float MenuIconInset = 6f;
+
+        /// <summary>메뉴 버튼: 왼쪽에 아이콘, 남은 자리 가운데에 이름. 아이콘이 없으면 이름만. 이름은 "{label}Button"(튜토리얼이 이 이름으로 찾는다).</summary>
+        private static void CreateMenuButton(Transform parent, string label, string iconPath, UnityEngine.Events.UnityAction onClick)
         {
             var buttonGO = new GameObject(label + "Button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             buttonGO.transform.SetParent(parent, false);
@@ -547,7 +565,23 @@ namespace GN3.UI
             layoutElement.minWidth = MenuButtonWidth;
             layoutElement.minHeight = MenuButtonHeight;
 
-            CreateFillText(buttonGO.transform, label, 18);
+            var icon = UIIcons.Load(iconPath);
+            if (icon != null)
+            {
+                var iconGO = new GameObject("MenuIcon", typeof(RectTransform), typeof(Image));
+                iconGO.transform.SetParent(buttonGO.transform, false);
+                var iconRect = iconGO.GetComponent<RectTransform>();
+                iconRect.anchorMin = iconRect.anchorMax = iconRect.pivot = new Vector2(0f, 0.5f);
+                iconRect.anchoredPosition = new Vector2(MenuIconInset, 0f);
+                iconRect.sizeDelta = new Vector2(MenuIconSize, MenuIconSize);
+                var image = iconGO.GetComponent<Image>();
+                image.sprite = icon;
+                image.preserveAspect = true;
+                image.raycastTarget = false;
+            }
+
+            var text = CreateFillText(buttonGO.transform, label, icon != null ? 16 : 18);
+            if (icon != null) text.rectTransform.offsetMin = new Vector2(MenuIconInset + MenuIconSize, 0f); // 아이콘 오른쪽 남은 자리 가운데
             buttonGO.GetComponent<Button>().onClick.AddListener(onClick);
         }
 
@@ -569,7 +603,7 @@ namespace GN3.UI
             buttonGO.GetComponent<Button>().onClick.AddListener(() => panel.SetActive(false));
         }
 
-        private static void CreateFillText(Transform parent, string content, int fontSize)
+        private static Text CreateFillText(Transform parent, string content, int fontSize)
         {
             var go = new GameObject("Text", typeof(RectTransform), typeof(Text));
             go.transform.SetParent(parent, false);
@@ -586,6 +620,7 @@ namespace GN3.UI
             text.fontSize = fontSize;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
+            return text;
         }
     }
 }

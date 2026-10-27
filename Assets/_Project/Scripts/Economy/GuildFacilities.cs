@@ -93,7 +93,7 @@ namespace GN3.Economy
         public static string Block(Facility f)
         {
             string building = RequiredBuilding(f);
-            if (building != null && !VillageLayout.HasBuilding(building) && !(building == "training" && VillageLayout.HasBuilding("barracks"))) // 간이 훈련소도 훈련소로 친다
+            if (building != null && !VillageLayout.HasBuilding(building))
                 return $"마을에 {Josa.IGa(BuildingCatalog.Get(building).Name)} 있어야 증축할 수 있습니다.";
             int next = Level(f) + 1;
             if (next > MaxLevel) return "이미 최고 단계입니다.";

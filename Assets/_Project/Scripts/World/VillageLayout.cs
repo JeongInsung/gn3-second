@@ -39,15 +39,19 @@ namespace GN3.World
         public static int PlayerBuiltCount =>
             _built.Keys.Count(k => BuildingCatalog.ForObject(k) is { StartBuilt: false });
 
+        // 목록을 손대면(짓기·치우기) 그 목록이 정본이다 — IsInitialized가 false로 남아 있으면 전투에서 돌아와 씬을 다시 맞출 때
+        // VillageLayoutApplier가 Initialize(StartBuilt만)로 덮어써 지은 건물이 모두 사라졌다(2026-10-26, 건물 없는 저장을 불러온 뒤 지은 경우).
         public static void Add(string key, Vector2 position)
         {
             _built[key] = position;
+            IsInitialized = true;
             Changed();
         }
 
         /// <summary>그 자리 하나를 뺀다(놓은 장식품 치우기).</summary>
         public static void Remove(string key)
         {
+            IsInitialized = true;
             if (_built.Remove(key)) Changed();
         }
 
@@ -99,11 +103,12 @@ namespace GN3.World
                     {
                         var parts = e.Split('|');
                         if (parts.Length == 3
+                            && !BuildingCatalog.RetiredPrefixes.Any(p => parts[0].StartsWith(p, StringComparison.Ordinal)) // 없앤 건물(예전 용병 숙소)은 버린다
                             && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
                             && float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
                             _built[MigrateKey(parts[0])] = new Vector2(x, y);
                     }
-                IsInitialized = _built.Count > 0; // 비어 있으면(아무것도 안 지음) 새 게임처럼 다시 만든다
+                IsInitialized = true; // 새 저장의 건물 목록은 비어 있어도 정답이다(아무것도 안 지음) — 새 게임처럼 다시 만들지 않는다
                 PendingFullVillage = false;
             }
             Changed(false);

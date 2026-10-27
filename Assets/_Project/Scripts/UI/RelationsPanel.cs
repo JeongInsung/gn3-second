@@ -26,7 +26,7 @@ namespace GN3.UI
         private const float BarHeight = 12f;
         internal const float ButtonWidth = 80f; // HealthPanel이 "건강" 버튼을 이 버튼 왼쪽에 놓을 때 쓴다
         private const float ButtonHeight = 40f;
-        private const string Dim = "#a3937c";
+        private const string Dim = UITheme.MutedHex;
 
         public static RelationsPanel Instance { get; private set; }
 
@@ -176,7 +176,7 @@ namespace GN3.UI
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = new Vector2(Pad + column * (TabWidth + TabGap), -(56f + row * (TabHeight + TabGap)));
             rect.sizeDelta = new Vector2(TabWidth, TabHeight);
-            go.GetComponent<Image>().color = selected ? new Color(0.3f, 0.6f, 0.3f, 1f) : new Color(0.5f, 0.25f, 0.25f, 1f);
+            go.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.25f, 0.9f); // 모든 탭 같은 바탕 — 고른 탭은 흰 테두리 + 금색 굵은 글씨
             string id = merc.Id;
             go.GetComponent<Button>().onClick.AddListener(() =>
             {
@@ -184,20 +184,13 @@ namespace GN3.UI
                 Refresh();
             });
 
-            var label = CreateText("Text", 14, go.transform, merc.Name);
+            var label = CreateText("Text", 14, go.transform, selected ? $"<color={UITheme.SelectedTextHex}><b>{merc.Name}</b></color>" : merc.Name);
             Stretch(label.rectTransform);
             label.alignment = TextAnchor.MiddleCenter;
             label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.supportRichText = true;
 
-            if (!selected) return;
-            // 고른 탭 아래 금색 밑줄(자기 그림이라 테마가 바꾸지 않는다)
-            var line = CreateBox("Selected", go.transform, Affinity.Tiers[Affinity.Tiers.Length - 1].Color);
-            var lineRect = line.rectTransform;
-            lineRect.anchorMin = new Vector2(0f, 0f);
-            lineRect.anchorMax = new Vector2(1f, 0f);
-            lineRect.pivot = new Vector2(0.5f, 1f);
-            lineRect.anchoredPosition = new Vector2(0f, -1f);
-            lineRect.sizeDelta = new Vector2(0f, 3f);
+            if (selected) UITheme.CreateSelectFrame(go.transform);
         }
 
         /// <summary>동료 한 명: 이름(+상태) | 가운데 0 막대 | 값 | 단계 | 궁합. 줄 전체에 단계 효과 툴팁.</summary>

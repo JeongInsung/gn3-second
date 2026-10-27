@@ -33,7 +33,7 @@ namespace GN3.World
         // 용병들이 드나드는 여관 문(여관 그림 기준 비율, 왼쪽 아래 0). 512px 원본에서 아치문 중심 x≈206px, 디딤돌 y≈450px.
         private const float InnDoorU = 0.40f;
         private const float InnDoorV = 0.12f;
-        // 여관이 없으면 용병 숙소 천막(갈색 원뿔형 텐트)의 아래 가운데 입구로 드나든다
+        // 여관이 없으면 용병 텐트(군영 천막)의 아래 가운데 입구로 드나든다
         private const float CampDoorU = 0.5f;
         private const float CampDoorV = 0.1f;
 
@@ -119,6 +119,14 @@ namespace GN3.World
         private const string MerchantOwnerId = "merchant";
         private static readonly Vector2 MerchantOffset = new Vector2(2.2f, -1.2f);
         private VillageWanderer _merchant;
+        // 의뢰 중개인(QuestBroker): 와 있는 날 마을 가운데 조금 왼쪽 아래에 서 있고, 누르면 퀘스트 창
+        private const string BrokerOwnerId = "broker";
+        private static readonly Vector2 BrokerOffset = new Vector2(-2.2f, -1.2f);
+        private VillageWanderer _broker;
+        // 암거래 상인(BlackMarket): 와 있는 날 마을 가운데 아래쪽에 서 있고, 누르면 전리품을 비싸게 파는 창
+        private const string BlackMarketOwnerId = "blackmarket";
+        private static readonly Vector2 BlackMarketOffset = new Vector2(0f, -2.2f);
+        private VillageWanderer _blackMarket;
         private const float MarchGap = 0.4f;                          // 파견대가 한 줄로 나가는 간격
         private const float ReturnSpacing = 2f;                       // 귀환대 간격 = MarchGap × 이 값(유닛, 성문 밖에서 한 명씩 더 뒤에서 출발)
         private readonly Dictionary<string, float> _nextDecision = new Dictionary<string, float>();
@@ -260,6 +268,8 @@ namespace GN3.World
             if (!_hidden && DecorActivities.Spots.Count > 0) UpdateDecorVisits();
             if (!_hidden) SyncDecorHolds();
             SyncMerchant();
+            SyncBroker();
+            SyncBlackMarket();
 
             UpdateHoverAndClick();
             CloseInfoIfGone();
@@ -267,7 +277,7 @@ namespace GN3.World
 
         /// <summary>
         /// 용병이 묵는 숙소의 문과, 그 아래 처음 걸을 수 있는 바깥 지점: 여관(구운 "여관@..." 포함), 없으면 여관 전 단계의
-        /// 용병 숙소 천막(입구 아래 가운데). 둘 다 없으면 드나들기 없이 마을 아무 곳에 나타난다.
+        /// 용병 텐트(입구 아래 가운데). 둘 다 없으면 드나들기 없이 마을 아무 곳에 나타난다.
         /// 이 문으로 아침에 나오고 낮에 들어가 쉬었다 나온다(_hasInn·_innDoor는 숙소 천막도 뜻한다). 길드 본부 문(_hqDoor)도 함께 찾는다.
         /// </summary>
         private void FindLodgings()
@@ -276,7 +286,7 @@ namespace GN3.World
             float doorU = InnDoorU, doorV = InnDoorV;
             if (renderer == null)
             {
-                renderer = VillageProps.FindRenderer(BuildingCatalog.CampPrefix);
+                renderer = VillageProps.FindRenderer(BuildingCatalog.BarracksPrefix); // 용병 텐트(여러 채면 아무 채)
                 doorU = CampDoorU;
                 doorV = CampDoorV;
             }
@@ -326,7 +336,7 @@ namespace GN3.World
         /// <summary>훈련소 그림의 아래 가운데(발밑)를 문으로, 그 아래 처음 걸을 수 있는 지점을 문 앞으로 정한다. 없으면 훈련 드나들기 연출 없음.</summary>
         private void FindTrainingHallDoor()
         {
-            var renderer = VillageProps.FindRenderer(TrainingHallSpritePrefix) ?? VillageProps.FindRenderer(BuildingCatalog.BarracksPrefix); // 간이 훈련소
+            var renderer = VillageProps.FindRenderer(TrainingHallSpritePrefix); // 용병 텐트(예전 간이 훈련소)는 숙소라 훈련하러 가지 않는다
             if (renderer == null) return;
             var bounds = renderer.bounds;
             _trainingDoor = new Vector2(bounds.center.x, bounds.min.y + bounds.size.y * 0.08f);
@@ -509,6 +519,50 @@ namespace GN3.World
             _merchant.OwnerId = MerchantOwnerId;
             _merchant.HoldAt(spot, false);
             VillageNameTag.Create(_tagLayer, go.transform, "<color=#f0c060>떠돌이 상인</color>");
+        }
+
+        /// <summary>의뢰 중개인이 와 있으면(낮) 마을 가운데쯤에 세우고, 떠났거나 밤이면 치운다(그날 외형은 날짜로 고정).
+        /// 새 게임(아직 한 번도 안 옴)이면 타이틀이 닫힌 뒤 바로 오게 한다 — 게시판 없는 초반에 의뢰가 끊기지 않게.</summary>
+        private void SyncBroker()
+        {
+            if (!GN3.World.GamePause.IsPaused) QuestBroker.EnsureFirstVisit();
+            bool show = QuestBroker.IsHere && !_hidden && !TimeAdvanceController.IsSkippingDays;
+            if (!show)
+            {
+                if (_broker != null) Destroy(_broker.gameObject);
+                _broker = null;
+                return;
+            }
+            if (_broker != null) return;
+            Vector2 spot = _grid.NearestWalkable(_area.center + BrokerOffset);
+            var go = new GameObject("Wanderer_의뢰 중개인");
+            go.transform.position = spot;
+            _broker = go.AddComponent<VillageWanderer>();
+            _broker.Init(GN3.CharacterAnim.RandomCharacterComposer.Compose(new System.Random(QuestBroker.HereDay * 31 + 7)), _grid, _rng, _shadowMaterial);
+            _broker.OwnerId = BrokerOwnerId;
+            _broker.HoldAt(spot, true);
+            VillageNameTag.Create(_tagLayer, go.transform, "<color=#9fd0ff>의뢰 중개인</color>");
+        }
+
+        /// <summary>암거래 상인이 와 있으면(낮) 마을 가운데 아래쪽에 세우고, 떠났거나 밤이면 치운다(그날 외형은 날짜로 고정).</summary>
+        private void SyncBlackMarket()
+        {
+            bool show = GN3.Economy.BlackMarket.IsHere && !_hidden && !TimeAdvanceController.IsSkippingDays;
+            if (!show)
+            {
+                if (_blackMarket != null) Destroy(_blackMarket.gameObject);
+                _blackMarket = null;
+                return;
+            }
+            if (_blackMarket != null) return;
+            Vector2 spot = _grid.NearestWalkable(_area.center + BlackMarketOffset);
+            var go = new GameObject("Wanderer_암거래 상인");
+            go.transform.position = spot;
+            _blackMarket = go.AddComponent<VillageWanderer>();
+            _blackMarket.Init(GN3.CharacterAnim.RandomCharacterComposer.Compose(new System.Random(GN3.Economy.BlackMarket.HereDay * 17 + 3)), _grid, _rng, _shadowMaterial);
+            _blackMarket.OwnerId = BlackMarketOwnerId;
+            _blackMarket.HoldAt(spot, false);
+            VillageNameTag.Create(_tagLayer, go.transform, "<color=#c58ae0>암거래 상인</color>");
         }
 
         private DecorActivities.Spot ClosestFreeSpot(DecorActivities.Kind kind, Vector2 from) =>
@@ -779,7 +833,7 @@ namespace GN3.World
                 bool overUI = EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
                 if (!overUI) target = VillageWanderer.Pick(cam.ScreenToWorldPoint(mouse.position.ReadValue()));
                 // 건물로 들어가는 중인(등록 안 된) 인형은 고르지 않는다 — 눌러도 창이 안 열리고 뒤의 진짜 인형을 가렸다
-                if (target != null && target != _merchant
+                if (target != null && target != _merchant && target != _broker && target != _blackMarket
                     && (target.OwnerId == null || !_wanderers.TryGetValue(target.OwnerId, out var registered) || registered != target))
                     target = null;
             }
@@ -793,6 +847,8 @@ namespace GN3.World
 
             bool canClick = _hovered != null && mouse.leftButton.wasPressedThisFrame && !BuildPlacement.Active && !BuildingMover.Active && !ForestFelling.Active;
             if (canClick && _hovered == _merchant) MerchantShopUI.Open();
+            else if (canClick && _hovered == _broker) MainMenuBootstrapper.OpenQuestPanel();
+            else if (canClick && _hovered == _blackMarket) BlackMarketShopUI.Open();
             else if (canClick && _hovered.OwnerId != null && _mercById.TryGetValue(_hovered.OwnerId, out var merc))
                 _infoPanel.Show(merc, fromVillage: true);
         }

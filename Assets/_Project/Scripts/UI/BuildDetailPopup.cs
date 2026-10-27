@@ -104,7 +104,7 @@ namespace GN3.UI
             h.childForceExpandHeight = false;
             popup._ok = ShopListUI.CreateButton(buttons.transform, "짓기", () => popup._onOk?.Invoke(), 110f);
             popup._okLabel = popup._ok.GetComponentInChildren<Text>();
-            ShopListUI.CreateButton(buttons.transform, "닫기", Hide, 110f);
+            UITheme.CreateCloseX(panel.transform, Hide); // 닫기는 다른 창처럼 오른쪽 위 X
 
             _instance = popup;
             root.SetActive(false);

@@ -41,6 +41,14 @@ namespace GN3.UI
         private Text _personalityText;
         private Text _passiveText;
         private TooltipTrigger _weaponTip;
+        // 가방 줄(무기 줄 아래): 가방 아이콘 · 이름 · 칸 수만큼 빈 칸 네모(BagSlotsUI)
+        private RectTransform _bagRow;
+        private Image _bagIcon;
+        private Text _bagText;
+        private Transform _bagSlots;
+        private TooltipTrigger _bagTip;
+        private BagItem _bagShown; // 칸 네모를 다시 그릴지(0.5초마다 갱신되므로 가방이 바뀔 때만)
+        private const float BagRowHeight = 24f, BagPipSize = 14f;
         private TooltipTrigger _personalityTip;
         private TooltipTrigger _passiveTip;
         private Text _friendsText;
@@ -133,6 +141,7 @@ namespace GN3.UI
             _weaponTip = AddTooltip(_weaponText);
             _personalityTip = AddTooltip(_personalityText);
             _passiveTip = AddTooltip(_passiveText);
+            CreateBagRow();
             _friendsText = CreateText("Friends", 15, FontStyle.Normal, new Vector2(14f, -274f), new Vector2(bottomWidth, 22f));
             _friendsTip = AddTooltip(_friendsText);
             _healthStatusText = CreateText("HealthStatus", 15, FontStyle.Normal, new Vector2(14f, -302f), new Vector2(bottomWidth, 22f));
@@ -192,6 +201,56 @@ namespace GN3.UI
             text.supportRichText = false; // 패시브 이름의 "<...>"가 태그로 읽히지 않게
             text.raycastTarget = false;
             return text;
+        }
+
+        /// <summary>가방 줄: [아이콘] "가방: 낡은 주머니" ▢▢▢▢. 마우스를 올리면 몇 개까지 들고 오는지·어디서 바꾸는지.</summary>
+        private void CreateBagRow()
+        {
+            var row = new GameObject("BagRow", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup));
+            row.transform.SetParent(_panel.transform, false);
+            _bagRow = (RectTransform)row.transform;
+            _bagRow.anchorMin = _bagRow.anchorMax = _bagRow.pivot = new Vector2(0f, 1f);
+            _bagRow.sizeDelta = new Vector2(PanelWidth - 28f, BagRowHeight);
+            row.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.001f); // 툴팁용 레이캐스트(보이지 않음)
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.spacing = 6f;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = h.childForceExpandHeight = false;
+
+            var icon = new GameObject("Icon", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            icon.transform.SetParent(row.transform, false);
+            _bagIcon = icon.GetComponent<Image>();
+            _bagIcon.preserveAspect = true;
+            _bagIcon.raycastTarget = false;
+            var iconLayout = icon.GetComponent<LayoutElement>();
+            iconLayout.preferredWidth = iconLayout.preferredHeight = 22f;
+
+            _bagText = ShopListUI.CreateText(row.transform, "", 15, TextAnchor.MiddleLeft, Color.white);
+            _bagText.font = UITheme.Font;
+            _bagText.horizontalOverflow = HorizontalWrapMode.Overflow;
+
+            var slots = new GameObject("Slots", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            slots.transform.SetParent(row.transform, false);
+            var s = slots.GetComponent<HorizontalLayoutGroup>();
+            s.spacing = 3f;
+            s.childAlignment = TextAnchor.MiddleLeft;
+            s.childControlWidth = s.childControlHeight = true;
+            s.childForceExpandWidth = s.childForceExpandHeight = false;
+            _bagSlots = slots.transform;
+            _bagTip = row.AddComponent<TooltipTrigger>();
+        }
+
+        private void RefreshBagRow(Mercenary merc)
+        {
+            var bag = merc.Bag;
+            _bagText.text = $"가방: {bag.Name}";
+            _bagTip.Text = $"가방 {bag.Name} ({bag.Slots}칸): 원정에서 전리품을 {bag.Slots}개까지 들고 온다\n건설 재료·동전 주머니는 칸을 쓰지 않는다 · 의약품 상점에서 더 큰 가방으로 바꿀 수 있다";
+            if (_bagShown == bag) return;
+            _bagShown = bag;
+            _bagIcon.sprite = bag.Icon;
+            for (int i = _bagSlots.childCount - 1; i >= 0; i--) Destroy(_bagSlots.GetChild(i).gameObject);
+            for (int i = 0; i < bag.Slots; i++) BagSlotsUI.CreateSlot(_bagSlots, null, BagPipSize);
         }
 
         /// <summary>왼쪽 아래 "관계 보기": 이 용병을 고른 채로 관계 창(RelationsPanel)을 연다. 고용된 용병만 보인다.</summary>
@@ -463,6 +522,7 @@ namespace GN3.UI
                 SetTipLine(_weaponText, _weaponTip, $"무기: {merc.Weapon.Name}", merc.Weapon.DescribeFor(merc.Class.Kind));
             else
                 SetTipLine(_weaponText, _weaponTip, "무기: 맨손", null);
+            RefreshBagRow(merc); // 가방(전리품을 들고 올 칸 — BagCatalog)은 무기 아래 줄
 
             var personality = PersonalityTable.Get(merc.Personality);
             SetTipLine(_personalityText, _personalityTip, $"성격 [{personality.Label}]", personality.Description);
@@ -472,7 +532,10 @@ namespace GN3.UI
             if (passives.Count > 0)
             {
                 string rare = merc.HasRarePassive ? " (레어)" : "";
-                SetTipLine(_passiveText, _passiveTip, $"패시브 <{passives[0].Name}>{rare}", passives[0].Description);
+                var trait = passives.Count > 1 ? passives[passives.Count - 1] : null; // 직업 고유 특성(ClassPassiveFactory.TraitFor)은 맨 뒤
+                SetTipLine(_passiveText, _passiveTip,
+                    $"패시브 <{passives[0].Name}>{rare}" + (trait != null ? $" · 특성 <{trait.Name}>" : ""),
+                    passives[0].Description + (trait != null ? $"\n특성 {trait.Name}: {trait.Description}" : ""));
             }
 
             // 친한 동료(고용된 용병만): 지인 이상 상위 3명
@@ -520,6 +583,11 @@ namespace GN3.UI
             {
                 if (!row.gameObject.activeSelf) continue;
                 y = Place(row, 14f, y, bottomWidth, 22f, true) - 6f;
+                if (row == _weaponText) // 무기 줄 바로 아래 가방 줄
+                {
+                    _bagRow.anchoredPosition = new Vector2(14f, y + 2f);
+                    y -= BagRowHeight - 2f + 6f;
+                }
             }
             _panelRect.sizeDelta = new Vector2(PanelWidth, Mathf.Max(PanelHeight, -(y + 6f) + BottomSpace));
         }

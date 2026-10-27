@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using GN3.Save;
 using UnityEngine;
 using UnityEngine.UI;
@@ -6,7 +7,8 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 불러오기 창: 저장 기록(SaveSystem.ListSaves, 최신순)을 한 줄씩 보여 주고 골라 불러온다.
+    /// 불러오기 창: 저장 기록(SaveSystem.ListSaves)을 게임(새로 시작한 판)별로 묶어 — 지금 게임 먼저, 그다음 최근에 한 게임 순,
+    /// 게임 구분 전 기록은 맨 아래 — 머리줄 아래에 최신순으로 한 줄씩 보여 주고 골라 불러온다.
     /// 줄: "650년 3월 10일 · 견습 용병단 · 용병 3명 · 368G" / "2026-10-14 20:35 · 자동|직접" + [불러오기].
     /// 지금 진행 중 저장하지 않은 부분이 사라지므로 버튼을 한 번 누르면 "정말 불러오기?"로 바뀌고 한 번 더 눌러야 불러온다.
     /// 오른쪽 위 "불러오기" 버튼과 타이틀 화면(TitleScreen)의 "게임 불러오기"가 연다. ESC·X·바깥 어두운 곳으로 닫힌다.
@@ -109,10 +111,6 @@ namespace GN3.UI
             title.fontStyle = FontStyle.Bold;
             Place(title.rectTransform, new Vector2(0f, -16f), new Vector2(Width - 40f, 36f));
 
-            var hint = CreateText(panel.transform, "저장할 때마다 기록이 남습니다(자동·직접 각각 최근 10개). 불러오면 지금 저장하지 않은 진행은 사라집니다.",
-                14, TextAnchor.MiddleCenter, UITheme.MutedText);
-            Place(hint.rectTransform, new Vector2(0f, -54f), new Vector2(Width - 40f, 36f));
-
             var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
             close.transform.SetParent(panel.transform, false);
             var closeRect = close.GetComponent<RectTransform>();
@@ -126,7 +124,7 @@ namespace GN3.UI
             // 목록(스크롤)
             var list = new GameObject("List", typeof(RectTransform), typeof(Image), typeof(ScrollRect), typeof(RectMask2D));
             list.transform.SetParent(panel.transform, false);
-            Place(list.GetComponent<RectTransform>(), new Vector2(0f, -98f), new Vector2(Width - 40f, Height - 118f));
+            Place(list.GetComponent<RectTransform>(), new Vector2(0f, -60f), new Vector2(Width - 40f, Height - 80f)); // 안내 문장 없이 제목 바로 아래부터
             list.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
             var content = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
             content.transform.SetParent(list.transform, false);
@@ -154,7 +152,30 @@ namespace GN3.UI
                 Stretch(empty.rectTransform);
                 return;
             }
-            foreach (var entry in saves) CreateRow(content.transform, entry);
+            string current = SaveSystem.GameId;
+            var games = saves.GroupBy(s => s.GameId)
+                .OrderBy(g => g.Key == current ? 0 : g.Key == SaveSystem.LegacyGameId ? 2 : 1)
+                .ThenByDescending(g => g.Max(s => s.SavedAt));
+            foreach (var game in games)
+            {
+                var latest = game.First(); // ListSaves가 최신순
+                string head = game.Key == current ? "지금 게임" : game.Key == SaveSystem.LegacyGameId ? "이전 기록(게임 구분 전)" : "다른 게임";
+                CreateHeader(content.transform, game.Key == SaveSystem.LegacyGameId ? head : $"{head} · 최근 {FirstLine(latest.Description)}");
+                foreach (var entry in game) CreateRow(content.transform, entry);
+            }
+        }
+
+        /// <summary>게임 묶음 머리줄(누를 수 없음).</summary>
+        private void CreateHeader(Transform parent, string content)
+        {
+            var row = new GameObject("GameHeader", typeof(RectTransform), typeof(LayoutElement));
+            row.transform.SetParent(parent, false);
+            var layout = row.GetComponent<LayoutElement>();
+            layout.minHeight = layout.preferredHeight = 30f;
+            var text = CreateText(row.transform, content, 15, TextAnchor.LowerLeft, UITheme.TitleText);
+            text.fontStyle = FontStyle.Bold;
+            Stretch(text.rectTransform);
+            text.rectTransform.offsetMin = new Vector2(6f, 0f);
         }
 
         private void CreateRow(Transform parent, SaveSystem.SaveEntry entry)
@@ -183,7 +204,8 @@ namespace GN3.UI
             cv.spacing = 2f;
             var main = CreateText(column.transform, FirstLine(entry.Description), 17, TextAnchor.MiddleLeft, UITheme.BodyText);
             main.fontStyle = FontStyle.Bold;
-            CreateText(column.transform, $"{entry.SavedAt:yyyy-MM-dd HH:mm} · {(entry.IsAuto ? "자동" : "직접")} 저장", 13, TextAnchor.MiddleLeft, UITheme.MutedText);
+            string kind = entry.IsWeekly ? "주간 보관" : entry.IsAuto ? "자동" : "직접";
+            CreateText(column.transform, $"{entry.SavedAt:yyyy-MM-dd HH:mm} · {kind} 저장", 13, TextAnchor.MiddleLeft, UITheme.MutedText);
 
             var button = new GameObject("LoadButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             button.transform.SetParent(row.transform, false);

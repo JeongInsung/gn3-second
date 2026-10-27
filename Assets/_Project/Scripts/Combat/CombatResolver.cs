@@ -80,6 +80,7 @@ namespace GN3.Combat
                 context.Evaded = true;
 
             bool targetDefeated = false;
+            int healthBefore = target.CurrentHealth;
             if (!context.Evaded)
             {
                 if (context.Damage >= target.CurrentHealth &&
@@ -95,8 +96,9 @@ namespace GN3.Combat
                 targetDefeated = !target.IsAlive;
             }
 
-            int loggedDamage = context.Evaded ? 0 : context.Damage;
-            var evt = new BattleEvent(round, attacker, target, loggedDamage, targetDefeated, context.Evaded);
+            // 기록·화면 피해는 남은 체력까지(마무리 일격의 확정 처치 ×100이 "-3000"으로 뜨지 않게)
+            int loggedDamage = context.Evaded ? 0 : Math.Min(context.Damage, healthBefore);
+            var evt = new BattleEvent(round, attacker, target, loggedDamage, targetDefeated, context.Evaded, blocked: context.Blocked && !context.Evaded);
 
             if (targetDefeated)
                 RaiseAllyDefeated(targetTeam, target);

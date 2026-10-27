@@ -47,7 +47,64 @@ namespace GN3.UI
                 });
                 ShopListUI.CreateButton(row.transform, "창고로", () => BuyToStorage(picked));
             }
+
+            // 가방: 원정에서 전리품을 들고 올 칸(BagCatalog). 사면 용병 한 명의 가방을 바꿔 준다.
+            var bagHeader = ShopListUI.CreateRow(_panel, "BagHeader");
+            ShopListUI.CreateTwoLineLabel(bagHeader.transform, "가방", "원정에서 전리품을 들고 올 칸 수 — 파견대 가방 칸을 합친 만큼만 챙겨 온다(건설 재료는 따로)");
+            foreach (var bag in BagCatalog.All.Where(b => b != BagCatalog.Basic))
+            {
+                var row = ShopListUI.CreateRow(_panel, "Bag_" + bag.Name);
+                ShopListUI.CreateIcon(row.transform, bag.Icon);
+                ShopListUI.CreateTwoLineLabel(row.transform, $"{bag.Name} · {bag.Slots}칸", $"용병 한 명의 가방을 바꿔 준다 (기본 {BagCatalog.Basic.Name} {BagCatalog.Basic.Slots}칸)");
+                ShopListUI.CreatePrice(row.transform, bag.Price);
+                var picked = bag;
+                var button = ShopListUI.CreateButton(row.transform, "구매", () => ShowBagTargets(picked));
+                string block = Guild.Rank < bag.RequiredRank ? $"{Guild.RankName(bag.RequiredRank)} 이상이 되어야 살 수 있습니다." : null;
+                button.interactable = block == null;
+                if (block != null) button.gameObject.AddComponent<TooltipTrigger>().Text = block;
+            }
             ShopListUI.EndList(_panel);
+        }
+
+        /// <summary>가방을 바꿔 줄 용병 고르기: 지금 가방보다 큰 가방일 때만.</summary>
+        private void ShowBagTargets(BagItem bag)
+        {
+            ShopListUI.BeginList(_panel);
+            ShopListUI.CreateHeader(_panel, $"{bag.Name} {bag.Slots}칸 ({bag.Price}G) — 누구에게?", ShowItems);
+
+            var mercs = ShopListUI.MercsInVillage().ToList();
+            if (mercs.Count == 0) ShopListUI.CreateEmptyRow(_panel, "마을에 있는 용병이 없습니다.");
+
+            foreach (var merc in mercs)
+            {
+                var row = ShopListUI.CreateRow(_panel, "BagTarget_" + merc.Name);
+                CharacterPortraitUI.Create(row.transform, merc.Appearance, 40);
+                ShopListUI.CreateTwoLineLabel(row.transform, merc.Name, $"가방: {merc.Bag.Name} ({merc.Bag.Slots}칸)");
+                var target = merc;
+                var button = ShopListUI.CreateButton(row.transform, "바꾸기", () => GiveBag(bag, target));
+                bool bigger = bag.Slots > merc.Bag.Slots;
+                button.interactable = bigger;
+                if (!bigger) button.gameObject.AddComponent<TooltipTrigger>().Text = "이미 같거나 더 큰 가방을 메고 있습니다.";
+            }
+
+            ShopListUI.EndList(_panel);
+        }
+
+        private void GiveBag(BagItem bag, Mercenary merc)
+        {
+            if (bag.Slots <= merc.Bag.Slots)
+            {
+                ToastLog.Show($"{Josa.EunNeun(merc.Name)} 이미 같거나 더 큰 가방을 메고 있습니다.");
+                return;
+            }
+            if (!Wallet.TrySpend(bag.Price))
+            {
+                ToastLog.Show($"골드가 부족합니다 (필요 {bag.Price}G, 보유 {Wallet.Gold}G)", false);
+                return;
+            }
+            merc.SetBag(bag);
+            ToastLog.Show($"{merc.Name}에게 {bag.Name}({bag.Slots}칸)을 메어 주었습니다 -{bag.Price}G");
+            ShowItems();
         }
 
         /// <summary>바로 쓰지 않고 길드 창고에 넣는다(나중에 창고에서 사용). 창고가 가득 차면 돈을 받지 않는다.</summary>

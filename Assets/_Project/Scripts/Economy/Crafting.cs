@@ -57,10 +57,18 @@ namespace GN3.Economy
             new CraftRecipe(WeaponCatalog.Find("단검"), 20, (LootCatalog.RiderDagger, 3)),
             new CraftRecipe(WeaponCatalog.Find("창"), 45, (LootCatalog.WoodenShield, 2), (LootCatalog.Fang, 3)),
             new CraftRecipe(WeaponCatalog.Find("장궁"), 50, (LootCatalog.ShortBow, 2), (LootCatalog.ArcherArrows, 3)),
-            new CraftRecipe(WeaponCatalog.Find("수정 지팡이"), 60, (LootCatalog.SporeSac, 3), (LootCatalog.LifeSeed, 1)),
+            new CraftRecipe(WeaponCatalog.Find("수정 지팡이"), 60, (LootCatalog.SporeSac, 2), (LootCatalog.MushroomCap, 3), (LootCatalog.LifeSeed, 1)),
+            // 2026-10-26 팔기만 하던 전리품과 몬스터별 전용 전리품에 쓰임을 준다(제작법이 없던 상점 무기)
+            new CraftRecipe(WeaponCatalog.Find("석궁"), 70, (LootCatalog.Quiver, 2), (LootCatalog.RiderArrows, 3), (LootCatalog.ShootingGlove, 1)),
+            new CraftRecipe(WeaponCatalog.Find("시미터"), 45, (LootCatalog.Claw, 4), (LootCatalog.Pelt, 2)),
+            new CraftRecipe(WeaponCatalog.Find("대검"), 80, (LootCatalog.OldSword, 4), (LootCatalog.RedSash, 1)),
+            new CraftRecipe(WeaponCatalog.Find("전쟁 망치"), 90, (LootCatalog.CarpenterHammer, 2), (LootCatalog.MasterChisel, 1), (LootCatalog.IronRing, 2)),
+            new CraftRecipe(WeaponCatalog.Find("전투 도끼"), 50, (LootCatalog.Plane, 2), (LootCatalog.ToolPouch, 2), (LootCatalog.Log, 2)),
+            new CraftRecipe(WeaponCatalog.Find("모닝스타"), 60, (LootCatalog.RustyHelm, 2), (LootCatalog.ShieldBoss, 1), (LootCatalog.Nail, 3)),
             new CraftRecipe(WeaponCatalog.WolfKingDagger, 80, (LootCatalog.ManaFang, 1), (LootCatalog.WolfBridle, 1), (LootCatalog.Fang, 4)),
             new CraftRecipe(WeaponCatalog.MyceliumStaff, 100, (LootCatalog.MyceliumCrystal, 2), (LootCatalog.Venom, 3)),
             new CraftRecipe(WeaponCatalog.EntHeartBlade, 150, (LootCatalog.EntKingHeart, 1), (LootCatalog.RootThorn, 3), (LootCatalog.MossyBark, 2)),
+            new CraftRecipe(WeaponCatalog.KnotStaff, 90, (LootCatalog.LivingKnot, 1), (LootCatalog.RootVine, 3), (LootCatalog.TreeRing, 2)),
         };
 
         // 마정 무기 제작법: 색마다 마정석 개수·금화(푸른 3개 50G … 붉은 1개 500G)

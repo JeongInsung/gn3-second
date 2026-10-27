@@ -26,7 +26,7 @@ namespace GN3.UI
         private const float ChipGap = 6f;
         private const float ButtonHeight = 40f;
         private const float RefreshSeconds = 1f;
-        private const string Dim = "#a3937c";
+        private const string Dim = UITheme.MutedHex;
         private const string Warn = "#e0c060";
         private const string Bad = "#e06050";
 

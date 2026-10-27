@@ -145,7 +145,8 @@ namespace GN3.UI
             {
                 var selected = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id));
                 int teamPower = QuestDifficulty.TeamPower(selected);
-                string power = $"{QuestDifficulty.DescribeTeam(_pendingQuest, teamPower)} · {QuestDifficulty.DurationText(_pendingQuest, teamPower)}";
+                string power = $"{QuestDifficulty.DescribeTeam(_pendingQuest, teamPower)} · {QuestDifficulty.DurationText(_pendingQuest, teamPower)}"
+                    + $" · 가방 {BagCatalog.CapacityOf(selected)}칸"; // 전리품을 들고 올 칸(BagCatalog)
                 if (SquadCount > 1)
                 {
                     for (int s = 0; s < SquadCount; s++)
@@ -305,9 +306,9 @@ namespace GN3.UI
             row.transform.SetParent(listContainer, false);
 
             Color rowColor = onExpedition ? new Color(0f, 0f, 0f, 0.25f)
-                : selected ? new Color(0.25f, 0.4f, 0.3f, 0.5f)
-                : new Color(1f, 1f, 1f, 0.06f);
+                : new Color(1f, 1f, 1f, 0.06f); // 파견에 고른 줄은 바탕색 대신 흰 테두리(다른 창과 같은 표시)
             row.GetComponent<Image>().color = rowColor;
+            if (selected && !onExpedition) UITheme.CreateSelectFrame(row.transform);
 
             var layoutElement = row.GetComponent<LayoutElement>();
             layoutElement.minHeight = 56;

@@ -18,12 +18,12 @@ namespace GN3.Battle
         private const float Shade = 0.85f;               // 바닥 타일과 같은 밝기
         private const float LightJitter = 0.06f;
 
-        // 판 안(1760×560) 배치
-        private const int PatchCount = 7;
+        // 판 안(2200×700) 배치
+        private const int PatchCount = 10;
         private const float PatchSpacing = 220f;        // 꽃밭 중심끼리 이만큼 떨어뜨린다
         private const float PatchRadius = 60f;
-        private const int WildflowerCount = 4, GrassCount = 24, StoneCount = 6;
-        private const float TopBandBottom = 450f;        // 돌은 이 위(숲 쪽)나
+        private const int WildflowerCount = 6, GrassCount = 38, StoneCount = 8;
+        private const float TopBandBottom = 590f;        // 돌은 이 위(숲 쪽)나
         private const float BottomBandTop = 80f;         // 이 아래에만 둔다
         private const int Attempts = 60;                 // 한 개를 놓으려고 던져 보는 횟수
 
@@ -113,6 +113,7 @@ namespace GN3.Battle
             lifeRect.anchorMax = field.anchorMax;
             lifeRect.pivot = field.pivot;
             lifeRect.sizeDelta = field.sizeDelta;
+            lifeRect.localScale = field.localScale; // 판과 같이 줄여 그린다(줌 아웃)
             lifeRect.anchoredPosition = field.anchoredPosition;
             life.transform.SetSiblingIndex(1);
 
@@ -226,7 +227,8 @@ namespace GN3.Battle
             return rect;
         }
 
-        private static Sprite Load(string name)
+        /// <summary>Resources/Battle/Decor 그림(밑동 기준 피벗). 숲 테두리(BattleGroundTiles)도 쓴다.</summary>
+        internal static Sprite Load(string name)
         {
             if (_sprites.TryGetValue(name, out var cached) && cached != null) return cached; // 파괴됐으면 다시 만든다
             var texture = Resources.Load<Texture2D>(DecorPath + name);

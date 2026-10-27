@@ -40,6 +40,7 @@ namespace GN3.UI
         private GameObject _panel;
         private Text _title;
         private readonly List<Text> _tabLabels = new List<Text>();
+        private readonly List<GameObject> _tabFrames = new List<GameObject>(); // 고른 탭의 흰 테두리
         private RectTransform _list;
         private ScrollRect _listScroll;
         private Font _font;
@@ -134,7 +135,9 @@ namespace GN3.UI
             for (int i = 0; i < Tabs.Length; i++)
             {
                 var (tab, label) = Tabs[i];
-                _tabLabels[i].text = tab == _tab ? $"● {label}" : label;
+                bool on = tab == _tab;
+                _tabLabels[i].text = on ? $"<color={UITheme.SelectedTextHex}><b>{label}</b></color>" : label;
+                _tabFrames[i].SetActive(on);
             }
 
             // 목록: 최신이 위. Destroy는 프레임 끝이라 먼저 떼어 낸다.
@@ -306,8 +309,8 @@ namespace GN3.UI
             _title = CreateText(_panel.transform, "", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             _title.fontStyle = FontStyle.Bold;
             Place(_title.rectTransform, new Vector2(20f, -14f), new Vector2(360f, 34f));
-            CreateButton(_panel.transform, "모두 읽음", () => Mailbox.MarkAllRead(), new Vector2(Width - 236f, -14f), new Vector2(110f, 32f));
-            CreateButton(_panel.transform, "닫기", Hide, new Vector2(Width - 118f, -14f), new Vector2(100f, 32f));
+            CreateButton(_panel.transform, "모두 읽음", () => Mailbox.MarkAllRead(), new Vector2(Width - 166f, -12f), new Vector2(110f, 32f));
+            UITheme.CreateCloseX(_panel.transform, Hide); // 닫기는 다른 창처럼 오른쪽 위 X
 
             // 탭
             for (int i = 0; i < Tabs.Length; i++)
@@ -316,6 +319,8 @@ namespace GN3.UI
                 var label = CreateButton(_panel.transform, Tabs[i].Label, () => SetTab(tab),
                     new Vector2(20f + i * (TabWidth + TabSpacing), -56f), new Vector2(TabWidth, 30f));
                 _tabLabels.Add(label);
+                label.supportRichText = true;
+                _tabFrames.Add(UITheme.CreateSelectFrame(label.transform.parent));
             }
 
             // 목록(펼친 내용까지 같은 칸 안에서 스크롤)

@@ -22,7 +22,8 @@ namespace GN3.World
             public (LootItem item, int count)[] Materials; // 건설 재료(BuildMaterials) — 금화와 함께 든다
             public bool StartBuilt;    // 새 게임에 처음부터 있는 건물 — 건설 목록에 안 나온다(지금은 없음: 빈 숲에서 시작)
             public bool House;         // 여러 채를 지을 수 있는 묶음
-            public string Replaces;    // 지으면 사라지는 건물 id(길드 홀 → 길드 천막, 여관 → 용병 숙소, 훈련소 → 간이 훈련소)
+            public bool Repeatable;    // 같은 그림을 복제해 몇 채든 짓는 건물(용병 텐트) — 첫 채는 무료(CostOf·MaterialsOf)
+            public string Replaces;    // 지으면 사라지는 건물 id(길드 홀 → 길드 천막)
             public bool Decor;         // 장식품(Decorations) — 원본을 복제해 몇 개든 놓고 치울 수 있다
             public string Category;    // 장식품 분류([건설] 창 [장식품]의 정렬 순서)
             public int Charm;          // 마을 매력 점수(VillageCharm — 같은 장식은 VillageCharm.MaxCountedPerKind개까지)
@@ -46,6 +47,13 @@ namespace GN3.World
         public const string BarracksPrefix = "중세 군영 천막";
         public const string CottagePrefix = "중세 판타지 픽셀 오두막";
 
+        /// <summary>용병 텐트 한 채에 묵는 용병 수(InnRest).</summary>
+        public const int TentBeds = 3;
+        public const string TentId = "barracks";
+
+        /// <summary>없앤 건물의 그림 — Village에 남아 있어도 늘 숨기고, 예전 저장의 그 자리는 버린다(VillageLayoutApplier·VillageLayout).</summary>
+        public static readonly string[] RetiredPrefixes = { CampPrefix };
+
         /// <summary>예전 저장(건물이 처음부터 다 있던 마을)에는 없던 그림 — 그 저장을 불러와도 지은 것으로 치지 않는다.</summary>
         public static readonly string[] OldVillageMissing = { TentPrefix, CampPrefix, BarracksPrefix, CottagePrefix };
 
@@ -53,19 +61,20 @@ namespace GN3.World
 
         public static readonly Entry[] All =
         {
-            // 새 게임은 빈 숲에서 시작한다(StartBuilt 건물 없음) — 시작 재료로 길드 천막부터 직접 세운다.
+            // 새 게임은 빈 숲에서 시작한다(StartBuilt 건물 없음) — 길드 천막과 첫 용병 텐트는 무료로 바로 세운다(2026-10-26).
             new Entry { Id = "tent", Name = "길드 천막", Description = "창고·시설 · 3명 숙소", Prefixes = new[] { TentPrefix },
-                RequiredRank = 0, Cost = 0, Materials = M((LootCatalog.Cloth, 3), (LootCatalog.Rope, 2), (LootCatalog.Stake, 4)) },
+                RequiredRank = 0, Cost = 0, Materials = M() },
+            // 퀘스트 게시판은 돌빛부터(2026-10-26) — 그 전엔 며칠마다 오는 의뢰 중개인(QuestBroker)에게서만 의뢰를 받는다.
+            // 정착민 시스템이 생기면 "정착민이 있을 때" 조건도 붙인다.
             new Entry { Id = "board", Name = "퀘스트 게시판", Description = "의뢰 받기", Prefixes = new[] { "오크 퀘스트 게시판" },
-                RequiredRank = 0, Cost = 50, Materials = M((LootCatalog.Log, 2), (LootCatalog.Nail, 3)) },
-            new Entry { Id = "camp", Name = "용병 숙소", Description = "밤 회복 조금",
-                Prefixes = new[] { CampPrefix }, RequiredRank = 0, Cost = 100,
-                Materials = M((LootCatalog.Leather, 3), (LootCatalog.Log, 3), (LootCatalog.Strap, 2)) },
-            new Entry { Id = "barracks", Name = "간이 훈련소", Description = "용병 훈련",
-                Prefixes = new[] { BarracksPrefix }, RequiredRank = 0, Cost = 200,
+                RequiredRank = 1, Cost = 50, Materials = M((LootCatalog.Log, 2), (LootCatalog.Nail, 3)) },
+            // 용병 텐트(2026-10-26, 예전 "간이 훈련소" 자리 — id·그림이 같아 예전 저장의 간이 훈련소는 그대로 첫 텐트가 된다.
+            // 예전 "용병 숙소"(갈색 원뿔형 텐트, id camp)는 없앴다): 한 채에 용병 3명이 묵는다(InnRest). 몇 채든 짓고, 첫 채는 무료 · 다음부터 재료.
+            new Entry { Id = "barracks", Name = "용병 텐트", Description = $"용병 {TentBeds}명 숙소",
+                Prefixes = new[] { BarracksPrefix }, RequiredRank = 0, Cost = 0, Repeatable = true,
                 Materials = M((LootCatalog.Cloth, 4), (LootCatalog.Rope, 3), (LootCatalog.Stake, 4), (LootCatalog.IronRing, 2)) },
             new Entry { Id = "inn", Name = "여관", Description = "밤 회복 · 파티 구성",
-                Prefixes = new[] { "여관" }, RequiredRank = 1, Cost = 300, Replaces = "camp",
+                Prefixes = new[] { "여관" }, RequiredRank = 1, Cost = 300,
                 Materials = M((LootCatalog.Log, 6), (LootCatalog.Nail, 6), (LootCatalog.Cloth, 2)) },
             new Entry { Id = "smithy", Name = "대장간", Description = "무기 구입",
                 Prefixes = new[] { "아늑한 판타지 마을 대장간" }, RequiredRank = 1, Cost = 400,
@@ -74,7 +83,7 @@ namespace GN3.World
                 Prefixes = new[] { "이끼 지붕의 중세 마을 잡화점" }, RequiredRank = 1, Cost = 300,
                 Materials = M((LootCatalog.Log, 4), (LootCatalog.Nail, 4), (LootCatalog.Cloth, 3)) },
             new Entry { Id = "training", Name = "훈련소", Description = "능력치 훈련",
-                Prefixes = new[] { "중세 마을 훈련소 건물" }, RequiredRank = 2, Cost = 600, Replaces = "barracks",
+                Prefixes = new[] { "중세 마을 훈련소 건물" }, RequiredRank = 2, Cost = 600,
                 Materials = M((LootCatalog.Log, 6), (LootCatalog.IronRing, 3), (LootCatalog.Strap, 3), (LootCatalog.Nail, 6)) },
             new Entry { Id = "hospital", Name = "병원", Description = "입원 치료",
                 Prefixes = new[] { "십자가가 돋보이는 중세 픽셀 병원" }, RequiredRank = 2, Cost = 600,
@@ -178,16 +187,28 @@ namespace GN3.World
 
         public static IEnumerable<Entry> Buildable => All.Where(e => !e.StartBuilt);
 
-        /// <summary>지을 수 없으면 이유, 되면 null. hasSpot: 아직 안 지은 그림이 남아 있는가(주택 묶음은 다 지으면 false).</summary>
+        /// <summary>그 건물을 지금 몇 채 지었나(반복 건물·주택 묶음용).</summary>
+        public static int BuiltCount(Entry entry) => VillageLayout.Built.Keys.Count(entry.Matches);
+
+        /// <summary>지금 지을 때 드는 금화 — 반복 건물(용병 텐트)은 첫 채가 무료.</summary>
+        public static int CostOf(Entry entry) => entry.Repeatable && BuiltCount(entry) == 0 ? 0 : entry.Cost;
+
+        /// <summary>지금 지을 때 드는 재료 — 반복 건물(용병 텐트)은 첫 채가 무료.</summary>
+        public static (LootItem item, int count)[] MaterialsOf(Entry entry) =>
+            entry.Repeatable && BuiltCount(entry) == 0 ? M() : entry.Materials;
+
+        /// <summary>지을 수 없으면 이유, 되면 null. hasSpot: 아직 안 지은 그림이 남아 있는가(주택 묶음은 다 지으면 false). 반복 건물은 늘 자리가 있다.</summary>
         public static string Block(Entry entry, bool hasSpot)
         {
-            if (!hasSpot && !entry.Decor) return entry.House ? "더 지을 집이 없습니다." : "이미 지었습니다.";
+            if (!hasSpot && !entry.Decor && !entry.Repeatable) return entry.House ? "더 지을 집이 없습니다." : "이미 지었습니다.";
             // 대신 들어선 건물이 있으면 다시 못 짓는다(길드 홀이 있으면 천막)
             var replacer = All.FirstOrDefault(e => e.Replaces == entry.Id && VillageLayout.HasBuilding(e.Id));
             if (replacer != null) return $"{Josa.IGa(replacer.Name)} 이미 있습니다.";
             if (Guild.Rank < entry.RequiredRank) return $"{Guild.RankName(entry.RequiredRank)} 이상이 되어야 {(entry.Decor ? "놓을" : "지을")} 수 있습니다.";
-            if (Wallet.Gold < entry.Cost) return $"금화 {entry.Cost}G가 필요합니다.";
-            if (!BuildMaterials.Has(entry.Materials)) return $"재료가 모자랍니다: {BuildMaterials.MissingText(entry.Materials)}";
+            int cost = CostOf(entry);
+            var materials = MaterialsOf(entry);
+            if (Wallet.Gold < cost) return $"금화 {cost}G가 필요합니다.";
+            if (!BuildMaterials.Has(materials)) return $"재료가 모자랍니다: {BuildMaterials.MissingText(materials)}";
             return null;
         }
     }

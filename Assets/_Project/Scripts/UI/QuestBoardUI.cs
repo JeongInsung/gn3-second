@@ -11,6 +11,8 @@ namespace GN3.UI
     /// <summary>
     /// 퀘스트 게시판. 새로고침 버튼은 없고 3~4일마다 새 의뢰가 붙는다(QuestBoardListings — 저장돼 불러와도 같은 목록).
     /// 은월의 숲 레벨이 열리면 새 레벨 도전 퀘스트만 맨 위에 더한다.
+    /// 의뢰 중개인(QuestBroker)이 와 있는 날엔 그 의뢰가 맨 위에 붙는다. 게시판 건물을 아직 안 지었으면 게시판 목록은 보이지 않고
+    /// 중개인 의뢰만 받을 수 있다(게시판 목록은 뒤에서 계속 갈아 두어 지으면 바로 보인다).
     /// </summary>
     public class QuestBoardUI : MonoBehaviour
     {
@@ -47,6 +49,8 @@ namespace GN3.UI
             ForestProgress.OnChanged += OnLevelUnlocked;
             GameClock.OnDayAdvanced += ShowListings; // 날이 바뀌어 기한이 되면 새 의뢰
             RivalGuilds.OnChanged += RedrawIfListed; // 근처 길드가 의뢰를 가져가거나 노릴 때
+            QuestBroker.OnChanged += RedrawIfListed;  // 중개인이 오거나 떠날 때
+            VillageLayout.OnChanged += RedrawIfListed; // 게시판을 지었을 때
         }
 
         private void RedrawIfListed()
@@ -59,6 +63,8 @@ namespace GN3.UI
             ForestProgress.OnChanged -= OnLevelUnlocked;
             GameClock.OnDayAdvanced -= ShowListings;
             RivalGuilds.OnChanged -= RedrawIfListed;
+            QuestBroker.OnChanged -= RedrawIfListed;
+            VillageLayout.OnChanged -= RedrawIfListed;
         }
 
         /// <summary>불러오기 직후: 저장된 목록으로 다시 그린다(낡았으면 새로 뽑는다).</summary>
@@ -70,6 +76,7 @@ namespace GN3.UI
         /// <summary>기한이 됐거나 아직 없으면 새로 뽑고, 아니면 붙어 있는 목록 그대로 그린다.</summary>
         private void ShowListings()
         {
+            QuestBroker.EnsureFirstVisit(); // 새 게임: 게시판이 없으니 중개인이 바로 온다
             if (QuestBoardListings.IsStale)
             {
                 _board.MaxGrade = Guild.Current.MaxQuestGrade; // 길드 단계에 따라 높은 등급 퀘스트가 열린다
@@ -101,16 +108,23 @@ namespace GN3.UI
                 Destroy(row);
             _cardRows.Clear();
 
-            foreach (var quest in QuestBoardListings.Current)
-                _cardRows.Add(CreateCard(quest));
-
-            int days = QuestBoardListings.DaysUntilRefresh;
-            _nextText.text = ListingTimer.Label("의뢰", days);
+            // 중개인 의뢰(중개인이 떠나도 기한까지 남는다)를 맨 위에 — 카드 끝 "기한 N일"로 게시판 의뢰와 구분된다
+            foreach (var quest in QuestBroker.Quests)
+                _cardRows.Add(CreateCard(quest, ExpiryText(QuestBroker.DaysLeft(quest))));
+            bool hasBoard = QuestBroker.HasBoard;
+            if (hasBoard)
+                foreach (var quest in QuestBoardListings.Current)
+                    _cardRows.Add(CreateCard(quest));
+            _nextText.text = hasBoard ? ListingTimer.Label("의뢰", QuestBoardListings.DaysUntilRefresh) : "";
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
         }
 
-        private GameObject CreateCard(Quest quest)
+        /// <summary>중개인 의뢰 기한 꼬리 글: "· 기한 3일", 마지막 날이면 주황 "· 오늘까지".</summary>
+        private static string ExpiryText(int daysLeft) =>
+            daysLeft < 0 ? "" : daysLeft <= 1 ? "  <color=#f0a54a>· 오늘까지</color>" : $"  <color=#a3937c>· 기한 {daysLeft}일</color>";
+
+        private GameObject CreateCard(Quest quest, string extra = "")
         {
             var row = new GameObject(quest.Title, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
             row.transform.SetParent(listContainer, false);
@@ -141,7 +155,7 @@ namespace GN3.UI
             var rival = RivalGuilds.TargetOf(quest); // 내일 자정에 가져갈 근처 길드
             string targeted = rival != null ? $"  <color=#f0a54a>{Josa.IGa(rival.Name)} 노리는 중</color>" : "";
             string materials = quest.MaterialReward.Count > 0 ? $" · {quest.MaterialRewardText}" : ""; // 부탁한 사람이 주는 건설 재료
-            var rewardText = CreateText(row.transform, $"{rounds}보상 {Pricing.QuestReward(quest)}G{materials}{targeted}", 18, TextAnchor.MiddleLeft);
+            var rewardText = CreateText(row.transform, $"{rounds}보상 {Pricing.QuestReward(quest)}G{materials}{targeted}{extra}", 18, TextAnchor.MiddleLeft);
             rewardText.supportRichText = true;
             rewardText.color = UITheme.TitleText;
             rewardText.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -179,7 +193,7 @@ namespace GN3.UI
             if (partyPanel != null)
                 PanelActivator.Open(partyPanel);
 
-            QuestBoardListings.Remove(quest); // 저장에서도 빠진다
+            if (!QuestBroker.Remove(quest)) QuestBoardListings.Remove(quest); // 저장에서도 빠진다
             _cardRows.Remove(row);
             Destroy(row);
         }

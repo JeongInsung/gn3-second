@@ -40,6 +40,12 @@ namespace GN3.Mercenaries
         /// <summary>들고 있는 무기(없으면 맨손). 대장간에서 사서 쥐여 준다.</summary>
         public WeaponItem Weapon { get; private set; }
 
+        /// <summary>메고 다니는 가방(전리품을 들고 올 칸 수 — BagCatalog). 처음엔 낡은 주머니, 의약품 상점에서 바꿔 준다.</summary>
+        public GN3.Economy.BagItem Bag { get; private set; } = GN3.Economy.BagCatalog.Basic;
+
+        /// <summary>가방을 바꾼다(들던 가방은 버린다). null이면 기본 가방.</summary>
+        public void SetBag(GN3.Economy.BagItem bag) => Bag = bag ?? GN3.Economy.BagCatalog.Basic;
+
         /// <summary>직업 기본값 + 성장 → 성격 보정 → 무기 보너스(고정값) → 피로·사기 배율(공격·방어·신성력) → 부상·질병 순으로 계산한 현재 능력치.
         /// 마법사는 마지막에 공격을 마력으로 옮긴다(UsesMagic).</summary>
         public CombatStats CurrentStats => ComputeStats(_ailments);

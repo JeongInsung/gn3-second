@@ -26,7 +26,7 @@ namespace GN3.World
 
         // 전투 그림이 있는 몬스터로만 짠다: 고블린(근접은 검 고블린, 무리의 3명 중 1명은 고블린 궁수)과
         // 늑대(이름에 "늑대"·"울프" → 늑대 그림, BattleMonsterSprite.KindFor). 보스는 혼자 크게 나온다.
-        // 이름·장소도 그림에 맞춰 통일: 고블린·고블린 늑대기수(늑대 탄 고블린) / 야생늑대·독버섯 / 보스 앤트킹(2026-10-19 고블린 족장을 교체한 거목 엔트를 이름만 바꿈, 은월의 숲 Lv5에서만), 장소는 모두 "은월의 숲".
+        // 이름·장소도 그림에 맞춰 통일: 고블린·고블린 늑대기수(늑대 탄 고블린) / 야생늑대·독버섯·그루터기 엔트(2026-10-26) / 보스 앤트킹(2026-10-19 고블린 족장을 교체한 거목 엔트를 이름만 바꿈, 은월의 숲 Lv5에서만), 장소는 모두 "은월의 숲".
         // 예전 저장의 "고블린 족장" 퀘스트는 이름 그대로 남아 큰 검 고블린 그림으로 나온다.
         // 보스는 "은월의 숲의 주인"이라 보스 퀘스트만 장소가 "은월의 숲 깊은 곳"(제목도 그 장소로)이고, 전투 배경도 숲 한가운데다.
         // 새 몬스터 그림을 넣으면 여기에 그 이름을 더하고 KindFor에 연결한다.
@@ -37,8 +37,8 @@ namespace GN3.World
                 DisplayName = "서쪽",
                 RaiderFaction = new[] { "고블린", "고블린 늑대기수" },
                 RaiderLocations = new[] { "은월의 숲", "은월의 숲" },
-                TerrainAnimal = new[] { "야생늑대", "독버섯" },
-                TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲" },
+                TerrainAnimal = new[] { "야생늑대", "독버섯", "그루터기 엔트" },
+                TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲", "은월의 숲" },
                 Boss = new[] { "앤트킹" },
                 BossLocations = new[] { "은월의 숲 깊은 곳" },
                 BossTitles = new[] { "은월의 숲의 주인" },
@@ -48,8 +48,8 @@ namespace GN3.World
                 DisplayName = "북쪽",
                 RaiderFaction = new[] { "고블린", "고블린 늑대기수" },
                 RaiderLocations = new[] { "은월의 숲", "은월의 숲" },
-                TerrainAnimal = new[] { "야생늑대", "독버섯" },
-                TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲" },
+                TerrainAnimal = new[] { "야생늑대", "독버섯", "그루터기 엔트" },
+                TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲", "은월의 숲" },
                 Boss = new[] { "앤트킹" },
                 BossLocations = new[] { "은월의 숲 깊은 곳" },
                 BossTitles = new[] { "은월의 숲의 주인" },
@@ -59,8 +59,8 @@ namespace GN3.World
                 DisplayName = "남쪽",
                 RaiderFaction = new[] { "고블린", "고블린 늑대기수" },
                 RaiderLocations = new[] { "은월의 숲", "은월의 숲" },
-                TerrainAnimal = new[] { "야생늑대", "독버섯" },
-                TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲" },
+                TerrainAnimal = new[] { "야생늑대", "독버섯", "그루터기 엔트" },
+                TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲", "은월의 숲" },
                 Boss = new[] { "앤트킹" },
                 BossLocations = new[] { "은월의 숲 깊은 곳" },
                 BossTitles = new[] { "은월의 숲의 주인" },
@@ -70,8 +70,8 @@ namespace GN3.World
                 DisplayName = "동쪽",
                 RaiderFaction = new[] { "고블린", "고블린 늑대기수" },
                 RaiderLocations = new[] { "은월의 숲", "은월의 숲" },
-                TerrainAnimal = new[] { "야생늑대", "독버섯" },
-                TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲" },
+                TerrainAnimal = new[] { "야생늑대", "독버섯", "그루터기 엔트" },
+                TerrainAnimalLocations = new[] { "은월의 숲", "은월의 숲", "은월의 숲" },
                 Boss = new[] { "앤트킹" },
                 BossLocations = new[] { "은월의 숲 깊은 곳" },
                 BossTitles = new[] { "은월의 숲의 주인" },
@@ -112,8 +112,12 @@ namespace GN3.World
             return null;
         }
 
-        /// <summary>엔트 보스(앤트킹, 예전 저장의 거목 엔트)인지. 그림·뿌리 내려찍기·포효·뿌리박기가 이것으로 붙는다.</summary>
-        public static bool IsEnt(string name) => name != null && (name.Contains("엔트") || name.Contains("앤트"));
+        /// <summary>엔트 보스(앤트킹, 예전 저장의 거목 엔트)인지. 그림·뿌리 내려찍기·포효·뿌리박기가 이것으로 붙는다.
+        /// 그루터기 엔트(숲 지형 몬스터)는 이름에 "엔트"가 있어도 보스가 아니다(IsStump).</summary>
+        public static bool IsEnt(string name) => name != null && (name.Contains("엔트") || name.Contains("앤트")) && !IsStump(name);
+
+        /// <summary>그루터기 엔트(느리고 단단한 숲 근접 몬스터)인지.</summary>
+        public static bool IsStump(string name) => name != null && name.Contains("그루터기");
 
         /// <summary>퀘스트가 나오는 지역. 지역 구분이 없어 하나뿐이다.</summary>
         public static readonly Region QuestRegion = Region.West;

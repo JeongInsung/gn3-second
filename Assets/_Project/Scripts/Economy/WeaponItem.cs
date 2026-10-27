@@ -87,6 +87,7 @@ namespace GN3.Economy
         public static readonly WeaponItem WolfKingDagger = new WeaponItem("늑대왕의 송곳니 단검", 260, 6, 0, 3, MercenaryClassKind.Assassin, 2, craftOnly: true);
         public static readonly WeaponItem MyceliumStaff = new WeaponItem("균사 결정 지팡이", 300, 8, 1, 0, MercenaryClassKind.Mage, 11, craftOnly: true);
         public static readonly WeaponItem EntHeartBlade = new WeaponItem("엔트 심장 대검", 600, 12, 2, -1, MercenaryClassKind.Warrior, 3, craftOnly: true);
+        public static readonly WeaponItem KnotStaff = new WeaponItem("옹이 지팡이", 280, 5, 3, 0, MercenaryClassKind.Healer, 11, craftOnly: true); // 그루터기 엔트 전리품
 
         public static WeaponItem Find(string name) => All.FirstOrDefault(w => w.Name == name);
 
@@ -130,7 +131,7 @@ namespace GN3.Economy
             new WeaponItem("석궁",        180, 6, 0, -1, MercenaryClassKind.Archer,   10),
             new WeaponItem("수정 지팡이", 160, 3, 2, 0,  MercenaryClassKind.Healer,   11),
             new WeaponItem("흑요 마검",   450, 10, 0, 1, null,                        12),
-            WolfKingDagger, MyceliumStaff, EntHeartBlade,
+            WolfKingDagger, MyceliumStaff, EntHeartBlade, KnotStaff,
         }.Concat(ManaWeapons).ToList();
     }
 }

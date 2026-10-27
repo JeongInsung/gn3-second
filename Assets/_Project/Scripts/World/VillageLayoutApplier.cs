@@ -42,16 +42,54 @@ namespace GN3.World
         /// <summary>ApplyLive가 마을을 고친 뒤. 길찾기 격자·앞뒤 정렬·문(VillagePartyPresenter·VillageDogs)과 건물 클릭(MainMenuBootstrapper)이 다시 맞춘다.</summary>
         public static event Action Rebuilt;
 
-        /// <summary>그 종류에서 아직 안 지은 첫 그림(주택 묶음은 프리팹 순서대로). 장식품은 남은 게 없으면 원본을 하나 더 복제한다.</summary>
+        /// <summary>그 종류에서 아직 안 지은 첫 그림(주택 묶음은 프리팹 순서대로). 장식품·반복 건물(용병 텐트)은 남은 게 없으면 하나 더 복제한다.</summary>
         public static Slot FirstUnbuilt(BuildingCatalog.Entry entry)
         {
             var slot = _slots.FirstOrDefault(s => s.Entry == entry && !s.Built && s.Transform != null);
-            if (slot == null && entry.Decor)
+            if (slot == null && (entry.Decor || entry.Repeatable))
             {
                 var village = GameObject.Find(VillageRootName);
-                if (village != null) slot = CreateDecor(village.transform, entry, NextDecorKey(entry), false);
+                if (village != null)
+                    slot = entry.Decor ? CreateDecor(village.transform, entry, NextDecorKey(entry), false)
+                                       : CreateRepeat(village.transform, entry, NextRepeatKey(entry), false);
             }
             return slot;
+        }
+
+        // ---------- 반복 건물(용병 텐트) ----------
+
+        /// <summary>
+        /// 그 건물의 프리팹 그림(첫 자리)을 복제해 Village 바로 아래에 새 자리를 만든다(그림자는 자식이라 같이 온다). 이름은 원본과 같아
+        /// 키는 "이름#n". built면 VillageLayout 자리로 옮기고 켠다. 원본 자리가 없으면 null.
+        /// </summary>
+        private static Slot CreateRepeat(Transform village, BuildingCatalog.Entry entry, string key, bool built)
+        {
+            var source = _slots.FirstOrDefault(s => s.Entry == entry && s.Transform != null);
+            if (source == null) return null;
+            var copy = UnityEngine.Object.Instantiate(source.Transform.gameObject, village);
+            copy.name = source.Transform.name;
+            var root = copy.transform;
+            if (built && VillageLayout.Built.TryGetValue(key, out var position))
+                root.position = new Vector3(position.x, position.y, source.Transform.position.z);
+            var slot = new Slot { Transform = root, Renderer = copy.GetComponent<SpriteRenderer>(), Key = key, Entry = entry };
+            if (slot.Renderer != null) slot.Renderer.color = Color.white; // 원본이 옮기는 중이라 흐려져 있었어도 새 것은 또렷하게
+            _slots.Add(slot);
+            copy.SetActive(built);
+            return slot;
+        }
+
+        /// <summary>새 반복 건물 키: 원본 이름#(지금 쓰는 번호 중 가장 큰 것 + 1).</summary>
+        private static string NextRepeatKey(BuildingCatalog.Entry entry)
+        {
+            var source = _slots.FirstOrDefault(s => s.Entry == entry && s.Transform != null);
+            string name = source != null ? source.Transform.name : entry.Prefixes[0];
+            int max = -1;
+            foreach (var key in VillageLayout.Built.Keys.Concat(_slots.Select(s => s.Key)))
+            {
+                if (!key.StartsWith(name + "#")) continue;
+                if (int.TryParse(key.Substring(name.Length + 1), out int n)) max = Mathf.Max(max, n);
+            }
+            return $"{name}#{max + 1}";
         }
 
         public static void Apply()
@@ -63,6 +101,12 @@ namespace GN3.World
             var seen = new Dictionary<string, int>();
             foreach (Transform child in village.transform)
             {
+                // 없앤 건물(예전 용병 숙소 갈색 텐트)은 프리팹에 남아 있어도 늘 숨긴다(그림자는 자식이라 같이 꺼진다)
+                if (BuildingCatalog.RetiredPrefixes.Any(p => child.name.StartsWith(p, StringComparison.Ordinal)))
+                {
+                    child.gameObject.SetActive(false);
+                    continue;
+                }
                 var entry = BuildingCatalog.ForObject(child.name);
                 if (entry == null) continue;
                 seen.TryGetValue(child.name, out int n);
@@ -97,6 +141,16 @@ namespace GN3.World
                 var entry = BuildingCatalog.DecorForKey(kv.Key);
                 if (entry == null) continue;
                 var slot = CreateDecor(village.transform, entry, kv.Key, true);
+                if (slot?.Renderer != null) builtAreas.Add(BuildingArea(slot.Renderer));
+            }
+
+            // 반복 건물(용병 텐트)의 두 번째 채부터: 프리팹엔 한 자리뿐이라 그림을 복제해 세운다(번호 순서대로)
+            foreach (var kv in VillageLayout.Built.OrderBy(k => k.Key, StringComparer.Ordinal).ToList())
+            {
+                if (_slots.Any(s => s.Key == kv.Key)) continue;
+                var entry = BuildingCatalog.ForObject(kv.Key);
+                if (entry == null || !entry.Repeatable) continue;
+                var slot = CreateRepeat(village.transform, entry, kv.Key, true);
                 if (slot?.Renderer != null) builtAreas.Add(BuildingArea(slot.Renderer));
             }
 

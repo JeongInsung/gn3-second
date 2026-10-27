@@ -88,21 +88,21 @@ namespace GN3.Combat
     /// </summary>
     public class FieldBattleSession
     {
-        // 필드 크기(UI가 같은 크기의 영역에 1:1로 그린다).
-        public const float FieldWidth = 1760f;
-        public const float FieldHeight = 560f;
+        // 필드 크기(UI는 이 크기의 판을 BattleUIController.FieldZoom배로 줄여 그린다).
+        public const float FieldWidth = 2200f;
+        public const float FieldHeight = 700f;
         private const float EdgeMargin = 40f;
         /// <summary>배치 단계에서 아군을 놓을 수 있는 구역의 오른쪽 끝(왼쪽 끝은 필드 가장자리).</summary>
-        public const float DeployMaxX = 620f;
+        public const float DeployMaxX = 775f;
 
         public const float MeleeRange = 90f;
         public const float RangedRange = 420f;
         private const float ApproachFraction = 0.85f; // 사거리의 이만큼 안까지 다가가 멈춘다(경계에서 들락날락하지 않게)
         private const float SeparationRadius = 60f;   // 이보다 가까우면 서로 밀어낸다(겹쳐 서지 않게)
 
-        // 이동 속도 = Base + 이동속도 능력치 × PerSpeed (필드 단위/초). 이동속도 4(전사)면 132, 14(암살자)면 212.
-        private const float BaseMoveSpeed = 100f;
-        private const float MoveSpeedPerStat = 8f;
+        // 이동 속도 = Base + 이동속도 능력치 × PerSpeed (필드 단위/초). 이동속도 4(전사)면 165, 14(암살자)면 265(판이 가로세로 1.25배 넓어진 만큼 빠르게 — 전투 시간이 줌 아웃 전과 비슷하게).
+        private const float BaseMoveSpeed = 125f;
+        private const float MoveSpeedPerStat = 10f;
 
         // 공격 간격 = 100 / (10 + 이동속도 × 2) × AttackPace 초 - 예전 ATB 게이지와 같은 비율을 쓰되 실시간 조작에 맞게 빠르게.
         // 이동속도 4면 약 3.4초, 14면 약 1.6초.
@@ -227,8 +227,14 @@ namespace GN3.Combat
                 ranged[i] = archers[i] || IsSporeShooter(EnemyTeam[i].Name);
             }
             for (int i = 0; i < EnemyTeam.Count; i++)
+            {
                 if (archers[i])
                     EnemyTeam[i] = Renamed(EnemyTeam[i], EnemyTeam[i].Name + " 궁수");
+                else if (IsCarpenterSlot(i, EnemyTeam.Count) && IsPlainGoblin(EnemyTeam[i].Name))
+                    EnemyTeam[i] = Renamed(EnemyTeam[i], EnemyTeam[i].Name + " 목수"); // 목재·쇠못을 짊어진 근접 일꾼(LootCatalog)
+                else if (IsShieldSlot(i, EnemyTeam.Count) && IsPlainGoblin(EnemyTeam[i].Name))
+                    EnemyTeam[i] = AsShieldBearer(EnemyTeam[i]);
+            }
             AllEnemies.AddRange(EnemyTeam);
             var added = new List<FieldUnit>();
             for (int i = 0; i < EnemyTeam.Count; i++)
@@ -245,15 +251,44 @@ namespace GN3.Combat
 
         private static bool IsArcherSlot(int index, int count) => count >= 2 && index % 3 == 2;
 
-        /// <summary>활을 쓰지 않는 짐승·괴물 적(이름에 늑대·울프·버섯·엔트). 전투 그림도 그 종류로 나온다(BattleMonsterSprite.KindFor).</summary>
-        private static bool IsBeast(string name) => name != null && (name.Contains("늑대") || name.Contains("울프") || name.Contains("버섯") || GN3.World.RegionInfo.IsEnt(name));
+        /// <summary>고블린 목수 자리: 4마리 이상 라운드의 4번째(궁수 자리와 겹치지 않는다).</summary>
+        private static bool IsCarpenterSlot(int index, int count) => count >= 4 && index == 3;
+
+        /// <summary>고블린 방패병 자리: 3마리 이상 라운드의 둘째 — 홀수 자리가 앞줄(x가 120 더 아군 쪽)이라 맨 앞에 선다
+        /// (궁수 i%3==2·목수 i==3과 겹치지 않는다).</summary>
+        private static bool IsShieldSlot(int index, int count) => count >= 3 && index == 1;
+
+        // 고블린 방패병: 단단한 대신 약하게 친다. 막기(ShieldBlockPassive)까지 더해 앞에서 버틴다.
+        private const float ShieldHealthMultiplier = 1.3f;
+        private const float ShieldAttackMultiplier = 0.8f;
+
+        /// <summary>그냥 고블린을 방패병으로: 이름 뒤에 "방패병", 체력↑·공격↓, 방패 막기 패시브.</summary>
+        private static Combatant AsShieldBearer(Combatant c)
+        {
+            var s = c.Stats;
+            var stats = new CombatStats(
+                attack: Math.Max(1, (int)Math.Round(s.Attack * ShieldAttackMultiplier)),
+                defense: s.Defense,
+                maxHealth: Math.Max(1, (int)Math.Round(s.MaxHealth * ShieldHealthMultiplier)),
+                moveSpeed: s.MoveSpeed, magic: s.Magic, holy: s.Holy);
+            var passives = new List<PassiveBase>(c.Passives) { new ShieldBlockPassive() };
+            return new Combatant(c.Name + " 방패병", stats, passives);
+        }
+
+        /// <summary>그냥 고블린(늑대기수·궁수·목수·방패병이 아닌).</summary>
+        private static bool IsPlainGoblin(string name) =>
+            name != null && name.Contains("고블린") && !name.Contains("늑대기수") && !name.Contains("궁수") && !name.Contains("목수")
+            && !name.Contains("방패병");
+
+        /// <summary>활을 쓰지 않는 짐승·괴물 적(이름에 늑대·울프·버섯·엔트·그루터기). 전투 그림도 그 종류로 나온다(BattleMonsterSprite.KindFor).</summary>
+        private static bool IsBeast(string name) => name != null && (name.Contains("늑대") || name.Contains("울프") || name.Contains("버섯") || GN3.World.RegionInfo.IsEnt(name) || GN3.World.RegionInfo.IsStump(name));
 
         /// <summary>멀리서 포자를 쏘는 적(독버섯).</summary>
         private static bool IsSporeShooter(string name) => name != null && name.Contains("버섯");
 
         /// <summary>늑대를 탄 고블린(늑대기수). 필드에서 훨씬 빨리 달린다 — 이동만 빠르고 회피·공격 속도(이동 속도 능력치)는 그대로.</summary>
         private static bool IsRider(string name) => name != null && name.Contains("늑대기수");
-        private const float RiderFieldSpeedMultiplier = 1.6f; // 이동 약 160 → 260(암살자 212보다 빠르다)
+        private const float RiderFieldSpeedMultiplier = 1.6f; // 이동 약 200 → 325(암살자 265보다 빠르다)
 
         /// <summary>제자리에 뿌리박은 보스(앤트킹·예전 거목 엔트): 걸어가지 않고 밀리지도 않는다. 손이 닿지 않는 적은 뿌리 내려찍기로 친다.</summary>
         private static bool IsRooted(string name) => GN3.World.RegionInfo.IsEnt(name);

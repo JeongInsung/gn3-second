@@ -730,6 +730,9 @@ namespace GN3.Battle
         Mushroom,
         GoblinRider,
         Ent,
+        Carpenter,
+        Stump,
+        Shield,
     }
 
     /// <summary>
@@ -766,6 +769,8 @@ namespace GN3.Battle
             public float SizeScale = 1f;                  // 전투 화면 크기 배율(BattleUIController의 MonsterSize에 곱한다)
             public string Slam, Intro;                    // 두 번째 공격(광역)·등장 동작(없는 종류가 대부분)
             public string Portrait;                       // 보스 등장 컷인 그림(한 장, BossCutIn). 없으면 컷인 없이 배너만
+            public string Guard;                          // 막기 8장(고블린 방패병, PlayGuard)
+            public float GuardFps;
             public string Roar;                           // 기절 포효(거목 엔트 붉은 눈 포효). RoarPeakFrame = 입을 크게 벌리는 장(기절이 터지는 순간)
             public int RoarFrames, RoarPeakFrame;
             public float RoarFps;
@@ -837,16 +842,52 @@ namespace GN3.Battle
                 Roar = "ent_roar_stun", RoarFrames = 12, RoarPeakFrame = 6, RoarFps = 12f, RoarHoldFrom = 6, RoarHoldTo = 7,
                 FeetOffset = 0.033f, SizeScale = 1f / 0.7f * 1.5f * 1.4f, // 발밑·크기: 예전 굽기(0.7배)에 맞춘 값 그대로 — 새 그림을 같은 키·발밑으로 구웠다(용병 키의 약 4배, 몸 반지름은 FieldBattleSession.RootedBodyRadius)
             },
+            // 고블린 목수(망치 근접, 목재·쇠못을 떨어뜨린다, 2026-10-26 그림): 대기 8장 · 걷기 8장 · 망치 내려치기 8장
+            // (4번째 장에 망치를 머리 위로 → 6번째 장에 땅을 친다) · 쓰러짐 8장(망치를 떨어뜨리고 엎어진다).
+            // bake_monster_set.py --ground(대기 기준)로 구웠다. 발이 원본 칸 아래 4.9% 위(대기 시트 실측).
+            [MonsterKind.Carpenter] = new Sheets
+            {
+                Idle = "goblin_carpenter_idle", Walk = "goblin_carpenter_walk", Attack = "goblin_carpenter_attack", Die = "goblin_carpenter_die",
+                IdleFps = 8f, WalkFps = 10f, AttackFrames = 8, AttackHitFrame = 5, AttackFps = 14f, DieFrames = 8, DieFps = 10f,
+                FeetOffset = 0.049f, SizeScale = GoblinSizeScale,
+            },
+            // 그루터기 엔트(숲 지형 몬스터, 느리고 단단한 근접): 대기 8장 · 걷기 8장 · 팔 휘두르기 8장(3번째 장에 팔을 뒤로 젖히고
+            // → 5번째 장에 팔을 앞으로 쭉 뻗어 친다). 쓰러짐 시트는 없어 UI가 옆으로 눕히고 흐린다(HasDie).
+            // 원본 칸(384×512)이 세로로 길고 5번째 장 팔이 옆 칸까지 뻗어, 칸을 640 정사각으로 넓혀 옮긴 뒤 --ground로 구웠다.
+            // 그 바람에 몸이 작게 구워져(키 249, 고블린 404) 화면 크기는 SizeScale로 키운다. 발이 원본 칸 아래 27.2% 위(대기 실측).
+            [MonsterKind.Stump] = new Sheets
+            {
+                Idle = "stump_ent_idle", Walk = "stump_ent_walk", Attack = "stump_ent_attack",
+                IdleFps = 6f, WalkFps = 8f, AttackFrames = 8, AttackHitFrame = 4, AttackFps = 12f,
+                FeetOffset = 0.272f, SizeScale = 1.6f,
+            },
+            // 고블린 방패병(2026-10-26, 고블린 무리 맨 앞 — 방패로 막는다, ShieldBlockPassive): 대기 8장 · 걷기 8장
+            // · 방패 강타 8장(4번째 장에 방패를 당겼다 → 5번째 장에 앞으로 내민다) · 쓰러짐 8장(방패를 떨어뜨리고 엎어진다)
+            // · 막기 8장(방패를 몸 앞으로 들어 올렸다 내린다 — 막은 공격을 맞는 순간 PlayGuard). 강타·막기 원본은 칸이 세로로 길어
+            // 칸을 넓혀 옮긴 뒤 굽고, 내민 방패가 칸을 넘어 모두 0.85배로 구웠다(--shrink 0.85, 화면 크기는 SizeScale로 되돌린다).
+            [MonsterKind.Shield] = new Sheets
+            {
+                Idle = "goblin_shield_idle", Walk = "goblin_shield_walk", Attack = "goblin_shield_attack", Die = "goblin_shield_die",
+                Guard = "goblin_shield_guard", GuardFps = 16f,
+                IdleFps = 8f, WalkFps = 10f, AttackFrames = 8, AttackHitFrame = 4, AttackFps = 14f, DieFrames = 8, DieFps = 10f,
+                FeetOffset = 0.015f, SizeScale = GoblinSizeScale / 0.85f,
+            },
         };
 
-        /// <summary>적 이름으로 그림 종류: 늑대기수는 늑대 탄 고블린, 늑대 계열(늑대·울프)은 늑대, 버섯은 독버섯, 엔트는 거목 엔트,
-        /// 그 밖엔 근접 검 고블린 / 원거리 고블린 궁수.</summary>
+        /// <summary>적 이름으로 그림 종류: 늑대기수는 늑대 탄 고블린, 늑대 계열(늑대·울프)은 늑대, 버섯은 독버섯, 그루터기는 그루터기 엔트,
+        /// 엔트는 거목 엔트, 목수는 고블린 목수, 방패병은 고블린 방패병, 그 밖엔 근접 검 고블린 / 원거리 고블린 궁수.</summary>
         public static MonsterKind KindFor(string name, bool melee) =>
             name != null && name.Contains("늑대기수") ? MonsterKind.GoblinRider // 이름에 "늑대"도 있어 늑대보다 먼저
             : IsWolf(name) ? MonsterKind.Wolf
             : name != null && name.Contains("버섯") ? MonsterKind.Mushroom
+            : GN3.World.RegionInfo.IsStump(name) ? MonsterKind.Stump
             : GN3.World.RegionInfo.IsEnt(name) ? MonsterKind.Ent // 앤트킹(예전 저장은 거목 엔트)
+            : name != null && name.Contains("목수") ? MonsterKind.Carpenter
+            : name != null && name.Contains("방패병") ? MonsterKind.Shield
             : melee ? MonsterKind.Sword : MonsterKind.Archer;
+
+        /// <summary>그 종류의 그림(대기 시트)이 들어 있는지. 없으면 Init이 검 고블린 그림으로 대신한다.</summary>
+        public static bool HasArt(MonsterKind kind) => Slice(Kinds[kind].Idle) != null;
 
         private const float GoblinSizeScale = 0.8f; // 고블린(검·궁수)은 용병보다 조금 작게 — 예전 크기는 커 보였다
 
@@ -924,7 +965,7 @@ namespace GN3.Battle
         public void Init(MonsterKind kind)
         {
             Kind = kind;
-            _sheets = Kinds[kind];
+            _sheets = HasArt(kind) ? Kinds[kind] : Kinds[MonsterKind.Sword]; // 그림이 아직 없는 종류는 검 고블린으로
             // 시트를 미리 잘라 둔다: 첫 공격·첫 쓰러짐에서 큰 시트를 읽느라 한 프레임이 길어지면
             // 그만큼 동작이 건너뛰어 화살이 활을 놓는 장면을 지나서 나가 보인다.
             Slice(_sheets.Walk);
@@ -932,6 +973,7 @@ namespace GN3.Battle
             Slice(_sheets.Slam);
             Slice(_sheets.Intro);
             Slice(_sheets.Roar);
+            Slice(_sheets.Guard);
             Slice(_sheets.Die);
             _time = Random.Range(0f, Columns * Rows / _sheets.IdleFps);
             Show();
@@ -980,6 +1022,13 @@ namespace GN3.Battle
             return ActionSeconds;
         }
         public float RoarPeakDelay => _sheets.RoarFps > 0f ? _sheets.RoarPeakFrame / _sheets.RoarFps : 0f;
+
+        /// <summary>막기 동작을 한 번 재생한다(막기 시트가 있는 종류만, 다른 동작 중이면 그 동작을 끊지 않는다). 보이는 연출뿐이다.</summary>
+        public void PlayGuard()
+        {
+            if (_attackTime >= 0f) return;
+            PlayAction(_sheets.Guard, Columns * Rows, _sheets.GuardFps);
+        }
 
         private void PlayAction(string sheet, int frames, float fps, int holdFrom = 0, int holdTo = -1, float holdSeconds = 0f)
         {

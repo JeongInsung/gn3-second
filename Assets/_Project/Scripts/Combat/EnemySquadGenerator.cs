@@ -14,13 +14,18 @@ namespace GN3.Combat
         public const float HealthMultiplier = 2.4f;
         // 같은 날 다시 공격 1.2 → 1.44(×1.2): 전투 긴박감. 판정(권장 전투력)은 그대로 둬 같은 판정에서 조금 더 어렵다
         // (자동 전투 6000판: 중간 64→49%, 어려움 26→15%. ×1.4는 중간 33%로 너무 어려웠다).
-        public const float AttackMultiplier = 1.44f;
+        // 2026-10-26 1.44 → 1.52: 피해 배율 상향(CombatFormulas.DamageScale 0.35 → 0.55)으로 직접 전투 승률이 조금 올라(Lv2 66→75%) 되돌린다.
+        // 2026-10-26 1.52 → 1.3: "너무 어렵다" — 피해 배율 0.9 상향 뒤 직접 전투 승률(조작 없이) Lv1 78 · Lv2 48 · Lv3 34%를 레벨마다 약 +10%p.
+        public const float AttackMultiplier = 1.3f;
 
         // 보스(계층 2)는 여러 라운드 퀘스트의 마지막에 혼자 나와 앞 라운드를 버틴 파견대(최대 인원 = 가장 큰 라운드 + 1)를
         // 상대하므로 따로 세게.
         public const float SporeHealthMultiplier = 0.67f; // 독버섯(독이 더해지는 원거리 몹). 피해 ×0.35 뒤 전투가 길어져 0.8이면 늑대보다 어려웠다(중간 24% vs 39%) → 0.67(39%)
         public const float RiderHealthMultiplier = 0.9f; // 고블린 늑대기수(늑대를 탄 고블린): 빠른 대신(회피↑) 조금 덜 단단 — 1.2면 고블린보다 크게 어려웠다(중간 28% vs 43%), 0.9면 47%
         public const int RiderMoveSpeedBonus = 2;
+        // 그루터기 엔트(숲 지형 근접 몬스터, 2026-10-26): 느리고 단단한 탱커 — 체력을 늘린 대신 느리다(공격은 보통).
+        public const float StumpHealthMultiplier = 1.5f;
+        public const int StumpMoveSpeedPenalty = 1;
         // 보스 앤트킹(예전 이름 거목 엔트, 은월의 숲의 주인, 은월의 숲 Lv5): 아주 단단하고 세게 친다. 제자리에 뿌리박고 3타마다 뿌리 내려찍기
         // (직접 전투는 범위 예고 뒤 분출 — 분대장은 피할 수 있다, RootSlamPassive). 2026-10-19 사용자 요청으로 체력 1.1 → 2.5, 공격 ×1.5.
         public const float EntHealthMultiplier = 2.5f;
@@ -55,9 +60,12 @@ namespace GN3.Combat
                 bool spore = enemyName.Contains("버섯");
                 bool rider = enemyName.Contains("늑대기수");
                 bool ent = RegionInfo.IsEnt(enemyName);
-                float speciesHealth = spore ? SporeHealthMultiplier : rider ? RiderHealthMultiplier : ent ? EntHealthMultiplier : 1f;
+                bool stump = RegionInfo.IsStump(enemyName);
+                float speciesHealth = spore ? SporeHealthMultiplier : rider ? RiderHealthMultiplier : ent ? EntHealthMultiplier
+                    : stump ? StumpHealthMultiplier : 1f;
                 if (rider) moveSpeed += RiderMoveSpeedBonus;
                 if (ent) moveSpeed -= EntMoveSpeedPenalty;
+                if (stump) moveSpeed -= StumpMoveSpeedPenalty;
 
                 // 개체값: 같은 몬스터라도 개체마다 0.85~1.15배(속도 −2~+2), 합으로 등급(약한·보통·강한·우두머리)
                 var iv = MonsterIV.Roll(rng);
