@@ -60,11 +60,18 @@ namespace GN3.Quests
 
         /// <summary>
         /// 라운드 구성. 마지막 라운드가 퀘스트의 대표 적이고, 앞 라운드는 그보다 낮거나 같은 계층의 다른 무리.
-        /// Lv1 1라운드 · Lv2 1~2라운드 · Lv3 2~3라운드 · Lv4 3라운드(약탈 → 지형 동물 → 지형 동물) · Lv5 3라운드(약탈 → 지형 동물 → 앤트킹 단독).
-        /// 한 라운드짜리는 minCount~maxCount마리(Lv1은 최대 4), 여러 라운드면 라운드마다 2~3마리(Lv4 마지막·Lv5 앞 라운드는 3~4).
+        /// Lv1·2 1라운드(초반 소규모: Lv1 1~2마리 · Lv2 2~3마리) · Lv3 2~3라운드 · Lv4 3라운드(약탈 → 지형 동물 → 지형 동물) · Lv5 3라운드(약탈 → 지형 동물 → 앤트킹 단독).
+        /// 한 라운드짜리는 minCount~maxCount마리, 여러 라운드면 라운드마다 2~3마리(Lv4 마지막·Lv5 앞 라운드는 3~4).
         /// </summary>
         private static List<QuestWave> RollWaves(Region region, int level, int mainTier, string mainEnemy, int minCount, int maxCount, Random rng)
         {
+            // 초반 소규모 의뢰(Quest.EarlyMaxDispatch): Lv1 혼자 — 적 1마리(70%)·2마리, Lv2 둘이 — 적 2마리(60%)·3마리. 한 라운드.
+            if (level <= 2)
+            {
+                int count = level <= 1 ? (rng.NextDouble() < 0.7 ? 1 : 2) : (rng.NextDouble() < 0.6 ? 2 : 3);
+                return new List<QuestWave> { new QuestWave(mainEnemy, count, mainTier) };
+            }
+
             int waveCount = level switch
             {
                 1 => 1,

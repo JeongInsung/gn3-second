@@ -66,13 +66,13 @@ namespace GN3.Quests
         /// <summary>분대 하나의 인원(필요 인원이 없으면 최대 파견 인원).</summary>
         public int SquadSize => RequiredDispatchSize > 0 ? RequiredDispatchSize / SquadCount : MaxDispatchSize;
 
-        /// <summary>은월의 숲 Lv1은 적이 많아도 이 인원까지만.</summary>
-        public const int Level1MaxDispatch = 3;
+        /// <summary>초반 소규모 의뢰의 최대 인원: Lv1은 혼자 가는 의뢰(1명), Lv2는 둘이 가는 의뢰(2명). 그 밖은 0(제한 없음).</summary>
+        public static int EarlyMaxDispatch(int level) => level <= 1 ? 1 : level == 2 ? 2 : 0;
 
-        /// <summary>이 퀘스트에 파견 가능한 최대 인원. 필요 인원이 정해진 레벨은 그 인원, 아니면 적 숫자에 인원을 묶어서
-        /// 파티 전원을 몰아보내 무조건 이기는 것을 막는다(Lv1은 그래도 3명까지).</summary>
+        /// <summary>이 퀘스트에 파견 가능한 최대 인원. 필요 인원이 정해진 레벨(Lv3+)은 그 인원, 초반(Lv1·2)은 1명·2명,
+        /// 아니면 적 숫자에 인원을 묶어서 파티 전원을 몰아보내 무조건 이기는 것을 막는다.</summary>
         public int MaxDispatchSize => RequiredDispatchSize > 0 ? RequiredDispatchSize
-            : Difficulty <= 1 ? Math.Min(MaxWaveSize + 1, Level1MaxDispatch)
+            : EarlyMaxDispatch(Difficulty) > 0 ? EarlyMaxDispatch(Difficulty)
             : MaxWaveSize + 1;
 
         /// <param name="waves">라운드 구성. 없으면(예전 저장) enemyName × enemyCount 한 라운드.</param>

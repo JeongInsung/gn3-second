@@ -87,7 +87,8 @@ namespace GN3.UI
                     : $"적: {q.EnemyName} × {q.EnemyCount}    은월의 숲 Lv{q.Difficulty}\n\n") +
                 $"{QuestDifficulty.DescribeForBoard(q)}\n" +
                 $"{QuestDifficulty.BoardDurationText(q)}\n" +
-                (q.RequiredDispatchSize <= 0 ? $"최대 파견 인원: {q.MaxDispatchSize}명\n\n"
+                (q.RequiredDispatchSize <= 0 ? $"최대 파견 인원: {q.MaxDispatchSize}명" +
+                    (Quest.EarlyMaxDispatch(q.Difficulty) == 1 ? " (혼자 가는 의뢰)" : Quest.EarlyMaxDispatch(q.Difficulty) == 2 ? " (둘이 가는 의뢰)" : "") + "\n\n"
                     : q.SquadCount > 1 ? $"필요 인원: {q.RequiredDispatchSize}명 ({q.SquadSize}명씩 두 분대)\n\n"
                     : $"필요 인원: 정확히 {q.RequiredDispatchSize}명\n\n") +
                 (RivalDeals.JointLabel(q) is string joint ? $"<color=#6ab8ff>{joint}</color>\n" : "") + // 연합 의뢰

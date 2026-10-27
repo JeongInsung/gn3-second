@@ -27,7 +27,9 @@ namespace GN3.Quests
         private static readonly string[] Labels = { "매우 쉬움", "쉬움", "중간", "어려움", "매우 어려움" };
         private static readonly string[] Hexes = { "6fbf5a", "a8cf5a", "e0c25a", "f08a3c", "e05050" };
 
-        public static int PowerPerEnemy(int difficulty) => 58 + 21 * difficulty;
+        /// <summary>적 1마리 몫. 초반(Lv1·2)은 적 체력·공격을 줄인 만큼(EnemySquadGenerator.EarlyStatMultiplier) 낮춘다.</summary>
+        public static int PowerPerEnemy(int difficulty) =>
+            (int)System.Math.Round((58 + 21 * difficulty) * GN3.Combat.EnemySquadGenerator.EarlyStatMultiplier(difficulty));
 
         // 퀘스트 등급(용병과 같은 F~S): 권장 전투력이 이 값 미만이면 그 등급(F, E, D, C, B, A), 그 이상은 S.
         // D급 Lv1 용병 한 명 ≈ 전투력 100 기준.

@@ -37,6 +37,12 @@ namespace GN3.Combat
         public const int TwoSquadBossDifficulty = 5;
         public const float BossAttackMultiplier = 1.3f;
 
+        /// <summary>
+        /// 초반 소규모 의뢰(은월의 숲 Lv1 혼자 · Lv2 둘이 — Quest.EarlyMaxDispatch)의 적 체력·공격 배율: Lv1 ×0.75, Lv2 ×0.85.
+        /// 같은 난이도의 이동 중 습격도 함께 약하다. 권장 전투력(QuestDifficulty.PowerPerEnemy)도 같은 배율을 쓴다.
+        /// </summary>
+        public static float EarlyStatMultiplier(int difficulty) => difficulty <= 1 ? 0.75f : difficulty == 2 ? 0.85f : 1f;
+
         /// <summary>tierOverride를 주면 이름 계층(약탈 세력/지형 동물/보스)은 그 값으로 고정하고
         /// difficulty는 스탯 강도에만 반영한다. 예: 이동 중 습격은 항상 "약탈 세력" 이름(tier 0)을 쓰되,
         /// 퀘스트 난이도에 맞춰 스탯만 세게 만들 때 사용. name을 주면 모두 그 이름(퀘스트 라운드의 적), 없으면 계층 목록에서 무작위.</summary>
@@ -46,6 +52,9 @@ namespace GN3.Combat
             float healthMul = HealthMultiplier * (tier >= 2 ? BossHealthMultiplier : 1f)
                 * (tier >= 2 && difficulty >= TwoSquadBossDifficulty ? TwoSquadBossHealthMultiplier : 1f);
             float attackMul = AttackMultiplier * (tier >= 2 ? BossAttackMultiplier : 1f);
+            float early = EarlyStatMultiplier(difficulty); // 초반(Lv1·2) 소규모 의뢰는 약하게
+            healthMul *= early;
+            attackMul *= early;
 
             var result = new List<Combatant>(count);
             for (int i = 0; i < count; i++)
