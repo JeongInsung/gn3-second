@@ -147,14 +147,36 @@ namespace GN3.UI
 
         private static string StripTags(string text) => System.Text.RegularExpressions.Regex.Replace(text ?? "", "<.*?>", "");
 
-        /// <summary>파견대 도착: 자동/직접 선택이 필요한 중요 편지. 같은 파견에 처리 안 된 편지가 있으면 다시 만들지 않는다.</summary>
+        /// <summary>
+        /// 불러오기 전: 우편함을 통째로 비운다(저장하지 않는 편지라 모두 옛 게임 것 — 파견 도착·마을 사건 선택은 옛 파견·용병을 가리킨다).
+        /// 도착해 있던 파견은 복원 끝에 편지가 새로 생긴다(ExpeditionLog.AnnounceRestoredArrivals).
+        /// </summary>
+        public static void ClearAll()
+        {
+            if (_mails.Count == 0) return;
+            _mails.Clear();
+            Changed?.Invoke();
+        }
+
+        /// <summary>
+        /// 파견대 도착: 자동/직접 선택이 필요한 중요 편지. 같은 파견에 처리 안 된 편지가 이미 있으면(도착지에서 [휴식] 뒤 다시 도착 등)
+        /// 새로 만들지 않고 그 편지를 다시 띄운다 — 예전엔 그냥 넘어가 알림·자동 전투 없이 도착한 채 멈췄다.
+        /// </summary>
         public static void PostArrival(Expedition expedition)
         {
-            if (expedition == null || _mails.Any(m => m.Kind == MailKind.Arrival && m.Expedition == expedition && !m.Resolved)) return;
+            if (expedition == null) return;
             // 편성 때 "도착하면 자동 전투"를 골랐으면 묻지 않고 바로(결과 편지만 온다)
             if (expedition.AutoOnArrival && !ExpeditionLog.Instance.IsRestoring && MailActions.CanFight(expedition))
             {
                 MailActions.AutoFight(expedition);
+                return;
+            }
+            var existing = _mails.FirstOrDefault(m => m.Kind == MailKind.Arrival && m.Expedition == expedition && !m.Resolved);
+            if (existing != null)
+            {
+                existing.Acknowledged = existing.Read = false;
+                Changed?.Invoke();
+                ImportantPosted?.Invoke(existing);
                 return;
             }
             var quest = expedition.Quest;
@@ -187,7 +209,7 @@ namespace GN3.UI
             fromDay = System.Math.Min(fromDay, DailyLog.FirstPendingDay);
             var pending = DailyLog.TakePending();
             var sb = new StringBuilder();
-            AppendSummary(sb);
+            AppendSummary(sb, fromDay, toDay);
             for (int day = fromDay; day <= toDay; day++)
             {
                 sb.Append($"<b>■ {GameCalendar.Format(day)}</b>\n");
@@ -219,7 +241,7 @@ namespace GN3.UI
         /// <summary>
         /// 보고서 맨 위 요약: 골드·명성 변화와 지금 손봐야 할 것(도착한 파견·지친/중한 용병·계약 갱신·주급 부족). 해당하는 줄만.
         /// </summary>
-        private static void AppendSummary(StringBuilder sb)
+        private static void AppendSummary(StringBuilder sb, int fromDay, int toDay)
         {
             var lines = new List<string>();
             int gold = Economy.Wallet.Gold, rep = Economy.Guild.Reputation;
@@ -231,6 +253,15 @@ namespace GN3.UI
             }
             _reportGold = gold;
             _reportRep = rep;
+
+            // 금고 장부: 이 기간 수입·지출 큰 이유 3개씩(G로 장부 창)
+            var totals = Economy.GoldLedger.Totals(fromDay, toDay);
+            string Top(System.Func<(string reason, int income, int expense), int> pick, string sign) =>
+                string.Join(", ", totals.Where(t => pick(t) > 0).OrderByDescending(pick).Take(3).Select(t => $"{t.reason} {sign}{pick(t)}"));
+            string incomes = Top(t => t.income, "+"), expenses = Top(t => t.expense, "-");
+            if (incomes.Length > 0 || expenses.Length > 0)
+                lines.Add((incomes.Length > 0 ? $"수입: {incomes}" : "") + (incomes.Length > 0 && expenses.Length > 0 ? " · " : "")
+                          + (expenses.Length > 0 ? $"지출: {expenses}" : "") + " <color=#a3937c>(G: 장부)</color>");
 
             var todo = new List<string>();
             int arrived = ExpeditionLog.Instance.Active.Count(e => e.IsReady);

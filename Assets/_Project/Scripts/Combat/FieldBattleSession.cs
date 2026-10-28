@@ -155,8 +155,8 @@ namespace GN3.Combat
         public bool IsOver => !PlayersAlive || (LastWave && !EnemyTeam.Any(c => c.IsAlive)) || Elapsed >= MaxBattleSeconds * WaveCount;
         public BattleOutcome Outcome => CombatResolver.DetermineOutcome(PlayerTeam, EnemyTeam);
 
-        /// <summary>스킬이 쓰인 순간(UI가 스킬 이름을 띄운다).</summary>
-        public event Action<FieldUnit, SkillBase> OnSkillUsed;
+        /// <summary>스킬이 쓰인 순간(쓴 유닛 · 스킬 · 대상 — UI가 스킬 이름과 스킬별 효과를 띄운다).</summary>
+        public event Action<FieldUnit, SkillBase, FieldUnit> OnSkillUsed;
         /// <summary>라운드를 깼다(깬 라운드 번호, 0부터). WaveBreakSeconds 뒤에 다음 라운드가 시작된다.</summary>
         public event Action<int> OnWaveCleared;
         /// <summary>다음 라운드 시작(라운드 번호, 치운 적 유닛, 새로 나온 적 유닛).</summary>
@@ -367,7 +367,7 @@ namespace GN3.Combat
             if (!playerSide && IsRooted(c.Name)) interval /= RootedAttackSpeedMultiplier;
             float speed = BaseMoveSpeed + c.Stats.MoveSpeed * MoveSpeedPerStat;
             if (!playerSide && IsRider(c.Name)) speed *= RiderFieldSpeedMultiplier;
-            var unit = new FieldUnit(c, playerSide, leader, melee, skill, position, speed, interval)
+            var unit = new FieldUnit(c, playerSide, leader, melee, skill, ClampToField(position), speed, interval) // 모서리 자리는 둥근 공터 안으로
             {
                 AttackTimer = interval * (float)_rng.NextDouble() * StartingTimerJitter,
                 BodyRadius = !playerSide && IsRooted(c.Name) ? RootedBodyRadius : 0f,
@@ -566,9 +566,7 @@ namespace GN3.Combat
             unit.Facing = 1f;
         }
 
-        public static Vector2 ClampToDeploy(Vector2 p) => new Vector2(
-            Math.Clamp(p.X, EdgeMargin, DeployMaxX),
-            Math.Clamp(p.Y, EdgeMargin, FieldHeight - EdgeMargin));
+        public static Vector2 ClampToDeploy(Vector2 p) => ClampToField(new Vector2(Math.Min(p.X, DeployMaxX), p.Y));
 
         // ---------- 진행 ----------
 
@@ -577,7 +575,15 @@ namespace GN3.Combat
         {
             var events = new List<BattleEvent>();
             if (!HasStarted || IsOver) return events;
-            Elapsed += dt;
+            PassiveEvents.Begin(); // 이 틱에 패시브가 일으킨 회복·부활·즉사·도발을 모아 끝에 붙인다(화면 표시용)
+            try { TickInner(dt, events); }
+            finally { PassiveEvents.End(events); }
+            return events;
+        }
+
+        private void TickInner(float dt, List<BattleEvent> events)
+        {
+            if (!HoldBreak) Elapsed += dt; // 라운드 정리(파밍) 시간은 라운드 제한 시간을 먹지 않는다
             for (int i = 0; i < _squadCooldowns.Length; i++)
                 if (_squadCooldowns[i] > 0f) _squadCooldowns[i] = Math.Max(0f, _squadCooldowns[i] - dt);
             if (Leader != null && !Leader.IsAlive) SwitchLeader(); // 조종 중인 분대장이 쓰러지면 다른 분대장에게
@@ -622,7 +628,6 @@ namespace GN3.Combat
             TickPoison(dt, events);
             Separate(dt);
             UpdateWaveBreak(dt);
-            return events;
         }
 
         private const float PoisonTickSeconds = 1f;
@@ -650,12 +655,23 @@ namespace GN3.Combat
                 OnWaveCleared?.Invoke(CurrentWave);
                 return;
             }
+            if (HoldBreak) return; // 라운드 정리(파밍) 시간: 화면이 놓아 줄 때까지 다음 적을 세우지 않는다
             _breakTimer -= dt;
             if (_breakTimer <= 0f)
             {
                 _breakTimer = 0f;
                 StartNextWave();
             }
+        }
+
+        /// <summary>라운드 사이 쉬는 시간을 붙잡아 둔다(직접 전투의 라운드 정리 — 시체를 뒤질 시간). 자동 전투는 쓰지 않는다.</summary>
+        public bool HoldBreak { get; set; }
+
+        /// <summary>붙잡아 둔 쉬는 시간을 놓는다: seconds 뒤에 다음 라운드.</summary>
+        public void ReleaseBreak(float seconds = 1.5f)
+        {
+            HoldBreak = false;
+            if (_breakTimer > 0f) _breakTimer = Math.Min(_breakTimer, Math.Max(0.01f, seconds));
         }
 
         /// <summary>분대장: 명령이 없을 때는 사거리 안의 적만 알아서 때린다(쫓아가지는 않음 - 이동은 플레이어 몫).</summary>
@@ -871,12 +887,12 @@ namespace GN3.Combat
                 for (int t = 0; t < SlamZoneTries; t++)
                 {
                     p = new Vector2(minX + (float)_rng.NextDouble() * (maxX - minX), minY + (float)_rng.NextDouble() * (maxY - minY));
-                    bool apart = true;
-                    for (int j = 0; j < i; j++)
+                    bool apart = ArenaRadius(p.X, p.Y, r * 0.5f) <= 1f; // 둥근 공터 밖(숲 속)이면 다시 고른다
+                    for (int j = 0; j < i && apart; j++)
                         if (Vector2.Distance(p, zones[j]) < r * SlamZoneSpacing) { apart = false; break; }
                     if (apart) break;
                 }
-                zones[i] = p;
+                zones[i] = ClampToField(p);
             }
             return zones;
         }
@@ -998,7 +1014,7 @@ namespace GN3.Combat
             var produced = u.Skill.Execute(u.Combatant, target.Combatant, allies, enemies, ActionCount, _rng);
             u.Cooldown = u.Skill.CooldownSeconds;
             if (produced.Any(e => e.Damage >= 0)) u.BusyTimer = u.AttackAnimSeconds; // 치유만 하는 스킬은 검격 동작이 없다
-            OnSkillUsed?.Invoke(u, u.Skill);
+            OnSkillUsed?.Invoke(u, u.Skill, target);
             events.AddRange(produced);
             Log.AddRange(produced);
         }
@@ -1052,9 +1068,28 @@ namespace GN3.Combat
             }
         }
 
-        public static Vector2 ClampToField(Vector2 p) => new Vector2(
-            Math.Clamp(p.X, EdgeMargin, FieldWidth - EdgeMargin),
-            Math.Clamp(p.Y, EdgeMargin, FieldHeight - EdgeMargin));
+        /// <summary>둥근 공터(ArenaRadius, 가장자리에서 EdgeMargin 안쪽) 안으로 당긴 뒤 판 네모 안으로 맞춘다.</summary>
+        public static Vector2 ClampToField(Vector2 p)
+        {
+            float r = ArenaRadius(p.X, p.Y, EdgeMargin);
+            if (r > 1f) p = ArenaCenter + (p - ArenaCenter) / r; // 1차 동차라 1/r배 하면 정확히 가장자리
+            return new Vector2(
+                Math.Clamp(p.X, EdgeMargin, FieldWidth - EdgeMargin),
+                Math.Clamp(p.Y, EdgeMargin, FieldHeight - EdgeMargin));
+        }
+
+        // 싸우는 곳 = 판을 감싼 타원 공터(ArenaPower 2). 숲(BattleGroundTiles)·꾸미기(BattleDecor)·이동이 같은 모양을 쓴다.
+        // 판보다 조금 크게 잡아 가운데는 판 끝까지 쓰고(위 끝 ≈800), 가장자리 전체가 휘어 네 모서리가 숲으로 둥글게 깎인다(판 왼쪽 끝에선 y 136~564).
+        public static readonly Vector2 ArenaCenter = new Vector2(FieldWidth / 2f, FieldHeight / 2f);
+        public const float ArenaRadiusX = 1250f, ArenaRadiusY = 450f, ArenaPower = 2f;
+
+        /// <summary>공터 모양 안에서의 상대 거리: 1 = 가장자리, 1보다 크면 바깥(숲). inset만큼 안쪽으로 줄인 모양으로 잰다.</summary>
+        public static float ArenaRadius(float x, float y, float inset = 0f)
+        {
+            double dx = Math.Abs(x - ArenaCenter.X) / Math.Max(1f, ArenaRadiusX - inset);
+            double dy = Math.Abs(y - ArenaCenter.Y) / Math.Max(1f, ArenaRadiusY - inset);
+            return (float)Math.Pow(Math.Pow(dx, ArenaPower) + Math.Pow(dy, ArenaPower), 1.0 / ArenaPower);
+        }
 
         // ---------- 도우미 ----------
 

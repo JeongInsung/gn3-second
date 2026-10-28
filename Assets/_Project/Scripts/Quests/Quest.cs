@@ -76,10 +76,11 @@ namespace GN3.Quests
             : MaxWaveSize + 1;
 
         /// <param name="waves">라운드 구성. 없으면(예전 저장) enemyName × enemyCount 한 라운드.</param>
+        /// <param name="id">저장에서 되살릴 때의 Id(연합 의뢰 손님 Loan.QuestId가 가리킨다). 없으면 새로 만든다.</param>
         public Quest(string title, Region region, string locationName, string enemyName, int enemyCount, int difficulty, int durationDays,
-            IReadOnlyList<QuestWave> waves = null, string requester = null, string requestText = null)
+            IReadOnlyList<QuestWave> waves = null, string requester = null, string requestText = null, string id = null)
         {
-            Id = Guid.NewGuid().ToString();
+            Id = string.IsNullOrEmpty(id) ? Guid.NewGuid().ToString() : id;
             Requester = requester;
             RequestText = requestText;
             Title = title;

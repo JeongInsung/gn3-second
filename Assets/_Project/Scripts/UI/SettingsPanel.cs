@@ -19,7 +19,7 @@ namespace GN3.UI
         private static readonly Vector2Int[] Resolutions = { new Vector2Int(1280, 720), new Vector2Int(1600, 900), new Vector2Int(1920, 1080) };
 
         private const float Width = 600f;
-        private const float Height = 720f; // 볼륨·화면·해상도 + 안내 다시 보기 + 단축키 목록
+        private const float Height = 750f; // 볼륨·화면·해상도 + 안내 다시 보기 + 단축키 목록(마을 두 줄)
         private const float LabelWidth = 130f;
         private const float RowLeft = 40f;
         private static readonly Color SelectedTint = new Color(1f, 0.82f, 0.5f); // 고른 버튼: 숯빛 버튼을 따뜻한 청동빛으로
@@ -120,6 +120,7 @@ namespace GN3.UI
             var panel = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(Button));
             panel.transform.SetParent(transform, false);
             ((RectTransform)panel.transform).sizeDelta = new Vector2(Width, Height);
+            DraggablePanel.Attach((RectTransform)panel.transform); // 잡고 끌어 옮길 수 있다(뒤 어두운 막은 고정)
             var panelImage = panel.GetComponent<Image>();
             panelImage.sprite = UITheme.Panel;
             panelImage.type = Image.Type.Sliced;
@@ -130,11 +131,7 @@ namespace GN3.UI
             title.fontStyle = FontStyle.Bold;
             PlaceTop(title.rectTransform, 0f, -18f, Width - 120f, 40f, center: true);
 
-            var close = CreateButton(panel.transform, "X", Close, out _);
-            var closeRect = (RectTransform)close.transform;
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = Vector2.one;
-            closeRect.anchoredPosition = new Vector2(-14f, -14f);
-            closeRect.sizeDelta = new Vector2(38f, 38f);
+            UITheme.CreateCloseX(panel.transform, Close); // 공통 닫기 X
 
             // 음악 · 효과음 볼륨(따로)
             float y = -96f;
@@ -183,16 +180,29 @@ namespace GN3.UI
             PlaceTop((RectTransform)reset.transform, RowLeft + LabelWidth, y, 190f, 44f, center: false);
             reset.gameObject.AddComponent<TooltipTrigger>().Text = "대장간·창고·건강 창 등을 처음 열 때 뜨던 안내를 다음에 열 때 다시 보여 준다";
 
+            // 끌어 옮겨 저장된 창 자리(DraggablePanel)를 모두 지운다
+            Text windowsLabel = null;
+            var windows = CreateButton(panel.transform, "창 위치 초기화", () =>
+            {
+                DraggablePanel.ResetAll();
+                if (windowsLabel != null) windowsLabel.text = "초기화함";
+            }, out windowsLabel);
+            PlaceTop((RectTransform)windows.transform, RowLeft + LabelWidth + 200f, y, 190f, 44f, center: false);
+            windows.gameObject.AddComponent<TooltipTrigger>().Text = "끌어 옮겨 둔 창들을 다음에 열 때부터 원래 자리에 띄운다";
+
             // 단축키 목록(게임 안에서 알 수 있게)
             y -= 64f;
             RowLabel(panel.transform, "단축키", y);
             var keys = CreateText(panel.transform,
-                "마을  M 용병시장 · T 파티 · Q 퀘스트 · L 우편함 · B 건설\n" +
+                "마을  M 용병시장 · T 파티 · Q 퀘스트 · L 우편함 · B 건설 · G 장부 · H 의뢰 기록\n" +
+                "      C 일정 · Y 업적 · U 길드 · K 건강 · R 관계 · N 근처 길드 · J 도감\n" +
                 "      Space 시간 진행 · F 배속(1/2/4) · P 일시정지 · ESC 창 닫기/메뉴\n" +
-                "전투  Space 일시정지 · F 배속 · Q 스킬 · Tab 분대 바꾸기 · B 가방\n" +
-                "      분대 명령 1 집결 · 2 후퇴 · 3 전진 · 4 집중 · 결과 화면 Enter 마을로",
+                "전투  Space 일시정지 · F 배속 · Q 스킬 · Tab 분대 바꾸기 · B 가방 · D 통계\n" +
+                "      분대 명령 1 집결 · 2 후퇴 · 3 전진 · 4 집중 · 결과 화면 Enter 마을로\n" +
+                "      수색 창 E 가져가기 · R 모두 열기 · X 두고 가기 · 라운드 정리 Enter\n" +
+                "      가방 창 X 버리기 · S 값 순 정리 · Esc 닫기 · Shift+클릭 빈 칸 많은 대원에게",
                 UITheme.SmallSize, TextAnchor.UpperLeft, UITheme.BodyText);
-            PlaceTop(keys.rectTransform, RowLeft + LabelWidth, y - 10f, Width - RowLeft * 2f - LabelWidth, 100f, center: false);
+            PlaceTop(keys.rectTransform, RowLeft + LabelWidth, y - 10f, Width - RowLeft * 2f - LabelWidth, 170f, center: false);
 
             if (Application.isEditor)
             {

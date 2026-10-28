@@ -15,10 +15,10 @@ namespace GN3.UI
     /// </summary>
     public class GuildPanel : MonoBehaviour
     {
-        private const float Width = 680f;
-        private const float Height = 420f;
+        private const float Width = 860f;  // 긴 "다음 단계·혜택" 줄이 한 줄에 들게(예전 680)
+        private const float Height = 470f;
         private const float BodyTop = 144f;   // 판 위에서 첫 줄까지
-        private const float RowHeight = 36f;
+        private const float RowHeight = 40f;
         private const int RowCount = 6;       // 인원 · 주급 · 지금 혜택 · 다음 단계 · 전체 단계 · 마을 매력
         private const string Gold = UITheme.SelectedTextHex;
         private const string Dim = UITheme.MutedHex; // 2026-10-26 #7a7064 → 다른 창과 같은 흐린 색
@@ -103,6 +103,12 @@ namespace GN3.UI
         }
 
         public void Hide() => _panel.SetActive(false);
+
+        public void Toggle()
+        {
+            if (_panel.activeSelf) Hide();
+            else Show();
+        }
 
         private void OnGuildChanged(bool rankUp) => RefreshIfOpen();
 
@@ -288,21 +294,7 @@ namespace GN3.UI
             facilityLabel.rectTransform.offsetMin = facilityLabel.rectTransform.offsetMax = Vector2.zero;
 
             // 닫기
-            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            close.transform.SetParent(_panel.transform, false);
-            var closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-8f, -8f);
-            closeRect.sizeDelta = new Vector2(28f, 28f);
-            close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
-            close.GetComponent<Button>().onClick.AddListener(Hide);
-            var x = CreateText("Text", 16, FontStyle.Normal, Vector2.zero, Vector2.zero, close.transform);
-            x.text = "X";
-            x.color = Color.white;
-            x.alignment = TextAnchor.MiddleCenter;
-            x.rectTransform.anchorMin = Vector2.zero;
-            x.rectTransform.anchorMax = Vector2.one;
-            x.rectTransform.offsetMin = x.rectTransform.offsetMax = Vector2.zero;
+            UITheme.CreateCloseX(_panel.transform, Hide); // 공통 닫기 X(32px, 오른쪽 위)
 
             _panel.SetActive(false);
             EscapeCloser.Register(_panel, Hide);

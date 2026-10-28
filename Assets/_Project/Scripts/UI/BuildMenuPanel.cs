@@ -18,10 +18,10 @@ namespace GN3.UI
         private const string PanelName = "BuildMenuPanel";
         private const float BuildRowHeight = 64f; // 이름 + 짧은 설명·재료 한 줄
         private const float RankRowHeight = 32f;
-        // 건물 카드 격자(목록 칸 폭 592 − 여백 안에 5열)
+        // 건물 카드 격자(목록 칸 폭 772 − 여백 안에 6열)
         private static readonly Vector2 CardSize = new Vector2(104f, 118f);
         private const float CardSpacing = 8f;
-        private const int CardColumns = 5;
+        private const int CardColumns = 6; // 넓어진 목록 칸(772)에 6열
         private const float CardIconSize = 64f;
         private const float BlockedIconAlpha = 0.45f;
 

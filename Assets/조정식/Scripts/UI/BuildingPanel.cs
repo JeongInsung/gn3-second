@@ -35,7 +35,7 @@ namespace GN3.UI
         }
 
         /// <summary>
-        /// 가운데 건물 패널(처음엔 숨김): 화면 전체 어두운 배경(누르면 닫힘) + 640x580 판에 제목·설명·상품 목록 칸·닫기 버튼.
+        /// 가운데 건물 패널(처음엔 숨김): 화면 전체 어두운 배경(누르면 닫힘) + 820x680 판에 제목·설명·상품 목록 칸·닫기 버튼.
         /// 목록 칸은 기본으로 "상품 준비 중"이고, 상점(HospitalShop 등)이 Opened 때 채운다. 상인 그림은 쓰지 않는다.
         /// </summary>
         public static BuildingPanel Create(Transform parent)
@@ -53,22 +53,22 @@ namespace GN3.UI
             box.transform.SetParent(root.transform, false);
             box.GetComponent<Button>().transition = Selectable.Transition.None;
             var boxRect = box.GetComponent<RectTransform>();
-            boxRect.sizeDelta = new Vector2(640f, 580f); // 목록이 한눈에 더 보이게(예전 520x420은 스크롤이 많았다)
+            boxRect.sizeDelta = new Vector2(820f, 680f); // 긴 설명 줄도 접히지 않게 넓게(예전 640x580은 글이 칸을 넘쳤다)
             boxRect.anchoredPosition = Vector2.zero; // 화면 가운데(상인 그림은 빼서 Portrait는 null)
             DraggablePanel.Attach(boxRect); // 판을 잡고 끌어 옮길 수 있다(뒤 어두운 막은 고정)
             box.GetComponent<Image>().color = new Color(0.13f, 0.12f, 0.15f, 0.96f);
 
             panel.Title = CreateText(box.transform, "", 28, TextAnchor.MiddleLeft);
-            Place(panel.Title.rectTransform, new Vector2(24f, -20f), new Vector2(400f, 40f));
+            Place(panel.Title.rectTransform, new Vector2(24f, -20f), new Vector2(560f, 40f));
 
             panel.Description = CreateText(box.transform, "", 18, TextAnchor.UpperLeft);
             panel.Description.color = new Color(0.85f, 0.85f, 0.85f);
-            Place(panel.Description.rectTransform, new Vector2(24f, -66f), new Vector2(592f, 48f));
+            Place(panel.Description.rectTransform, new Vector2(24f, -66f), new Vector2(772f, 48f));
 
             // 상품 목록 칸(빈 스크롤 영역). 나중에 ItemListContent 아래에 상품 줄을 추가하면 된다.
             var list = new GameObject("ItemList", typeof(RectTransform), typeof(Image), typeof(ScrollRect), typeof(RectMask2D));
             list.transform.SetParent(box.transform, false);
-            Place(list.GetComponent<RectTransform>(), new Vector2(24f, -124f), new Vector2(592f, 428f));
+            Place(list.GetComponent<RectTransform>(), new Vector2(24f, -124f), new Vector2(772f, 508f));
             list.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f);
             var content = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
             content.transform.SetParent(list.transform, false);
@@ -82,6 +82,7 @@ namespace GN3.UI
             scroll.content = contentRect;
             scroll.horizontal = false;
             SmoothWheelScroll.Attach(scroll); // 휠로 한 줄씩 부드럽게(끝에서 튕기지 않게 Clamped)
+            ScrollListWrapper.AddOverlayScrollbar(scroll); // 공통 스크롤바(내용이 짧으면 숨음)
             panel.ItemListContent = contentRect;
 
             var empty = CreateText(list.transform, "상품 준비 중", 18, TextAnchor.MiddleCenter);
@@ -89,15 +90,7 @@ namespace GN3.UI
             Stretch(empty.rectTransform);
             panel.EmptyLabel = empty;
 
-            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            close.transform.SetParent(box.transform, false);
-            var closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-14f, -14f);
-            closeRect.sizeDelta = new Vector2(40f, 40f);
-            close.GetComponent<Image>().color = new Color(0.3f, 0.28f, 0.33f, 1f);
-            close.GetComponent<Button>().onClick.AddListener(panel.Close);
-            Stretch(CreateText(close.transform, "X", 22, TextAnchor.MiddleCenter).rectTransform);
+            UITheme.CreateCloseX(box.transform, panel.Close); // 공통 닫기 X(32px, 오른쪽 위)
 
             root.transform.SetAsLastSibling(); // 같은 Canvas의 다른 메뉴 패널보다 위에 뜬다
             root.SetActive(false);

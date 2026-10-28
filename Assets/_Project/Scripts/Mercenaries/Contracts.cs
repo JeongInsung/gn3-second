@@ -132,7 +132,7 @@ namespace GN3.Mercenaries
             {
                 var c = Get(merc);
                 if (c == null || c.WinBonus <= 0) continue;
-                if (Wallet.TrySpend(c.WinBonus))
+                if (Wallet.TrySpend(c.WinBonus, "승리 보너스"))
                 {
                     paid += c.WinBonus;
                     merc.AddMorale(ContractTuning.BonusPaidMorale);

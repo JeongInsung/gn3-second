@@ -20,7 +20,6 @@ namespace GN3.UI
 
         private readonly List<GameObject> _rows = new List<GameObject>();
         // 용병 줄과 그 위치·상태 글자. 글자가 줄바꿈돼 넘치면 RefreshList가 줄 높이를 늘린다.
-        private readonly List<(LayoutElement layout, Text text)> _wrappedRows = new List<(LayoutElement, Text)>();
         private const int MemberRowPadding = 8;
         private readonly HashSet<string> _selectedForDispatch = new HashSet<string>();
         // 분대별 분대장(직접 진행 전투에서 플레이어가 조종). 분대에 처음 들어간 사람이 맡고 '분대장' 버튼으로 바꾼다.
@@ -50,14 +49,25 @@ namespace GN3.UI
         private Expedition _battlingExpedition;
         private Coroutine _battlePlayback;
 
+        private static readonly Vector2 PanelSize = new Vector2(980f, 860f);
+        private const float ResultHeight = 180f; // 아래 전투 결과 글 칸(씬 값 140 → 결과 줄이 잘리지 않게)
+
         private void Awake()
         {
             // ScrollListWrapper가 listContainer를 새 계층으로 옮기기 전에, 원래 부모(PartyPanel)를 기억해둔다.
             _panelTransform = listContainer.parent;
             UITheme.StyleWindowTitle(_panelTransform.Find("Title")?.GetComponent<Text>()); // 시장·퀘스트·파티 제목 줄을 같게
 
-            // PartyPanel(640x780) 안에서 제목 아래 ~ 결과 텍스트 위까지의 고정 영역
-            ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, 170f), new Vector2(-20f, -105f));
+            // 창을 넓힌다(씬 값 640x780 → PanelSize): 좁으면 용병 줄 상태 글이 여러 줄로 접혀 칸이 어색했다. 오른쪽 끝 위치는 그대로.
+            var panelRect = (RectTransform)_panelTransform;
+            float right = panelRect.anchoredPosition.x + panelRect.sizeDelta.x * (1f - panelRect.pivot.x);
+            float growY = PanelSize.y - panelRect.sizeDelta.y;
+            panelRect.sizeDelta = PanelSize;
+            panelRect.anchoredPosition = new Vector2(right - PanelSize.x * (1f - panelRect.pivot.x), panelRect.anchoredPosition.y - growY * 0.5f);
+            if (resultText != null) resultText.rectTransform.sizeDelta = new Vector2(resultText.rectTransform.sizeDelta.x, ResultHeight);
+
+            // 창 안에서 제목 아래 ~ 결과 텍스트 위까지의 고정 영역
+            ScrollListWrapper.Wrap((RectTransform)listContainer, new Vector2(20f, ResultHeight + 30f), new Vector2(-20f, -105f));
 
             _font = UITheme.Font;
             if (resultText != null && resultText.text.StartsWith("전투 결과가")) resultText.text = ""; // 빈 안내 문구는 지운다(결과가 생기면 채워진다)
@@ -70,10 +80,29 @@ namespace GN3.UI
             Hospital.OnChanged += RefreshList;
             Contracts.OnChanged += RefreshList; // 재계약·만료 표시
             ExpeditionLog.Instance.OnTravelEvent += HandleTravelEvent;
+            GN3.Save.SaveSystem.OnLoaded += HandleLoaded;
+        }
+
+        /// <summary>불러오기: 재생 중이던 전투·기다리던 전투 줄·편성 중 의뢰는 옛 게임 것이라 모두 버린다.</summary>
+        private void HandleLoaded()
+        {
+            StopBattlePlayback();
+            if (_pendingQuest != null) CancelDispatch(); // 고른 대원·분대장도 함께 푼다(목록도 다시 그린다)
+            else RefreshList();
+        }
+
+        private void StopBattlePlayback()
+        {
+            if (_battlePlayback != null && CoroutineHost.Instance != null) CoroutineHost.Instance.StopCoroutine(_battlePlayback);
+            _battlePlayback = null;
+            _battlingExpedition = null;
+            _battleQueue.Clear();
         }
 
         private void OnDestroy()
         {
+            GN3.Save.SaveSystem.OnLoaded -= HandleLoaded;
+            StopBattlePlayback(); // 씬이 바뀌면 이 창의 재생도 끝난다(오래 사는 CoroutineHost에서 돌던 것)
             if (_pendingQuest != null && PendingQuest == _pendingQuest) PendingQuest = null; // 씬이 바뀌면(불러오기) 편성도 끝난다
             PlayerParty.Instance.OnChanged -= RefreshList;
             ExpeditionLog.Instance.OnChanged -= RefreshList;
@@ -165,7 +194,6 @@ namespace GN3.UI
             foreach (var row in _rows)
                 Destroy(row);
             _rows.Clear();
-            _wrappedRows.Clear();
 
             var expeditions = ExpeditionLog.Instance.Active;
             if (expeditions.Count > 0)
@@ -212,18 +240,9 @@ namespace GN3.UI
                 _rows.Add(CreateMemberRow(merc));
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
-            // 위치·상태 글자가 줄바꿈돼 줄 안에 안 들어가면 줄을 늘리고 다시 배치한다
-            bool grew = false;
-            foreach (var (layout, text) in _wrappedRows)
-            {
-                float needed = text.preferredHeight + MemberRowPadding * 2;
-                if (needed > layout.preferredHeight)
-                {
-                    layout.minHeight = layout.preferredHeight = Mathf.Ceil(needed);
-                    grew = true;
-                }
-            }
-            if (grew) LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
+            // 줄바꿈된 글에 줄 높이를 맞춘다(FitRowHeight — 폭이 바뀌면 다음 프레임에도 다시 맞춘다)
+            foreach (var fit in listContainer.GetComponentsInChildren<FitRowHeight>()) fit.Fit();
+            LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
             RefreshDispatchButton();
         }
 
@@ -233,18 +252,18 @@ namespace GN3.UI
             var go = new GameObject("Header", typeof(RectTransform), typeof(LayoutElement));
             go.transform.SetParent(listContainer, false);
 
-            var layout = go.GetComponent<LayoutElement>();
-            layout.minHeight = 26 + 18 * (lines - 1);
-            layout.preferredHeight = layout.minHeight;
-
             var text = CreateText(go.transform, label, 15, TextAnchor.MiddleLeft);
             text.fontStyle = FontStyle.Bold;
             text.color = new Color(1f, 1f, 1f, 0.7f);
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
             var textRect = text.GetComponent<RectTransform>();
             textRect.anchorMin = Vector2.zero;
             textRect.anchorMax = Vector2.one;
             textRect.offsetMin = new Vector2(4f, 0f);
             textRect.offsetMax = Vector2.zero;
+            // 글이 길어 더 접히면 줄이 늘어난다(잘리지 않게)
+            FitRowHeight.Attach(go, 26 + 18 * (lines - 1), 6f).AddColumn(0f, text);
 
             return go;
         }
@@ -323,7 +342,11 @@ namespace GN3.UI
             button.GetComponent<LayoutElement>().minWidth = 100;
             var label = CreateText(row.transform, names.Count > 0 ? string.Join(", ", names) : "지난 팀이 모두 떠났습니다", 14, TextAnchor.MiddleLeft);
             label.color = new Color(1f, 1f, 1f, 0.6f);
-            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            label.horizontalOverflow = HorizontalWrapMode.Wrap; // 길면 줄을 바꾸고 줄이 늘어난다
+            var labelLayout = label.gameObject.AddComponent<LayoutElement>();
+            labelLayout.flexibleWidth = 1;
+            labelLayout.preferredWidth = 0;
+            FitRowHeight.Attach(row, 40, 4f).AddColumn(0f, label);
             button.gameObject.AddComponent<TooltipTrigger>().Text = "지난번 보낸 용병 중 지금 갈 수 있는 사람을 고르고 분대·분대장을 되살린다";
             return row;
         }
@@ -336,16 +359,13 @@ namespace GN3.UI
             row.transform.SetParent(listContainer, false);
             row.GetComponent<Image>().color = expedition.IsReturning ? new Color(0.2f, 0.28f, 0.4f, 0.4f) : new Color(0.2f, 0.35f, 0.25f, 0.4f);
 
-            var layoutElement = row.GetComponent<LayoutElement>();
-            layoutElement.minHeight = 56;
-            layoutElement.preferredHeight = 56;
-
+            // 높이는 세 줄 글에 맞춘다(FitRowHeight — 폭이 바뀌어도 다시 맞춰 글이 넘치거나 칸이 남지 않게)
             var hLayout = row.GetComponent<HorizontalLayoutGroup>();
             hLayout.padding = new RectOffset(12, 12, 6, 6);
             hLayout.spacing = 8;
             hLayout.childAlignment = TextAnchor.MiddleLeft;
             hLayout.childForceExpandWidth = false;
-            hLayout.childForceExpandHeight = true;
+            hLayout.childForceExpandHeight = false; // 버튼은 40px로 가운데, 글 칸만 flexibleHeight로 줄 높이를 채운다
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
@@ -358,14 +378,18 @@ namespace GN3.UI
             string status = expedition.IsReturning ? $"귀환 중 (남은 {GameClock.FormatDuration(expedition.ReturnHoursLeft)})"
                 : expedition.IsReady ? "도착 완료" : $"이동 중 (남은 {GameClock.FormatDuration(quest.RemainingHours)})";
             if (expedition.AwaitingEvent) status = "<color=#f0a54a>사건 선택 대기</color> · " + status; // 우편함·알림창에서 고를 때까지 멈춤
-            string info = $"{QuestDifficulty.RichTitle(quest)}    {status}    파견: {members}    {QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(expedition.Members))}";
+            // 세 줄: 제목·상태 / 대원 / 전투력 판정. 길면(두 분대 이름 등) 넘치는 대신 글씨가 조금 작아지고, 전문은 툴팁으로.
+            string info = $"{QuestDifficulty.RichTitle(quest)}    {status}\n파견: {members}\n" +
+                          $"<color=#a3937c>{QuestDifficulty.DescribeTeam(quest, QuestDifficulty.TeamPower(expedition.Members))}</color>";
             var infoText = CreateText(row.transform, info, 15, TextAnchor.MiddleLeft);
+            infoText.supportRichText = true;
+            infoText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            infoText.verticalOverflow = VerticalWrapMode.Overflow;
             var infoLayout = infoText.gameObject.AddComponent<LayoutElement>();
             infoLayout.flexibleWidth = 1;
             infoLayout.minWidth = 100;
-            infoLayout.preferredWidth = 0; // 버튼 앞까지만 쓰고 줄을 바꾼다(넘치면 RefreshList가 줄 높이를 늘림)
-            infoText.verticalOverflow = VerticalWrapMode.Overflow;
-            _wrappedRows.Add((layoutElement, infoText));
+            infoLayout.preferredWidth = 0; // 버튼 앞까지만 쓰고 줄을 바꾼다
+            FitRowHeight.Attach(row, 64, 12f).AddColumn(0f, infoText);
 
             bool anyWounded = expedition.Members.Any(m => m.IsAlive && m.CurrentHealth < m.CurrentStats.MaxHealth);
 
@@ -434,16 +458,12 @@ namespace GN3.UI
             row.GetComponent<Image>().color = rowColor;
             if (selected && !onExpedition) UITheme.CreateSelectFrame(row.transform);
 
-            var layoutElement = row.GetComponent<LayoutElement>();
-            layoutElement.minHeight = 56;
-            layoutElement.preferredHeight = 56;
-
             var hLayout = row.GetComponent<HorizontalLayoutGroup>();
             hLayout.padding = new RectOffset(12, 12, MemberRowPadding, MemberRowPadding);
             hLayout.spacing = 8;
             hLayout.childAlignment = TextAnchor.MiddleLeft;
             hLayout.childForceExpandWidth = false;
-            hLayout.childForceExpandHeight = true;
+            hLayout.childForceExpandHeight = false; // 줄이 글에 맞춰 커져도 초상·버튼은 제 크기로 가운데
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
@@ -458,13 +478,15 @@ namespace GN3.UI
             var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}{guestTag}{lockTag}", 17, TextAnchor.MiddleLeft);
             nameText.fontStyle = FontStyle.Bold;
             nameText.color = textColor;
-            nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            nameText.gameObject.AddComponent<LayoutElement>().minWidth = 150;
+            nameText.horizontalOverflow = HorizontalWrapMode.Wrap; // 손님·잠금 표시까지 붙어 길면 줄을 바꾼다(옆 칸을 덮지 않게)
+            var nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
+            nameLayout.minWidth = nameLayout.preferredWidth = 200;
 
             var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세", 15, TextAnchor.MiddleLeft);
             classText.color = textColor;
-            classText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            classText.gameObject.AddComponent<LayoutElement>().minWidth = 120; // "마법사  39세"와 전투력 칸이 붙지 않게
+            classText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var classLayout = classText.gameObject.AddComponent<LayoutElement>();
+            classLayout.minWidth = classLayout.preferredWidth = 130; // "마법사  39세"와 전투력 칸이 붙지 않게
 
             // 위치(항상): 마을 / 훈련소 / 병원 / 쉼터 이름 / 파견: 퀘스트 / 귀환 중 — 마을 캐릭터 이동은 알림 대신 여기서 본다
             // (onExpedition은 훈련·입원·쉼터까지 '마을에 없음'으로 묶은 값이라 실제 파견은 따로 본다)
@@ -483,13 +505,13 @@ namespace GN3.UI
                 status += ailment.Def.isSevere ? $"  · <color={DangerHex}>! {ailment.Def.displayName}(중)</color>" : $"  · {ailment.Def.displayName}";
             var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}  <color=#a3937c>· 가방 {merc.BagContents.Count}/{merc.Bag.Slots}칸</color>\n<color=#a3937c>{status}</color>", 15, TextAnchor.MiddleLeft);
             powerText.color = onExpedition ? new Color(UITheme.TitleText.r, UITheme.TitleText.g, UITheme.TitleText.b, 0.5f) : UITheme.TitleText;
-            powerText.horizontalOverflow = HorizontalWrapMode.Wrap; // 길면 버튼 앞에서 줄을 바꾼다(줄 높이는 RefreshList가 늘림)
+            powerText.horizontalOverflow = HorizontalWrapMode.Wrap; // 길면 버튼 앞에서 줄을 바꾼다(줄 높이는 FitRowHeight가 맞춤)
             powerText.verticalOverflow = VerticalWrapMode.Overflow;
             var powerLayout = powerText.gameObject.AddComponent<LayoutElement>();
             powerLayout.minWidth = 100;
             powerLayout.preferredWidth = 0; // 글자 길이로 폭을 요구하지 않는다(버튼이 눌려 줄지 않게)
             powerLayout.flexibleWidth = 1; // 남는 폭을 차지해 버튼을 오른쪽 끝으로 민다
-            _wrappedRows.Add((layoutElement, powerText));
+            FitRowHeight.Attach(row, 56, MemberRowPadding * 2).AddColumn(0f, nameText).AddColumn(0f, classText).AddColumn(0f, powerText);
             string ailmentTip = Ailments.EffectTooltip(merc); // 부상·질병: 떨어진 능력치는 마우스를 올리면
             if (ailmentTip != null)
             {
@@ -557,7 +579,7 @@ namespace GN3.UI
                 return;
             }
             _fireArmedId = null;
-            if (!Wallet.TrySpend(release))
+            if (!Wallet.TrySpend(release, "방출"))
             {
                 ToastLog.Show($"위약금을 낼 골드가 부족합니다 (필요 {release}G, 보유 {Wallet.Gold}G)", false);
                 RefreshList();
@@ -811,6 +833,9 @@ namespace GN3.UI
 
             _battlePlayback = null;
             _battlingExpedition = null;
+            // 재생하는 동안 불러오기·새 게임으로 이 파견이 사라졌으면 결과를 내지 않는다
+            // (옛 파견 결과가 불러온 게임에 섞이면 보상이 들어오고, 쓰러진 용병과 같은 Id의 용병이 파티에서 빠져 그 파견원이 돌아오지 않았다).
+            if (!ExpeditionLog.Instance.Active.Contains(expedition)) yield break;
             // 체력 반영·전사·보상·알림·귀환은 ExpeditionBattle이 맡는다(자동 진행과 같은 처리).
             string summary = ExpeditionBattle.Conclude(expedition, battle, alertShown: true); // 결과는 이 패널에 바로 보인다
             SetResultText($"{summary}\n{BuildResultSummary(result)}");
@@ -870,6 +895,7 @@ namespace GN3.UI
             layout.flexibleWidth = 0;
 
             var buttonText = CreateText(buttonGO.transform, label, 15, TextAnchor.MiddleCenter);
+            layout.preferredWidth = Mathf.Max(64f, Mathf.Ceil(buttonText.preferredWidth) + 20f); // "해고 -120G?"처럼 긴 글도 버튼 안에
             var buttonTextRect = buttonText.GetComponent<RectTransform>();
             buttonTextRect.anchorMin = Vector2.zero;
             buttonTextRect.anchorMax = Vector2.one;

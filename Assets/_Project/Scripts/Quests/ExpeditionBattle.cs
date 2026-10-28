@@ -27,6 +27,8 @@ namespace GN3.Quests
             /// <summary>직접 전투: 시체를 뒤져 챙긴 전리품(BattleUIController). 있으면 처치 목록으로 굴리지 않고 이것만 받는다(지든 이기든).
             /// 자동 전투는 null(처치한 적마다 굴림).</summary>
             public List<(LootItem item, int count)> PreLooted;
+            /// <summary>직접 전투: 칸 쓰는 전리품을 대원마다 어느 가방에 넣었는지(Fighters 순서 — 전투 중 끌어 옮긴 그대로). 있으면 StowLoot이 순서대로 나누지 않고 이대로 넣는다.</summary>
+            public List<List<LootItem>> PreAssigned;
             /// <summary>직접 전투(BattleUIController)로 치렀다 — 이기면 보상·명성·성장을 더 받는다(DirectGoldBonus 등).</summary>
             public bool Direct;
             public bool Victory => Result.Outcome == BattleOutcome.TeamAVictory;
@@ -123,18 +125,21 @@ namespace GN3.Quests
             public int Score;      // 이번 전투 평점 점수 0~100(BattleRating — 등급은 Grade)
             public bool Mvp;       // 이번 판 최고 점수
             public string Stats;   // "피해 320 · 받은 피해 140 · 처치 3 · 치유 0"(결과 화면 툴팁)
+            public int Dealt, Healed, Taken; // 이번 전투 딜량·힐량·받은 피해(의뢰 기록 그래프)
         }
 
         /// <summary>
         /// 챙긴 전리품을 넣는다: 칸을 쓰는 것은 대원 가방에(전투 가방 창과 같은 순서 — BagCatalog.Split, 원정이 끝나도 남는다),
         /// 칸을 안 쓰는 재료는 창고에·동전 주머니는 금화로(LootBag.Add). 쓰러진 대원 몫은 그 가방과 함께 잃는다(BagLost).
         /// </summary>
-        private static void StowLoot(Report report, IReadOnlyList<Mercenary> fighters)
+        private static void StowLoot(Report report, IReadOnlyList<Mercenary> fighters, List<List<LootItem>> assigned = null)
         {
             LootBag.Add(report.Loot.Where(l => !BagCatalog.UsesSlot(l.item)));
-            var units = BagCatalog.Units(report.Loot);
+            // 직접 전투는 전투 중 정한 대원별 가방 그대로(끌어 옮긴 것 포함), 아니면 앞 대원 빈 칸부터 나눈다
+            bool useAssigned = assigned != null && assigned.Count == fighters.Count;
+            var units = useAssigned ? assigned.SelectMany(a => a).ToList() : BagCatalog.Units(report.Loot);
             LootBag.MarkSeen(units);
-            var shares = BagCatalog.Split(units, fighters);
+            var shares = useAssigned ? assigned : BagCatalog.Split(units, fighters);
             int stowed = 0;
             for (int i = 0; i < fighters.Count; i++)
                 if (fighters[i].IsAlive) stowed += fighters[i].AddToBag(shares[i]);
@@ -161,6 +166,9 @@ namespace GN3.Quests
                 {
                     member.Score = score;
                     member.Stats = BattleRating.Describe(unit);
+                    member.Dealt = unit.DamageDealt;
+                    member.Healed = unit.HealingDone;
+                    member.Taken = unit.DamageTaken;
                     if (best == null || score > best.Score) best = member;
                 }
                 merc.Record.AddBattle(GameClock.CurrentDay, quest.Title, quest.Difficulty, battle.Victory, score,
@@ -199,6 +207,7 @@ namespace GN3.Quests
                 {
                     fallen.Add(merc.Name);
                     fallenMercs.Add(merc);
+                    GN3.Economy.Achievements.Memorialize(merc, $"전사 — {quest.Title}"); // 명예의 전당
                     PlayerParty.Instance.Remove(merc);
                 }
             }
@@ -225,7 +234,7 @@ namespace GN3.Quests
                     joint = $" (연합 몫 {reward - ours}G 제외)";
                     reward = ours;
                 }
-                Wallet.Add(reward);
+                Wallet.Add(reward, "의뢰 보상");
                 string directNote = battle.Direct && report.DirectGold > 0 ? $" (직접 전투 보너스 +{report.DirectGold}G·명성 +{report.DirectReputation})" : "";
                 summary = $"{quest.Title} — 임무 완료! 보상 +{reward}G{joint} · 명성 +{rep}{directNote}";
                 Guild.Add(rep);
@@ -242,7 +251,7 @@ namespace GN3.Quests
                 if (quest.MaterialReward.Count > 0)
                     report.Loot = report.Loot.Concat(quest.MaterialReward).GroupBy(l => l.item)
                         .Select(g => (g.Key, g.Sum(l => l.count))).ToList();
-                StowLoot(report, battle.Fighters);
+                StowLoot(report, battle.Fighters, battle.PreAssigned);
                 if (report.Loot.Count > 0) summary += $" · 전리품: {LootCatalog.Describe(report.Loot)}";
                 if (bagLeft > 0) summary += $" · 가방이 모자라 {bagLeft}개는 두고 왔다";
                 if (report.BagLost > 0) summary += $" · 쓰러진 대원의 가방과 함께 {report.BagLost}개를 잃었다";
@@ -273,7 +282,7 @@ namespace GN3.Quests
                 if (battle.PreLooted != null && battle.PreLooted.Count > 0)
                 {
                     report.Loot = GroupLoot(battle.PreLooted);
-                    StowLoot(report, battle.Fighters);
+                    StowLoot(report, battle.Fighters, battle.PreAssigned);
                     summary += $" · 챙긴 전리품: {LootCatalog.Describe(report.Loot)}";
                     if (report.BagLost > 0) summary += $" · 쓰러진 대원의 가방과 함께 {report.BagLost}개를 잃었다";
                 }
@@ -291,6 +300,10 @@ namespace GN3.Quests
                 if (member != null) member.Gains.AddRange(gains);
             }
             string ratingLine = RateFighters(report, battle, quest);
+            // 길드 의뢰 기록(의뢰 기록 창 H): 승패·보상·대원·MVP·전사자 + 대원별 딜량·힐량·받은 피해
+            QuestHistory.Record(quest, battle.Victory, report.Gold, report.Members.Select(m => m.Merc.Name),
+                report.Members.FirstOrDefault(m => m.Mvp)?.Merc.Name, fallen,
+                report.Members.Select(m => (m.Dealt, m.Healed, m.Taken)));
 
             var survivorsList = expedition.Members.Where(m => m.IsAlive).ToList();
             MercenaryCondition.AfterBattle(survivorsList, battle.Victory, fallenMercs); // 피로·사기(친밀도 보정 포함)

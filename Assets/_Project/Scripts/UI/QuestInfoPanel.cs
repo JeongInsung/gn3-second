@@ -156,16 +156,8 @@ namespace GN3.UI
             FillLabel(accept.transform, "수락", 18);
 
             // 닫기
-            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            close.transform.SetParent(_panel.transform, false);
-            var closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-8f, -8f);
-            closeRect.sizeDelta = new Vector2(28f, 28f);
-            close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
-            close.GetComponent<Button>().onClick.AddListener(Hide);
+            UITheme.CreateCloseX(_panel.transform, Hide); // 공통 닫기 X(32px, 오른쪽 위)
             EscapeCloser.Register(_panel, Hide, WindowRole.Linked); // 게시판 줄을 눌러 여는 창: 퀘스트 창을 닫지 않는다
-            FillLabel(close.transform, "X", 16);
 
             _panel.SetActive(false);
         }

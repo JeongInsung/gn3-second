@@ -6,7 +6,7 @@ namespace GN3.Battle
 {
     /// <summary>
     /// 전투 바닥 꾸미기(보이는 것만, 클릭·판정과 무관). BattleGroundTiles가 바닥을 깔 때 같은 seed의 rng로 부른다(같은 퀘스트는 늘 같은 배치).
-    ///  - 판 안: 꽃밭(꽃무더기를 몇 포기씩 모음)·야생화 묶음·풀 포기, 돌은 싸우는 가운데 줄을 피해 위·아래 띠에만.
+    ///  - 판 안: 꽃밭(꽃무더기를 몇 포기씩 모음)·야생화 묶음·풀 포기(둥근 공터 안에만). 돌은 두지 않는다.
     ///  - 판 밖: 좌우 여백에 같은 것을 듬성듬성(판 경계가 드러나지 않게).
     ///  - 살아 있는 것(Atmosphere 층, 유닛 위): 꽃밭 사이를 오가는 나비, 숲 가장자리·꽃밭 위의 빛 가루, 천천히 지나가는 구름 그림자.
     /// 그림은 Resources/Battle/Decor(Tools/bake_battle_decor.py가 Assets/조정식/Decorations에서 표시 크기 2배로 구운 것).
@@ -22,9 +22,7 @@ namespace GN3.Battle
         private const int PatchCount = 10;
         private const float PatchSpacing = 220f;        // 꽃밭 중심끼리 이만큼 떨어뜨린다
         private const float PatchRadius = 60f;
-        private const int WildflowerCount = 6, GrassCount = 38, StoneCount = 8;
-        private const float TopBandBottom = 590f;        // 돌은 이 위(숲 쪽)나
-        private const float BottomBandTop = 80f;         // 이 아래에만 둔다
+        private const int WildflowerCount = 6, GrassCount = 38;
         private const int Attempts = 60;                 // 한 개를 놓으려고 던져 보는 횟수
 
         private static readonly Dictionary<string, Sprite> _sprites = new Dictionary<string, Sprite>();
@@ -69,9 +67,7 @@ namespace GN3.Battle
 
             Scatter(items, taken, rng, "wildflowers", WildflowerCount, 40f, 48f, 26f, fieldSize, 0f, fieldSize.y);
             Scatter(items, taken, rng, "grass", GrassCount, 26f, 36f, 14f, fieldSize, 0f, fieldSize.y);
-            // 돌: 위쪽 띠(숲 쪽)와 아래쪽 띠에만 — 싸우는 가운데 줄은 비워 둔다.
-            for (int i = 0; i < StoneCount; i++)
-                ScatterBand(items, taken, rng, "stone", 28f, 40f, 22f, fieldSize);
+            // 돌은 두지 않는다: 숲이 타원으로 물러난 뒤 빈 잔디에 떠 보여 어색했다.
 
             Spawn(groundTiles, "Decor", items, rng);
             return patches;
@@ -90,8 +86,6 @@ namespace GN3.Battle
                     AddInRect(items, taken, rng, Flower(rng), 30f, 40f, 16f, x0, x1, 0f, fieldSize.y);
                 for (int i = 0; i < 6; i++)
                     AddInRect(items, taken, rng, "grass", 26f, 36f, 14f, x0, x1, 0f, fieldSize.y);
-                for (int i = 0; i < 2; i++)
-                    AddInRect(items, taken, rng, "stone", 28f, 40f, 22f, x0, x1, 0f, fieldSize.y);
             }
             Spawn(area, "OutskirtsDecor", items, rng);
         }
@@ -132,6 +126,7 @@ namespace GN3.Battle
         private static bool TryAdd(List<Item> items, List<(Vector2 pos, float radius)> taken, string name, Vector2 pos, float height, float radius, Vector2 bounds)
         {
             if (pos.x < 10f || pos.x > bounds.x - 10f || pos.y < 4f || pos.y > bounds.y - height * 0.6f) return false;
+            if (GN3.Combat.FieldBattleSession.ArenaRadius(pos.x, pos.y, 20f) > 1f) return false; // 둥근 공터 모서리 밖(숲 밑)은 비운다
             return Place(items, taken, name, pos, height, radius);
         }
 
@@ -153,20 +148,6 @@ namespace GN3.Battle
                     var pos = new Vector2(Range(rng, 0f, bounds.x), Range(rng, yMin, yMax));
                     if (TryAdd(items, taken, name, pos, Range(rng, minHeight, maxHeight), radius, bounds)) break;
                 }
-        }
-
-        /// <summary>위쪽 띠나 아래쪽 띠 중 한 곳에 하나.</summary>
-        private static void ScatterBand(List<Item> items, List<(Vector2 pos, float radius)> taken, System.Random rng, string name,
-            float minHeight, float maxHeight, float radius, Vector2 bounds)
-        {
-            for (int attempt = 0; attempt < Attempts; attempt++)
-            {
-                float height = Range(rng, minHeight, maxHeight);
-                bool top = rng.NextDouble() < 0.6;
-                float y = top ? Range(rng, TopBandBottom, bounds.y - height * 0.6f) : Range(rng, 6f, BottomBandTop - height * 0.5f);
-                var pos = new Vector2(Range(rng, 30f, bounds.x - 30f), y);
-                if (TryAdd(items, taken, name, pos, height, radius, bounds)) return;
-            }
         }
 
         private static void AddInRect(List<Item> items, List<(Vector2 pos, float radius)> taken, System.Random rng, string name,

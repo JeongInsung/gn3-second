@@ -12,6 +12,7 @@ namespace GN3.UI
     public static class BlackMarketShopUI
     {
         private static BuildingPanel _panel;
+        private static bool _sellAllArmed; // [모두 팔기]를 한 번 눌러 금액을 보여 주는 중
 
         public static void Create(Transform parent)
         {
@@ -29,6 +30,7 @@ namespace GN3.UI
                 ToastLog.Show("암거래 상인은 이미 떠났습니다.", false);
                 return;
             }
+            _sellAllArmed = false;
             Fill();
         }
 
@@ -49,14 +51,26 @@ namespace GN3.UI
             var header = ShopListUI.CreateRow(_panel, "BlackMarketHeader");
             ShopListUI.CreateTwoLineLabel(header.transform, "정가보다 비싸게 사 간다",
                 "등급이 높을수록 더: 최하급 ×1.2 · 하급 ×1.35 · 중급 ×1.5 · 상급 ×1.75 · 최상급 ×2 (건설 재료는 안 산다)");
-            var sellAll = ShopListUI.CreateButton(header.transform, "모두 팔기", () =>
+            // 모두 팔기: 창고처럼 두 번 누른다(첫 클릭은 받을 금액). 제작 재료·마정석은 빼고 판다(하나씩은 팔 수 있다).
+            var bulk = entries.Where(e => LootBag.SellsInBulk(e.item)).ToList();
+            int bulkValue = bulk.Sum(e => BlackMarket.PriceOf(e.item) * e.count);
+            var sellAll = ShopListUI.CreateButton(header.transform, _sellAllArmed ? $"정말? ≈{System.Math.Min(bulkValue, BlackMarket.Purse)}G" : "모두 팔기", () =>
             {
+                if (!_sellAllArmed)
+                {
+                    _sellAllArmed = true;
+                    Fill();
+                    return;
+                }
+                _sellAllArmed = false;
                 int gold = BlackMarket.SellAll();
                 if (gold > 0) ToastLog.Show($"암거래 상인에게 전리품을 팔았습니다 (+{gold}G)");
-            }, 120f);
-            sellAll.interactable = entries.Any(e => BlackMarket.PriceOf(e.item) <= BlackMarket.Purse);
-            if (!sellAll.interactable)
-                sellAll.gameObject.AddComponent<TooltipTrigger>().Text = entries.Count == 0 ? "팔 전리품이 없습니다." : "상인의 남은 돈이 모자랍니다.";
+                else Fill();
+            }, 140f);
+            sellAll.interactable = bulk.Any(e => BlackMarket.PriceOf(e.item) <= BlackMarket.Purse);
+            sellAll.gameObject.AddComponent<TooltipTrigger>().Text = !sellAll.interactable
+                ? (bulk.Count == 0 ? "모두 팔 전리품이 없습니다(제작 재료는 하나씩 파세요)." : "상인의 남은 돈이 모자랍니다.")
+                : "제작 재료·마정석은 남기고 판다 — 하나씩은 아래 줄에서 팔 수 있다";
 
             if (entries.Count == 0) ShopListUI.CreateEmptyRow(_panel, "팔 전리품이 없습니다. 몬스터를 쓰러뜨려 모아 오세요.");
 
@@ -68,8 +82,10 @@ namespace GN3.UI
                 outline.effectColor = LootGrades.ColorOf(loot.Grade);
                 outline.effectDistance = new Vector2(1.5f, -1.5f);
                 int price = BlackMarket.PriceOf(loot);
+                string uses = Crafting.UsesOf(loot);
                 ShopListUI.CreateTwoLineLabel(row.transform, $"{loot.Name} ×{count}  {loot.GradeTag}",
-                    $"정가 {loot.Price}G → {price}G (×{BlackMarket.Multiplier(loot.Grade):0.##})");
+                    $"정가 {loot.Price}G → {price}G (×{BlackMarket.Multiplier(loot.Grade):0.##})" + (uses != null ? " · 제작 재료" : ""));
+                if (uses != null) row.AddComponent<TooltipTrigger>().Text = uses + " — [모두 팔기]에서 남긴다";
                 var target = loot;
                 string block = price > BlackMarket.Purse ? $"상인의 남은 돈이 모자랍니다 (남은 {BlackMarket.Purse}G)" : null;
                 var one = ShopListUI.CreateButton(row.transform, "1개 팔기", () => Sell(target, 1), 90f);
@@ -92,6 +108,10 @@ namespace GN3.UI
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        private static void ResetForPlaySession() => _panel = null;
+        private static void ResetForPlaySession()
+        {
+            _panel = null;
+            _sellAllArmed = false;
+        }
     }
 }

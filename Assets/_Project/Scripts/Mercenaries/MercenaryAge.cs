@@ -87,6 +87,7 @@ namespace GN3.Mercenaries
 
         private static void Retire(Mercenary merc)
         {
+            GN3.Economy.Achievements.Memorialize(merc, "은퇴"); // 명예의 전당(파티에서 빼기 전에 경력을 남긴다)
             PlayerParty.Instance.Remove(merc);
             string line = $"{Josa.IGa(merc.Name)} {merc.Age}세가 되어 용병 일을 그만두고 은퇴했다.";
             ToastLog.Show(line, false);

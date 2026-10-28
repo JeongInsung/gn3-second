@@ -130,7 +130,9 @@ namespace GN3.UI
         {
             var header = ShopListUI.CreateRow(_panel, "LootHeader");
             var title = ShopListUI.CreateText(header.transform,
-                LootBag.KindCount > 0 ? $"전리품 ({LootBag.KindCount}종 · 모두 팔면 {LootBag.TotalValue}G)" : "전리품",
+                LootBag.KindCount > 0
+                    ? $"전리품 ({LootBag.KindCount}종 · 모두 팔면 {LootBag.TotalValue}G" + (LootBag.KeptIngredientKinds > 0 ? $" · 제작 재료 {LootBag.KeptIngredientKinds}종은 남김)" : ")")
+                    : "전리품",
                 16, TextAnchor.MiddleLeft, UITheme.BodyText);
             title.fontStyle = FontStyle.Bold;
             title.gameObject.AddComponent<UnityEngine.UI.LayoutElement>().flexibleWidth = 1f;
@@ -182,8 +184,10 @@ namespace GN3.UI
                 var gradeOutline = row.transform.GetChild(row.transform.childCount - 1).gameObject.AddComponent<UnityEngine.UI.Outline>(); // 아이콘 둘레 등급 색
                 gradeOutline.effectColor = LootGrades.ColorOf(loot.Grade);
                 gradeOutline.effectDistance = new Vector2(1.5f, -1.5f);
+                string uses = Crafting.UsesOf(loot); // 제작 재료면 [모두 팔기]에서 빠진다 — 줄에 표시하고 쓰이는 곳은 툴팁
                 ShopListUI.CreateTwoLineLabel(row.transform, $"{loot.Name} ×{count}  {loot.GradeTag}", // 이 글자는 색 태그를 그리지 않는다
-                    $"개당 {loot.Price}G · 모두 {loot.Price * count}G");
+                    $"개당 {loot.Price}G · 모두 {loot.Price * count}G" + (uses != null ? " · 제작 재료(모두 팔기에서 남김)" : ""));
+                if (uses != null) row.AddComponent<TooltipTrigger>().Text = uses;
                 ShopListUI.CreateButton(row.transform, "1개 팔기", () => Sell(loot, 1), 90f);
                 ShopListUI.CreateButton(row.transform, "모두", () => Sell(loot, LootBag.Count(loot)), 70f);
             }

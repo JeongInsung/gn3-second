@@ -156,7 +156,7 @@ namespace GN3.Mercenaries
                     }
                     if (!loan.Joint)
                     {
-                        if (Wallet.TrySpend(loan.DailyFee)) g.Gold += loan.DailyFee;
+                        if (Wallet.TrySpend(loan.DailyFee, "대여료")) g.Gold += loan.DailyFee;
                         else
                         {
                             RivalGuilds.AddRelation(g, -3, $"대여료를 내지 못해 {Josa.EulReul(loan.Merc.Name)} 돌려받았다");
@@ -169,7 +169,7 @@ namespace GN3.Mercenaries
                 {
                     int fee = Mathf.Min(loan.DailyFee, g.Gold);
                     g.Gold -= fee;
-                    Wallet.Add(fee);
+                    Wallet.Add(fee, "대여료");
                     if (today >= loan.EndDay) ComeBack(loan, g);
                 }
             }
@@ -196,7 +196,7 @@ namespace GN3.Mercenaries
                 return;
             }
             int compensation = Mathf.Min(Pricing.HireCost(loan.Merc), Wallet.Gold);
-            Wallet.TrySpend(compensation);
+            Wallet.TrySpend(compensation, "사망 보상금");
             g.Gold += compensation;
             RivalGuilds.AddRelation(g, DeathRelation, $"빌려 간 {Josa.EulReul(loan.Merc.Name)} 잃었다 (보상금 {compensation}G)");
             ToastLog.Show($"빌려 온 {Josa.EulReul(loan.Merc.Name)} 잃어 {g.Name}에 보상금 {compensation}G를 냈습니다.");

@@ -23,7 +23,7 @@ namespace GN3.Battle
     /// 필드 좌표는 화면 필드 영역의 로컬 좌표와 1:1(왼쪽 아래가 0,0)이다.
     /// 몬스터 그림이 아직 없어 기본 도형(BattlePlaceholderSprites)으로 그린다 - 그림이 생기면 CreateUnitView의 적 분기만 바꾸면 된다.
     /// </summary>
-    public class BattleUIController : MonoBehaviour
+    public partial class BattleUIController : MonoBehaviour // 전투 통계 그래프는 BattleUIController.Meter.cs
     {
         private class UnitView
         {
@@ -94,7 +94,51 @@ namespace GN3.Battle
             public UnitView View;
             public List<(LootItem item, int count)> Loot;
             public bool[] Picked; // 처음엔 전부 고름
+            public bool[] Revealed; // 수색으로 드러난 칸(비콘식: 하나씩 뜸 들여 열린다 — RevealLoot)
+            public LootPile Pile;   // 바닥 더미에서 연 창(Unit 없음)
+            public bool AllRevealed => Revealed != null && Revealed.All(r => r);
+            public string Name => Unit != null ? Unit.Combatant.Name : "버린 물건";
         }
+
+        // 다시 줍기: 가방에서 버린 것은 그 대원 발밑 바닥 더미(_piles)로, 시체 창에서 두고 간 것은 그 시체(_leftovers)에 남는다.
+        // 더미·남은 시체를 누르면 이미 열린 수색 창이 뜨고, 창을 닫을 때 안 가져간 것은 다시 출처로 돌아간다(ReturnLeftovers).
+        private class LootPile
+        {
+            public Vector2 Pos;
+            public readonly List<(LootItem item, int count)> Loot = new List<(LootItem, int)>();
+            public GameObject Marker;
+            public Image Icon;
+            public Text Count;
+            public TooltipTrigger Tip;
+        }
+        private readonly List<LootPile> _piles = new List<LootPile>();
+        private readonly Dictionary<FieldUnit, List<(LootItem item, int count)>> _leftovers = new Dictionary<FieldUnit, List<(LootItem, int)>>();
+        private const float PileMergeDistance = 70f;
+        private const float LeftoverAlpha = 0.8f; // 남긴 것이 있는 털린 시체(다시 누를 수 있다)
+
+        // 뒤진 시체 창의 카드 한 칸(가려진 덮개 · 수색 막대 · 등급 빛 · 고름 표시)
+        private class LootCard
+        {
+            public RectTransform Root;
+            public CanvasGroup Group;
+            public GameObject Cover;
+            public RectTransform SearchFill;
+            public Text Question;
+            public Image Glow;
+            public Outline Border;
+            public Image Check; // "제외" 띠(뺀 카드)
+        }
+        private readonly List<LootCard> _lootCards = new List<LootCard>();
+        private Coroutine _lootRevealRoutine;
+        private bool _lootRevealFast;        // [모두 열기]
+        private Text _lootTitleText, _lootStatusText, _lootSubText;
+        private GameObject _lootSubRow; // 수색 창 둘째 줄(가방 용량 막대 · 다음 시체)
+        private Button _lootRevealAllButton;
+        private const float LootCardWidth = 88f, LootCardHeight = 104f, LootCardGap = 8f;
+        private const int LootCardColumns = 4;
+        // 등급별 수색 시간(최하급 → 최상급), 등급 없는 것(재료·동전)은 LootSearchPlain. 좋은 것일수록 뜸 들인다.
+        private static readonly float[] LootSearchSeconds = { 0.35f, 0.45f, 0.6f, 0.9f, 1.3f };
+        private const float LootSearchPlain = 0.4f, LootSearchFast = 0.08f;
         private readonly Queue<LootChoice> _lootChoices = new Queue<LootChoice>();
         private LootChoice _lootChoiceShown;
         private GameObject _lootChoicePanel;
@@ -106,8 +150,32 @@ namespace GN3.Battle
         // 가방: 파견대 가방 칸 합(BagCatalog)만큼만 들고 온다. 쓴 칸 = 챙긴 것 개수(건설 재료·동전 주머니 빼고 — BagCatalog.UsesSlot).
         private int _bagCapacity;
         private int BagUsed => BagCatalog.SlotsUsed(_lootedItems);
+
+        // 대원별 가방 배정: _bagNew[i] = 대원 i(_fighters 순서)가 이번 전투에서 새로 든 칸 쓰는 전리품(끌어 옮기면 바뀐다).
+        // 결과 보고에 그대로 넘긴다(ExpeditionBattle.Battle.PreAssigned). _lootedItems는 같은 것을 한 줄로 센 기록.
+        private List<LootItem>[] _bagNew = new List<LootItem>[0];
+
+        /// <summary>대원 i 가방의 빈 칸(가방 칸 − 지난 원정부터 든 것 − 이번에 든 것).</summary>
+        private int FreeOf(int i) =>
+            i < 0 || i >= _fighters.Count ? 0 : Mathf.Max(0, _fighters[i].Bag.Slots - _fighters[i].BagContents.Count - _bagNew[i].Count);
+
+        /// <summary>칸 쓰는 전리품 하나를 가방에 배정: preferred 대원에게 빈 칸이 있으면 거기, 아니면 살아 있는 대원 중 앞에서부터.</summary>
+        private void AssignNew(LootItem item, int preferred = -1)
+        {
+            if (_bagNew.Length == 0) return;
+            int target = preferred >= 0 && FreeOf(preferred) > 0 ? preferred : -1;
+            for (int i = 0; target < 0 && i < _fighters.Count; i++)
+                if (_fighters[i].IsAlive && FreeOf(i) > 0) target = i;
+            for (int i = 0; target < 0 && i < _fighters.Count; i++)
+                if (FreeOf(i) > 0) target = i;
+            if (target < 0) target = _fighters.Count - 1; // 넘침(칸 계산상 오지 않는다)
+            _bagNew[target].Add(item);
+        }
+
+        /// <summary>가방 창 칸 순서(대원 순서대로 이번 전투 새것)로 펼친 목록.</summary>
+        private List<LootItem> NewUnits() => _bagNew.SelectMany(b => b).ToList();
         private int BagFree => Mathf.Max(0, _bagCapacity - BagUsed);
-        private const float LootChoiceWidth = 380f, LootChoiceRowHeight = 42f, LootChoiceIcon = 34f;
+        private const float LootChoiceWidth = 420f; // 카드 4열 + 여백
         private const float LootChoiceMargin = 24f;       // 화면 오른쪽 끝에서
         private const float LootChoiceUnpickedAlpha = 0.35f;
         // 가방 창(B·오른쪽 위 [가방] 버튼, 화면 위 가운데): 대원마다 큰 칸 가방 카드(BagSlotsUI.CreateMercBagCard), 챙긴 것을 칸 순서대로 채운다.
@@ -216,6 +284,7 @@ namespace GN3.Battle
 
             _fighters = expedition.Members.Where(m => m.IsAlive).ToList();
             _bagCapacity = BagCatalog.CapacityOf(_fighters); // 전투 중 쓰러진 대원 몫도 동료가 들고 온다
+            _bagNew = _fighters.Select(_ => new List<LootItem>()).ToArray();
             var combatants = _fighters.Select(m => m.ToCombatant()).ToList();
             var melee = _fighters.Select(m => IsMeleeClass(m.Class.Kind)).ToList();
             var skills = _fighters.Select(m => ClassSkillFactory.Create(m.Class.Kind)).ToList();
@@ -235,9 +304,13 @@ namespace GN3.Battle
             _session.OnWaveStarted += OnWaveStarted;
             _session.OnSlamTelegraph += cast => StartCoroutine(SlamTelegraph(cast));
             _session.OnRoarTelegraph += cast => StartCoroutine(RoarTelegraph(cast));
-            _session.OnSkillUsed += (unit, skill) =>
+            _session.OnSkillUsed += (unit, skill, target) =>
             {
-                if (_views.TryGetValue(unit, out var v)) StartCoroutine(FloatText(v, skill.Name, new Color(0.6f, 0.85f, 1f), 175f));
+                if (_views.TryGetValue(unit, out var v))
+                {
+                    StartCoroutine(FloatText(v, skill.Name, new Color(0.6f, 0.85f, 1f), 175f));
+                    if (target != null && _views.TryGetValue(target, out var tv)) StartCoroutine(SkillFx(v, tv, skill));
+                }
                 AppendLog($"<color=#9fd0ff>{unit.Combatant.Name} — {skill.Name}</color>");
             };
 
@@ -280,8 +353,84 @@ namespace GN3.Battle
             var quest = _expedition.Quest;
             var next = quest.Waves[wave + 1];
             AppendLog($"<color=#ffd36b>{wave + 1}라운드 돌파! 다음: {(next.IsBoss ? "보스 " : "")}{next.EnemyName} ×{next.Count}</color>");
-            StartCoroutine(Banner($"{wave + 1}라운드 돌파!", $"다음 — {(next.IsBoss ? "보스 " : "")}{next.EnemyName} ×{next.Count}",
+            StartCoroutine(Banner($"{wave + 1}라운드 돌파!", $"정리 시간 {WaveLootSeconds:0}초 — 다음 {(next.IsBoss ? "보스 " : "")}{next.EnemyName} ×{next.Count}",
                 new Color(1f, 0.85f, 0.4f)));
+            BeginWaveLootBreak(wave);
+        }
+
+        // ---------- 라운드 정리(파밍) 시간 ----------
+        // 라운드를 깨면 다음 적을 바로 세우지 않고(FieldBattleSession.HoldBreak) 시체를 뒤질 시간을 준다.
+        // WaveLootSeconds가 지나거나 [다음 라운드]/Enter면 시작. 뒤질 시체가 없으면 곧 시작.
+
+        private const float WaveLootSeconds = 25f;
+        private const float WaveLootDoneSeconds = 3f; // 다 뒤졌으면 이만큼만 더 기다린다
+        private GameObject _waveBreakBar;
+        private Text _waveBreakText;
+        private float _waveBreakLeft = -1f;          // 남은 정리 시간(초, 실제 시간·일시정지 중엔 멈춤). 음수면 정리 중 아님
+        private int _waveBreakCleared;
+        private int _waveBreakEndedFrame = -1;
+        private bool InWaveLootBreak => _waveBreakLeft >= 0f || _waveBreakEndedFrame == Time.frameCount;
+
+        private void BeginWaveLootBreak(int wave)
+        {
+            _session.HoldBreak = true;
+            _waveBreakCleared = wave + 1;
+            _waveBreakLeft = WaveLootSeconds;
+            if (_waveBreakBar != null) Destroy(_waveBreakBar);
+            _waveBreakBar = new GameObject("WaveLootBar", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(ContentSizeFitter));
+            _waveBreakBar.transform.SetParent(_canvas.transform, false);
+            var rect = (RectTransform)_waveBreakBar.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = new Vector2(0f, FieldBottom + 14f);
+            StyleGamePanel(_waveBreakBar);
+            var layout = _waveBreakBar.GetComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(20, 12, 10, 10);
+            layout.spacing = 14f;
+            layout.childAlignment = TextAnchor.MiddleCenter;
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = layout.childForceExpandHeight = false;
+            var fitter = _waveBreakBar.GetComponent<ContentSizeFitter>();
+            fitter.horizontalFit = fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _waveBreakText = CreateText(_waveBreakBar.transform, "", 17, TextAnchor.MiddleLeft, UITheme.BodyText);
+            _waveBreakText.supportRichText = true;
+            _waveBreakText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            CreateGameButton(_waveBreakBar.transform, "다음 라운드", "Enter", GameButtonStyle.Primary, EndWaveLootBreak, 170f);
+            _waveBreakBar.transform.SetAsLastSibling();
+            UpdateWaveLootBreak();
+        }
+
+        /// <summary>정리 시간 막대 글자·카운트다운. 시간이 다 되거나 Enter면 다음 라운드.</summary>
+        private void UpdateWaveLootBreak()
+        {
+            if (_waveBreakLeft < 0f || _waveBreakBar == null)
+            {
+                if (_session.HoldBreak) _session.ReleaseBreak(0.8f); // 안전장치: 막대가 없는데 붙잡혀 있으면 놓는다
+                return;
+            }
+            if (!_paused) _waveBreakLeft -= Time.unscaledDeltaTime;
+            int remaining = RemainingCorpses();
+            bool nothingLeft = (remaining == 0 || BagFree <= 0) && _looting.Count == 0 && _lootChoiceShown == null;
+            if (nothingLeft) _waveBreakLeft = Mathf.Min(_waveBreakLeft, WaveLootDoneSeconds); // 뒤질 게 없으면 곧 시작
+            _waveBreakText.text = $"<b>{_waveBreakCleared}라운드 정리</b>  <color=#a3937c>시체를 눌러 뒤지세요 · 남은 시체 {remaining}</color>" +
+                                  $"  <color=#ffd36b>가방 {BagUsed}/{_bagCapacity}</color>  ·  다음 라운드까지 <b>{Mathf.CeilToInt(Mathf.Max(0f, _waveBreakLeft))}초</b>  <color=#a3937c>(Enter·Space)</color>";
+            var kb = Keyboard.current;
+            // 쉬는 시간엔 멈출 이유가 없어 Space도 "다음 라운드"(일시정지는 HandleKeys가 이때 받지 않는다)
+            bool enter = kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame || kb.spaceKey.wasPressedThisFrame);
+            if (enter || _waveBreakLeft <= 0f) EndWaveLootBreak();
+        }
+
+        /// <summary>정리 시간을 끝내고 다음 라운드(잠깐 뒤)를 세운다.</summary>
+        private void EndWaveLootBreak()
+        {
+            if (_waveBreakLeft < 0f) return;
+            _waveBreakLeft = -1f;
+            _waveBreakEndedFrame = Time.frameCount; // 같은 프레임의 Space가 일시정지로 또 먹히지 않게
+            if (_waveBreakBar != null) Destroy(_waveBreakBar);
+            _waveBreakBar = null;
+            if (_paused) SetPaused(false); // 멈춰 있으면 세션이 안 돌아 다음 라운드가 서지 않는다
+            _session.ReleaseBreak(0.8f);
+            AppendLog("<color=#ffd36b>다음 라운드 준비!</color>");
+            StartCoroutine(Banner("다음 라운드 준비!", "", new Color(1f, 0.85f, 0.4f)));
         }
 
         /// <summary>쓰러진 앞 라운드 적을 치우고 새 적을 그린다(아군은 그대로).</summary>
@@ -295,9 +444,9 @@ namespace GN3.Battle
                 if (!u.IsPlayerSide && !u.IsAlive)
                 {
                     _corpses[u] = v; // 시체는 필드에 남겨 뒤질 수 있게(그림은 쓰러짐 마지막 프레임에 멈춰 있다)
-                    bool looted = _looted.Contains(u);
-                    v.Group.alpha = looted ? LootedAlpha : 1f;
-                    v.ClickArea.raycastTarget = !looted;
+                    bool looted = _looted.Contains(u), left = _leftovers.ContainsKey(u);
+                    v.Group.alpha = looted ? (left ? LeftoverAlpha : LootedAlpha) : 1f;
+                    v.ClickArea.raycastTarget = !looted || left;
                     continue;
                 }
                 _drawOrder.Remove(v);
@@ -664,6 +813,12 @@ namespace GN3.Battle
         private void Update()
         {
             if (_session == null) return;
+            RefreshPartyCards(); // 아래 패널 대원 카드(체력·쿨타임·상태) — 배치·전투·결과 모두
+            CloseDetailOnOutsideClick(); // 상세 카드: 다른 곳을 누르면 닫는다
+            HandleWindowKeys();
+            UpdateMeter(); // 왼쪽 위 전투 통계(딜량·힐량·받은 피해), D로 켜고 끈다
+            TrackLootPanelPosition();
+            UpdateWaveLootBreak();
             if (_resultShown)
             {
                 foreach (var v in _views.Values) UpdateUnitView(v); // 마지막에 쓰러진 유닛도 끝까지 넘어가게(그림만)
@@ -731,7 +886,7 @@ namespace GN3.Battle
             var kb = Keyboard.current;
             if (kb == null) return;
             if (kb.qKey.wasPressedThisFrame) PressSkill();
-            if (kb.escapeKey.wasPressedThisFrame) { _picking = false; _focusPicking = false; }
+            if (kb.escapeKey.wasPressedThisFrame && _escConsumedFrame != Time.frameCount) { _picking = false; _focusPicking = false; }
             // 분대 명령 1~4: 멈추지 않아도 바로(일시정지 화면 버튼과 같은 명령·쿨타임)
             if (!_resultShown && !_salvaging)
             {
@@ -740,7 +895,7 @@ namespace GN3.Battle
                 if (kb.digit3Key.wasPressedThisFrame || kb.numpad3Key.wasPressedThisFrame) PressSquadOrder(SquadOrder.Advance);
                 if (kb.digit4Key.wasPressedThisFrame || kb.numpad4Key.wasPressedThisFrame) PressSquadOrder(SquadOrder.Focus);
             }
-            if (kb.spaceKey.wasPressedThisFrame) SetPaused(!_paused);
+            if (kb.spaceKey.wasPressedThisFrame && !InWaveLootBreak) SetPaused(!_paused); // 라운드 정리 중 Space는 "다음 라운드"
             if (kb.tabKey.wasPressedThisFrame) SwitchSquad();
             if (kb.fKey.wasPressedThisFrame) ToggleSpeed();
         }
@@ -935,10 +1090,10 @@ namespace GN3.Battle
             float deathTime = alive ? 0f : Time.time - v.DeathStart - (animatedDeath ? v.Monster.DieSeconds : 0f);
             float fall = alive ? 0f : 1f - Mathf.Pow(1f - Mathf.Clamp01(deathTime / DeathFallSeconds), 3f);
             bool corpse = !alive && !u.IsPlayerSide;
-            bool looted = _looted.Contains(u);
-            // 몬스터 시체는 쓰러진 그림 그대로 남고(털리면 조금 흐려짐), 쓰러짐이 끝나면 눌러 뒤질 수 있다. 아군은 흐려진다.
-            v.Group.alpha = corpse ? (looted ? LootedAlpha : 1f) : Mathf.Lerp(1f, 0.3f, fall);
-            v.ClickArea.raycastTarget = alive || (corpse && !looted && fall >= 1f);
+            bool looted = _looted.Contains(u), left = _leftovers.ContainsKey(u);
+            // 몬스터 시체는 쓰러진 그림 그대로 남고(털리면 조금 흐려짐 — 남긴 것이 있으면 덜), 쓰러짐이 끝나면 눌러 뒤질 수 있다. 아군은 흐려진다.
+            v.Group.alpha = corpse ? (looted ? (left ? LeftoverAlpha : LootedAlpha) : 1f) : Mathf.Lerp(1f, 0.3f, fall);
+            v.ClickArea.raycastTarget = alive || (corpse && (!looted || left) && fall >= 1f);
             v.Kick = Vector2.MoveTowards(v.Kick, Vector2.zero, KickRecoverPerSecond * Time.deltaTime);
             // 중독은 판정(쏘는 순간)이 아니라 포자가 닿은 뒤부터 보인다(여러 마리가 연달아 쏴도 첫 포자가 닿으면 바로).
             if (!u.Combatant.IsPoisoned) v.PoisonShown = false;
@@ -1069,6 +1224,15 @@ namespace GN3.Battle
         {
             foreach (var evt in events)
             {
+                // 패시브 발동(부활·즉사·도발): 대상 머리 위에 글자. 피해·회복이 없는 것은 글자만
+                if (evt.Proc != null)
+                {
+                    var procUnit = _session.UnitOf(evt.Target);
+                    if (procUnit != null && _views.TryGetValue(procUnit, out var procView))
+                        StartCoroutine(FloatText(procView, evt.Proc, ProcColor(evt.Proc), 200f));
+                    AppendLog($"<color=#ffd36b>{evt.Attacker.Name} — {evt.Proc.TrimEnd('!')}</color>");
+                    if (evt.Damage == 0) continue;
+                }
                 AppendLog(FormatEvent(evt));
                 if (evt.IsPoison) // 독 한 번: 공격 동작·투사체 없이 맞은 쪽에 초록 숫자와 독 거품만
                 {
@@ -1122,6 +1286,45 @@ namespace GN3.Battle
                 }
                 else
                     PlayHit(attackerView, targetView, label, color, hit, evt.Damage);
+            }
+        }
+
+        /// <summary>패시브 발동 글자 색: 부활 금빛 · 즉사 붉은빛 · 그 밖(도발) 주황.</summary>
+        private static Color ProcColor(string proc) =>
+            proc.StartsWith("부활") ? new Color(1f, 0.85f, 0.35f) : proc.StartsWith("즉사") ? new Color(1f, 0.3f, 0.25f) : new Color(1f, 0.6f, 0.25f);
+
+        /// <summary>
+        /// 스킬별 전용 효과(맞는 순간에 맞춰): 화염구 주황 폭발 고리 · 관통 사격 빛줄기 · 강타 흰 충격파와 흔들림 ·
+        /// 마무리 일격 붉은 번쩍임 · 치유 초록 빛기둥. 이름 글자(FloatText)는 따로 바로 뜬다.
+        /// </summary>
+        private IEnumerator SkillFx(UnitView caster, UnitView target, SkillBase skill)
+        {
+            bool heal = skill is HealSkill;
+            float delay = heal ? 0f : HitDelay(caster);
+            if (delay > 0f) yield return new WaitForSeconds(delay);
+            if (target.Root == null || caster.Root == null) yield break;
+            Vector2 feet = target.Root.anchoredPosition, body = feet + new Vector2(0f, 60f);
+            switch (skill)
+            {
+                case FireballSkill _:
+                    StartCoroutine(BattleFx.Shockwave(_fxLayer, body, 130f, new Color(1f, 0.55f, 0.15f)));
+                    StartCoroutine(BattleFx.HitSpark(_fxLayer, body, new Color(1f, 0.85f, 0.3f)));
+                    if (_shakeTargets != null) StartCoroutine(BattleFx.Shake(_shakeTargets, ShakeStrength * 0.6f, ShakeSeconds * 0.6f));
+                    break;
+                case PiercingShotSkill _:
+                    StartCoroutine(BattleFx.Streak(_fxLayer, caster.Root.anchoredPosition + new Vector2(0f, 60f), body, new Color(1f, 0.92f, 0.55f)));
+                    break;
+                case PowerStrikeSkill _:
+                    StartCoroutine(BattleFx.Shockwave(_fxLayer, body, 90f, Color.white));
+                    if (_shakeTargets != null) StartCoroutine(BattleFx.Shake(_shakeTargets, ShakeStrength, ShakeSeconds));
+                    break;
+                case FinishingBlowSkill _:
+                    StartCoroutine(BattleFx.HitSpark(_fxLayer, body, new Color(1f, 0.25f, 0.2f)));
+                    StartCoroutine(BattleFx.Streak(_fxLayer, body + new Vector2(-50f, 40f), body + new Vector2(50f, -40f), new Color(1f, 0.35f, 0.3f), 10f));
+                    break;
+                case HealSkill _:
+                    StartCoroutine(BattleFx.LightColumn(_fxLayer, feet, new Color(0.5f, 1f, 0.55f)));
+                    break;
             }
         }
 
@@ -1266,9 +1469,17 @@ namespace GN3.Battle
         /// <summary>쓰러진 몬스터를 뒤지기 시작한다: 머리 위에 황금 진행률 바(여러 시체를 같이 뒤질 수 있다).</summary>
         private void BeginLoot(FieldUnit unit)
         {
-            if (unit.IsPlayerSide || unit.IsAlive || _resultShown || _looted.Contains(unit) || _looting.ContainsKey(unit)) return;
+            if (unit.IsPlayerSide || unit.IsAlive || _resultShown || _looting.ContainsKey(unit)) return;
             var view = CorpseView(unit);
             if (view == null) return;
+            if (_looted.Contains(unit)) // 이미 뒤진 시체: 남겨 둔 것이 있으면 막대 없이 바로 연 창
+            {
+                if (!_leftovers.TryGetValue(unit, out var left)) return;
+                _leftovers.Remove(unit);
+                SetCorpseLeftover(view, false);
+                EnqueueLootChoice(new LootChoice { Unit = unit, View = view, Loot = left, Picked = left.Select(_ => true).ToArray(), Revealed = left.Select(_ => true).ToArray() });
+                return;
+            }
             if (BagFree <= 0) // 가방이 꽉 찼으면 뒤지지 않는다(시체는 털리지 않은 채 남는다)
             {
                 StartCoroutine(BattleFx.DamageNumber(_fxLayer, view.Root.anchoredPosition + new Vector2(0f, 60f), "가방이 가득 찼다", new Color(0.75f, 0.7f, 0.62f), false));
@@ -1342,30 +1553,168 @@ namespace GN3.Battle
                 StartCoroutine(BattleFx.DamageNumber(_fxLayer, origin, "빈손", new Color(0.75f, 0.7f, 0.62f), false));
                 return;
             }
-            _lootChoices.Enqueue(new LootChoice { Unit = unit, View = view, Loot = loot, Picked = loot.Select(_ => true).ToArray() });
+            EnqueueLootChoice(new LootChoice { Unit = unit, View = view, Loot = loot, Picked = loot.Select(_ => true).ToArray(), Revealed = new bool[loot.Count] });
+        }
+
+        /// <summary>수색 창 대기열에 넣는다(떠 있는 창이 없으면 바로 띄운다).</summary>
+        private void EnqueueLootChoice(LootChoice choice)
+        {
+            _lootChoices.Enqueue(choice);
             if (_lootChoiceShown == null) ShowNextLootChoice();
             else RefreshLootChoiceTitle();
         }
 
-        /// <summary>고른 것만 챙긴다(시체에서 튀어나오는 연출·로그). 하나도 안 골랐으면 두고 간다.</summary>
+        /// <summary>고른 것만 챙긴다(시체에서 튀어나오는 연출·로그). 안 가져간 것은 출처(시체·바닥 더미)에 남는다.</summary>
         private void TakeLoot(LootChoice choice, bool take)
         {
             var taken = take ? choice.Loot.Where((_, i) => choice.Picked[i]).ToList() : new List<(LootItem item, int count)>();
-            string name = choice.Unit.Combatant.Name;
+            ReturnLeftovers(choice, choice.Loot.Where((_, i) => !take || !choice.Picked[i]).ToList());
+            string name = choice.Name;
             if (taken.Count == 0)
             {
-                AppendLog($"<color=#a3937c>{Josa.EulReul(name)} 뒤졌지만 두고 갔다</color>");
+                AppendLog(choice.Pile != null ? "<color=#a3937c>버린 물건을 그대로 두었다</color>" : $"<color=#a3937c>{Josa.EulReul(name)} 뒤졌지만 두고 갔다 — 다시 눌러 주울 수 있다</color>");
                 return;
             }
             _lootedItems.AddRange(taken);
-            if (choice.View != null && choice.View.Root != null)
+            foreach (var unit in BagCatalog.Units(taken)) AssignNew(unit); // 대원 가방 배정(앞 대원 빈 칸부터)
+            if ((choice.View != null && choice.View.Root != null) || choice.Pile != null)
             {
-                Vector2 origin = choice.View.Root.anchoredPosition + new Vector2(0f, 30f);
+                Vector2 origin = (choice.Pile != null ? choice.Pile.Pos : choice.View.Root.anchoredPosition) + new Vector2(0f, 30f);
                 for (int i = 0; i < taken.Count; i++)
                     StartCoroutine(PopLoot(taken[i].item, taken[i].count, origin, i, taken.Count));
             }
-            AppendLog($"<color=#ffd36b>{Josa.EulReul(name)} 뒤졌다 — {LootCatalog.Describe(taken)}</color>");
+            AppendLog(choice.Pile != null ? $"<color=#ffd36b>다시 주웠다 — {LootCatalog.Describe(taken)}</color>"
+                : $"<color=#ffd36b>{Josa.EulReul(name)} 뒤졌다 — {LootCatalog.Describe(taken)}</color>");
             RefreshBag();
+        }
+
+        // ---------- 다시 줍기(시체에 남긴 것 · 바닥 더미) ----------
+
+        private static void AddStack(List<(LootItem item, int count)> list, LootItem item, int count)
+        {
+            int at = list.FindIndex(l => l.item == item);
+            if (at >= 0) list[at] = (item, list[at].count + count);
+            else list.Add((item, count));
+        }
+
+        /// <summary>수색 창에서 안 가져간 것을 출처로 돌려준다: 바닥 더미면 그 더미, 시체면 그 시체(다시 누를 수 있게).</summary>
+        private void ReturnLeftovers(LootChoice choice, List<(LootItem item, int count)> left)
+        {
+            if (choice.Pile != null)
+            {
+                foreach (var (item, count) in left) AddStack(choice.Pile.Loot, item, count);
+                RefreshPile(choice.Pile, closing: true);
+                return;
+            }
+            if (choice.Unit == null || left.Count == 0) return;
+            if (!_leftovers.TryGetValue(choice.Unit, out var list)) _leftovers[choice.Unit] = list = new List<(LootItem, int)>();
+            foreach (var (item, count) in left) AddStack(list, item, count);
+            if (choice.View != null && choice.View.Root != null) SetCorpseLeftover(choice.View, true);
+        }
+
+        /// <summary>털린 시체 모양: 남긴 것이 있으면 덜 흐리고 누를 수 있다.</summary>
+        private static void SetCorpseLeftover(UnitView view, bool left)
+        {
+            view.Group.alpha = left ? LeftoverAlpha : LootedAlpha;
+            view.ClickArea.raycastTarget = left;
+        }
+
+        /// <summary>대원 발밑(필드 좌표, 옆으로 조금 비켜서 — 유닛에 가려 안 눌리지 않게). 필드에 없으면 분대장 곁·필드 가운데.</summary>
+        private Vector2 MercFeet(int merc)
+        {
+            FieldUnit unit = merc >= 0 && merc < _fighters.Count ? _mercOf.FirstOrDefault(kv => kv.Value == _fighters[merc]).Key : null;
+            if (unit == null) unit = _session?.Leader;
+            var at = unit != null ? new Vector2(unit.Position.X, unit.Position.Y)
+                : new Vector2(FieldBattleSession.FieldWidth * 0.5f, FieldBattleSession.FieldHeight * 0.5f);
+            return at + new Vector2(46f, -14f);
+        }
+
+        /// <summary>가방에서 버린 것 하나를 그 대원 발밑 바닥 더미에(가까운 더미가 있으면 합친다). 누르면 다시 주울 수 있다.</summary>
+        private void DropItemOnGround(LootItem item, int merc)
+        {
+            var pos = MercFeet(merc);
+            var pile = _piles.FirstOrDefault(p => (p.Pos - pos).magnitude <= PileMergeDistance);
+            if (pile == null)
+            {
+                pile = new LootPile { Pos = pos };
+                _piles.Add(pile);
+                CreatePileMarker(pile);
+            }
+            AddStack(pile.Loot, item, 1);
+            RefreshPile(pile);
+            StartCoroutine(BattleFx.DamageNumber(_fxLayer, pile.Pos + new Vector2(0f, 40f), $"-{item.Name}", new Color(0.75f, 0.7f, 0.62f), false));
+        }
+
+        /// <summary>바닥 더미 표시: 땅 층의 작은 칸(가장 비싼 것의 아이콘 · 개수 · 금빛 테두리). 누르면 다시 줍는 창.</summary>
+        private void CreatePileMarker(LootPile pile)
+        {
+            var go = new GameObject("LootPile", typeof(RectTransform), typeof(Image), typeof(Outline));
+            go.transform.SetParent(_groundLayer, false);
+            pile.Marker = go;
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.sizeDelta = new Vector2(40f, 40f);
+            rect.anchoredPosition = pile.Pos;
+            var bg = go.GetComponent<Image>();
+            bg.color = new Color(0.12f, 0.09f, 0.06f, 0.88f);
+            bg.raycastTarget = true; // 땅 클릭(이동)보다 먼저 받는다
+            var outline = go.GetComponent<Outline>();
+            outline.effectColor = new Color(1f, 0.8f, 0.35f, 0.9f);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
+
+            var icon = CreateImage(go.transform, "Icon", Color.white);
+            var iconRect = (RectTransform)icon.transform;
+            Stretch(iconRect);
+            iconRect.offsetMin = new Vector2(4f, 4f);
+            iconRect.offsetMax = new Vector2(-4f, -4f);
+            pile.Icon = icon.GetComponent<Image>();
+            pile.Icon.preserveAspect = true;
+            pile.Icon.raycastTarget = false;
+
+            pile.Count = CreateText(go.transform, "", 12, TextAnchor.LowerRight, Color.white);
+            pile.Count.fontStyle = FontStyle.Bold;
+            pile.Count.raycastTarget = false;
+            pile.Count.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
+            Stretch(pile.Count.rectTransform);
+            pile.Count.rectTransform.offsetMax = new Vector2(-2f, 0f);
+
+            go.AddComponent<BattleClickTarget>().OnClick = _ => OpenPile(pile);
+            pile.Tip = go.AddComponent<TooltipTrigger>();
+        }
+
+        /// <summary>더미 표시를 다시 쓴다. 비었으면 치운다(창으로 꺼내 간 동안은 숨김 — 남은 것이 돌아오면 다시 보인다).</summary>
+        private void RefreshPile(LootPile pile, bool closing = false)
+        {
+            if (pile.Marker == null) return;
+            if (pile.Loot.Count == 0)
+            {
+                pile.Marker.SetActive(false);
+                if ((closing || _lootChoiceShown?.Pile != pile) && !_lootChoices.Any(c => c.Pile == pile))
+                {
+                    Destroy(pile.Marker);
+                    _piles.Remove(pile);
+                }
+                return;
+            }
+            pile.Marker.SetActive(true);
+            var top = pile.Loot.OrderByDescending(l => l.item.Price).First().item;
+            pile.Icon.sprite = top.Icon;
+            pile.Icon.color = top.Icon != null ? Color.white : new Color(1f, 0.8f, 0.3f);
+            int total = pile.Loot.Sum(l => l.count);
+            pile.Count.text = total > 1 ? $"×{total}" : "";
+            pile.Tip.Text = "<b>버린 물건</b>\n" + string.Join("\n", pile.Loot.Select(l => l.count > 1 ? $"{l.item.Name} ×{l.count}" : l.item.Name))
+                + "\n<color=#a3937c>눌러서 다시 줍기</color>";
+        }
+
+        /// <summary>바닥 더미를 누름: 안의 것을 모두 꺼내 열린 수색 창으로(안 가져간 것은 창을 닫으면 더미로 돌아간다).</summary>
+        private void OpenPile(LootPile pile)
+        {
+            if (_deploying || _resultShown || pile.Loot.Count == 0) return;
+            var loot = new List<(LootItem item, int count)>(pile.Loot);
+            pile.Loot.Clear();
+            pile.Marker.SetActive(false);
+            EnqueueLootChoice(new LootChoice { Pile = pile, Loot = loot, Picked = loot.Select(_ => true).ToArray(), Revealed = loot.Select(_ => true).ToArray() });
         }
 
         // ---------- 가방 창 ----------
@@ -1381,8 +1730,41 @@ namespace GN3.Battle
         private void RefreshBag()
         {
             UpdateBagButton();
+            RefreshPartyBags(); // 아래 패널 대원 카드 "가방 n/m"
             if (_bagWindow != null) BuildBagWindow();
             UpdateLootChoiceState();
+        }
+
+        private int _escConsumedFrame = -1; // 이 프레임의 Esc는 창을 닫는 데 썼다(수습 → 결과·고르기 취소가 같이 반응하지 않게)
+
+        /// <summary>
+        /// 창 단축키: 가방 창이 열려 있으면 Esc 닫기 · X 고른 칸 버리기. 아니면 시체 수색 창 E 가져가기 · R 모두 열기 · X 두고 가기.
+        /// </summary>
+        private void HandleWindowKeys()
+        {
+            var kb = Keyboard.current;
+            if (kb == null || _resultShown) return;
+            if (_openDetail != null && kb.escapeKey.wasPressedThisFrame) // 대원 상세 카드가 먼저 닫힌다
+            {
+                CloseDetail();
+                _escConsumedFrame = Time.frameCount;
+                return;
+            }
+            if (_bagWindow != null)
+            {
+                if (kb.escapeKey.wasPressedThisFrame)
+                {
+                    CloseBagWindow();
+                    _escConsumedFrame = Time.frameCount;
+                }
+                else if (kb.xKey.wasPressedThisFrame && _bagSelected >= 0) DropSelectedBagItem();
+                else if (kb.sKey.wasPressedThisFrame) SortBagByValue();
+                return;
+            }
+            if (_lootChoiceShown == null || _lootChoicePanel == null) return;
+            if (kb.eKey.wasPressedThisFrame && _lootTakeButton != null && _lootTakeButton.interactable) ResolveLootChoice(true);
+            else if (kb.rKey.wasPressedThisFrame) _lootRevealFast = true;
+            else if (kb.xKey.wasPressedThisFrame) ResolveLootChoice(false);
         }
 
         private void ToggleBagWindow()
@@ -1409,6 +1791,8 @@ namespace GN3.Battle
         /// </summary>
         private void BuildBagWindow()
         {
+            // 열린 채 다시 만들 때(줍기·칸 고르기)는 끌어 옮긴 자리를 이어받는다. 닫았다 열면 기본 자리.
+            Vector2? moved = _bagWindow != null ? DraggablePanel.MovedPosition((RectTransform)_bagWindow.transform) : null;
             if (_bagWindow != null) Destroy(_bagWindow);
             var panel = new GameObject("BagWindow", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
             panel.transform.SetParent(_canvas.transform, false);
@@ -1417,53 +1801,94 @@ namespace GN3.Battle
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 1f);
             rect.anchoredPosition = new Vector2(0f, BagWindowTop);
             rect.sizeDelta = new Vector2(BagWindowWidth, 0f);
-            panel.GetComponent<Image>().color = new Color(0.1f, 0.09f, 0.11f, 0.94f);
+            DraggablePanel.Attach(rect, moved); // 잡고 끌어 옮길 수 있다(칸의 아이템 끌기는 칸이 먼저 받는다)
+            StyleGamePanel(panel);
             var layout = panel.GetComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(14, 14, 10, 12);
-            layout.spacing = 6f;
+            layout.padding = new RectOffset(18, 18, 14, 14);
+            layout.spacing = 8f;
             layout.childControlWidth = layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
             panel.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            var title = CreateText(panel.transform, $"<b>가방</b>  <size=15><color=#ffd36b>{BagUsed}/{_bagCapacity}칸</color></size>", 18, TextAnchor.MiddleLeft, UITheme.TitleText);
+            // 머리: "가방" + 이번에 주운 칸 용량 막대
+            var header = CreateRow(panel.transform, "Header", 12f, TextAnchor.MiddleLeft, 30f);
+            int lootValue = _lootedItems.Sum(l => l.item.Price * l.count);
+            var title = CreateText(header.transform, $"<b>가방</b>  <size=13><color=#a3937c>이번 원정에서 챙긴 것</color>  <color=#ffd36b>≈ {lootValue}G</color></size>", 20, TextAnchor.MiddleLeft, UITheme.TitleText);
             title.supportRichText = true;
-            title.gameObject.AddComponent<LayoutElement>().minHeight = 26f;
+            title.horizontalOverflow = HorizontalWrapMode.Overflow;
+            title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            CreateCapacityBar(header.transform, BagUsed, _bagCapacity, 200f);
 
-            var units = BagSlotsUI.Units(_lootedItems);
+            var units = NewUnits(); // 고르기 순서 = 대원 순서대로 이번 전투 새것(_bagNew)
             if (_bagSelected >= units.Count) _bagSelected = -1;
-            var shares = BagSlotsUI.Split(units, _fighters); // 앞 대원 가방 빈 칸부터 차례로 채운다
             int start = 0;
             for (int m = 0; m < _fighters.Count; m++)
             {
-                // 지난 원정부터 가방에 남아 있던 것이 앞 칸, 이번에 챙긴 몫이 그 뒤(남아 있던 것은 고르거나 버릴 수 없다)
-                int offset = start, kept = _fighters[m].BagContents.Count, count = shares[m].Count;
-                var items = _fighters[m].BagContents.Concat(shares[m]).ToList();
+                // 지난 원정부터 가방에 남아 있던 것이 앞 칸, 이번에 챙긴 몫(_bagNew)이 그 뒤.
+                // 남아 있던 것은 고르거나 버릴 수 없지만, 끌어서 다른 대원 가방으로는 옮길 수 있다.
+                int merc = m, offset = start, kept = _fighters[m].BagContents.Count, count = _bagNew[m].Count;
+                var items = _fighters[m].BagContents.Concat(_bagNew[m]).ToList();
                 int selected = _bagSelected >= offset && _bagSelected < offset + count ? _bagSelected - offset + kept : -1;
-                BagSlotsUI.CreateMercBagCard(panel.transform, _fighters[m], items, BagSlotsUI.LargeSlot, BagSlotsUI.LargePerLine, BagSlotsUI.LargeGap,
-                    i => { if (i >= kept) SelectBagSlot(offset + i - kept); }, selected, i => { if (i >= kept) DropBagItem(offset + i - kept); });
+                var card = BagSlotsUI.CreateMercBagCard(panel.transform, _fighters[m], items, BagSlotsUI.LargeSlot, BagSlotsUI.LargePerLine, BagSlotsUI.LargeGap,
+                    i =>
+                    {
+                        if (ShiftHeld) // Shift+클릭: 빈 칸 가장 많은 다른 대원에게 바로
+                        {
+                            int to = BestReceiver(merc);
+                            if (to >= 0) MoveBagItem(new BagDrag { Merc = merc, Kept = i < kept, Index = i < kept ? i : i - kept }, to);
+                            return;
+                        }
+                        if (i >= kept) SelectBagSlot(offset + i - kept);
+                    }, selected, i => { if (i >= kept) DropBagItem(offset + i - kept); });
+                if (!_fighters[m].IsAlive) card.GetComponent<Image>().color = new Color(0.5f, 0.15f, 0.12f, 0.12f); // 쓰러진 대원 가방(잃는다)
+                MakeMercDropTarget(card, merc);
+                var grid = card.transform.Find("BagGrid");
+                for (int i = 0; grid != null && i < items.Count && i < grid.childCount; i++)
+                {
+                    var drag = grid.GetChild(i).gameObject.AddComponent<DragItem>();
+                    drag.Payload = new BagDrag { Merc = merc, Kept = i < kept, Index = i < kept ? i : i - kept };
+                    drag.Icon = items[i].Icon;
+                }
                 start += count;
             }
             BagSlotsUI.CreateOutsideRow(panel.transform, _lootedItems, 28f);
 
-            string selectedName = _bagSelected >= 0 ? units[_bagSelected].Name : null;
-            var note = CreateText(panel.transform, selectedName != null ? $"고른 칸: {selectedName}" : units.Count > 0 ? "칸을 눌러 골라 [버리기] · 우클릭하면 바로 버린다" : "아직 챙긴 것이 없다",
-                13, TextAnchor.MiddleLeft, UITheme.MutedText);
-            note.gameObject.AddComponent<LayoutElement>().minHeight = 18f;
-
-            var buttons = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
-            buttons.transform.SetParent(panel.transform, false);
-            buttons.GetComponent<LayoutElement>().minHeight = 38f;
-            var h = buttons.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = 10f;
-            h.childAlignment = TextAnchor.MiddleRight;
-            h.childControlWidth = h.childControlHeight = true;
-            h.childForceExpandWidth = h.childForceExpandHeight = false;
-            var drop = ShopListUI.CreateButton(buttons.transform, "버리기", DropSelectedBagItem, 100f);
+            // 아래: 고른 칸 설명(왼쪽) + 단축키 안내 + [X 버리기] [B 닫기]
+            var footer = CreateRow(panel.transform, "Footer", 10f, TextAnchor.MiddleRight, 42f);
+            var selectedItem = _bagSelected >= 0 ? units[_bagSelected] : null;
+            string info = selectedItem != null
+                ? $"<b>{selectedItem.Name}</b> {(selectedItem.HasGrade ? $"<color={LootGrades.HexOf(selectedItem.Grade)}>{selectedItem.GradeTag}</color> " : "")}<color=#a3937c>· {selectedItem.Price}G</color>"
+                : units.Count > 0 ? "<color=#a3937c>클릭: 고르기 · 우클릭: 버리기 · 끌기/Shift+클릭: 다른 대원 가방으로 · B/Esc: 닫기</color>"
+                : "<color=#a3937c>아직 챙긴 것이 없다 · 시체 카드를 대원 가방으로 끌어 넣을 수 있다 · B/Esc: 닫기</color>";
+            var note = CreateText(footer.transform, info, 14, TextAnchor.MiddleLeft, UITheme.BodyText);
+            note.supportRichText = true;
+            note.horizontalOverflow = HorizontalWrapMode.Overflow;
+            note.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            var drop = CreateGameButton(footer.transform, "버리기", "X", GameButtonStyle.Danger, DropSelectedBagItem, 116f);
             drop.interactable = _bagSelected >= 0;
-            ShopListUI.CreateButton(buttons.transform, "닫기 (B)", CloseBagWindow, 100f);
-            UIThemeApplier.ApplyNow(buttons.transform);
+            CreateGameButton(footer.transform, "값 순 정리", "S", GameButtonStyle.Secondary, SortBagByValue, 130f);
+            CreateGameButton(footer.transform, "닫기", "B", GameButtonStyle.Secondary, CloseBagWindow, 100f);
             panel.transform.SetAsLastSibling();
+        }
+
+        private static bool ShiftHeld => Keyboard.current != null && Keyboard.current.shiftKey.isPressed;
+
+        /// <summary>빈 칸이 가장 많은 살아 있는 대원(except 빼고). 없으면 -1.</summary>
+        private int BestReceiver(int except = -1)
+        {
+            int best = -1;
+            for (int i = 0; i < _fighters.Count; i++)
+                if (i != except && _fighters[i].IsAlive && (best < 0 || FreeOf(i) > FreeOf(best))) best = i;
+            return best;
+        }
+
+        /// <summary>[값 순 정리](S): 대원마다 이번 전투에 든 것을 비싼 순으로(대원끼리 옮기지는 않는다).</summary>
+        private void SortBagByValue()
+        {
+            foreach (var list in _bagNew) list.Sort((a, b) => b.Price.CompareTo(a.Price));
+            _bagSelected = -1;
+            RefreshBag();
         }
 
         private void SelectBagSlot(int index)
@@ -1472,29 +1897,145 @@ namespace GN3.Battle
             BuildBagWindow();
         }
 
-        /// <summary>고른 칸의 아이템 하나를 버린다(시체는 이미 털려 되돌아가지 않는다). 칸이 비면 다시 시체를 뒤질 수 있다.</summary>
+        /// <summary>고른 칸의 아이템 하나를 그 대원 발밑 바닥에 버린다(누르면 다시 주울 수 있다). 칸이 비면 다시 시체를 뒤질 수 있다.</summary>
         private void DropSelectedBagItem() => DropBagItem(_bagSelected);
 
-        /// <summary>index번째 칸(BagSlotsUI.Units 순서)의 아이템 하나를 버린다(우클릭·[버리기]).</summary>
+        /// <summary>index번째 칸(가방 창 순서 = 대원 순서대로 이번 전투 새것, NewUnits)의 아이템 하나를 버린다(우클릭·[버리기]).</summary>
         private void DropBagItem(int index)
         {
-            var units = BagSlotsUI.Units(_lootedItems);
-            if (index < 0 || index >= units.Count) return;
-            RemoveOneLooted(units[index]);
+            for (int m = 0; m < _bagNew.Length; m++)
+            {
+                if (index < _bagNew[m].Count)
+                {
+                    var item = _bagNew[m][index];
+                    _bagNew[m].RemoveAt(index);
+                    RemoveOneLooted(item, fromBag: false, merc: m);
+                    break;
+                }
+                index -= _bagNew[m].Count;
+            }
             _bagSelected = -1;
             RefreshBag();
             UpdateLootChoiceState(); // 칸이 비면 뜬 시체 창의 [가져가기]가 다시 열린다
         }
 
-        /// <summary>챙긴 것에서 그 아이템 하나를 빼고 로그를 남긴다.</summary>
-        private void RemoveOneLooted(LootItem item)
+        /// <summary>
+        /// 챙긴 것에서 그 아이템 하나를 빼서 그 대원 발밑 바닥 더미에 버린다(다시 주울 수 있다).
+        /// fromBag이면 대원 가방 배정에서도 뺀다(뒤에 든 대원부터 — 그 대원이 버린 것).
+        /// </summary>
+        private void RemoveOneLooted(LootItem item, bool fromBag = true, int merc = -1)
         {
             int at = _lootedItems.FindIndex(l => l.item == item && l.count > 0);
             if (at < 0) return;
             var (_, count) = _lootedItems[at];
             if (count > 1) _lootedItems[at] = (item, count - 1);
             else _lootedItems.RemoveAt(at);
-            AppendLog($"<color=#a3937c>{Josa.EulReul(item.Name)} 버렸다</color>");
+            if (fromBag)
+                for (int m = _bagNew.Length - 1; m >= 0; m--)
+                {
+                    int j = _bagNew[m].LastIndexOf(item);
+                    if (j < 0) continue;
+                    _bagNew[m].RemoveAt(j);
+                    merc = m;
+                    break;
+                }
+            DropItemOnGround(item, merc);
+            AppendLog($"<color=#a3937c>{Josa.EulReul(item.Name)} 바닥에 버렸다 — 눌러서 다시 주울 수 있다</color>");
+        }
+
+        // ---------- 끌어 옮기기(시체 수색 카드 → 대원 가방, 대원 가방 → 다른 대원 가방) ----------
+
+        private class LootDrag { public LootChoice Choice; public int Index; }
+        private class BagDrag { public int Merc; public bool Kept; public int Index; }
+
+        /// <summary>대원 가방 카드(가방 창·아래 대원 카드)를 끌어 놓을 곳으로. 쓰러진 대원은 받지 않는다.</summary>
+        private void MakeMercDropTarget(GameObject card, int merc)
+        {
+            var graphic = card.GetComponent<Graphic>();
+            if (graphic != null) graphic.raycastTarget = true;
+            var target = card.AddComponent<DropTarget>();
+            target.Accepts = payload => merc >= 0 && merc < _fighters.Count && _fighters[merc].IsAlive && !_resultShown
+                && (payload is LootDrag l ? l.Choice == _lootChoiceShown && l.Index < l.Choice.Loot.Count && l.Choice.Revealed[l.Index]
+                    : payload is BagDrag b && b.Merc != merc);
+            target.Drop = payload =>
+            {
+                if (payload is LootDrag l) TakeSingleLoot(l.Choice, l.Index, merc);
+                else if (payload is BagDrag b) MoveBagItem(b, merc);
+            };
+        }
+
+        /// <summary>시체 수색 카드 하나를 그 대원 가방에 바로 넣는다(×n이면 n칸). 칸이 모자라면 알리고 그대로 둔다.</summary>
+        private void TakeSingleLoot(LootChoice choice, int index, int merc)
+        {
+            if (choice != _lootChoiceShown || index < 0 || index >= choice.Loot.Count || !choice.Revealed[index]) return;
+            var (item, count) = choice.Loot[index];
+            bool slot = BagCatalog.UsesSlot(item);
+            if (slot && FreeOf(merc) < count)
+            {
+                ShowBagFull(merc, count);
+                return;
+            }
+            _lootedItems.Add((item, count));
+            if (slot) for (int k = 0; k < count; k++) _bagNew[merc].Add(item);
+            if (choice.View != null && choice.View.Root != null)
+                StartCoroutine(PopLoot(item, count, choice.View.Root.anchoredPosition + new Vector2(0f, 30f), 0, 1));
+            AppendLog($"<color=#ffd36b>{_fighters[merc].Name}의 가방에 {item.Name}{(count > 1 ? $" ×{count}" : "")}</color>");
+
+            // 수색 창에서 뺀다(열린 상태는 그대로). 다 꺼냈으면 다음 시체 창.
+            choice.Loot.RemoveAt(index);
+            choice.Picked = choice.Picked.Where((_, i) => i != index).ToArray();
+            choice.Revealed = choice.Revealed.Where((_, i) => i != index).ToArray();
+            if (choice.Loot.Count == 0)
+            {
+                ReturnLeftovers(choice, new List<(LootItem item, int count)>()); // 바닥 더미였으면 빈 더미를 치운다
+                ShowNextLootChoice();
+            }
+            else
+            {
+                StopLootReveal();
+                if (_lootChoicePanel != null) Destroy(_lootChoicePanel);
+                BuildLootChoicePanel(choice);
+            }
+            RefreshBag();
+        }
+
+        /// <summary>대원 가방 칸 하나를 다른 대원 가방으로(빈 칸이 있을 때만). 지난 원정부터 든 것도 옮길 수 있다.</summary>
+        private void MoveBagItem(BagDrag from, int to)
+        {
+            if (from.Merc < 0 || from.Merc >= _fighters.Count || from.Merc == to) return;
+            if (FreeOf(to) < 1)
+            {
+                ShowBagFull(to, 1);
+                return;
+            }
+            LootItem item;
+            if (from.Kept)
+            {
+                item = _fighters[from.Merc].RemoveFromBagAt(from.Index);
+                if (item == null) return;
+                _fighters[to].AddToBag(new[] { item });
+            }
+            else
+            {
+                var list = _bagNew[from.Merc];
+                if (from.Index < 0 || from.Index >= list.Count) return;
+                item = list[from.Index];
+                list.RemoveAt(from.Index);
+                _bagNew[to].Add(item);
+            }
+            AppendLog($"<color=#a3937c>{item.Name}: {_fighters[from.Merc].Name} → {_fighters[to].Name}의 가방</color>");
+            _bagSelected = -1;
+            RefreshBag();
+        }
+
+        /// <summary>"가방이 가득" — 그 대원 머리 위에 잠깐(필드에 없으면 기록만).</summary>
+        private void ShowBagFull(int merc, int need)
+        {
+            string text = need > 1 ? $"가방 칸 {need}개 필요" : "가방이 가득 찼다";
+            var unit = _mercOf.FirstOrDefault(kv => kv.Value == _fighters[merc]).Key;
+            if (unit != null && _views.TryGetValue(unit, out var view))
+                StartCoroutine(BattleFx.DamageNumber(_fxLayer, view.Root.anchoredPosition + new Vector2(0f, 70f), text, new Color(0.95f, 0.55f, 0.45f), false));
+            AppendLog($"<color=#e07a6a>{_fighters[merc].Name}: {text}</color>");
         }
 
         /// <summary>고른 것 중 남은 가방 칸에 드는 만큼만(값 높은 것부터) 가져간다.</summary>
@@ -1527,7 +2068,14 @@ namespace GN3.Battle
             if (_lootChoiceShown == null) return;
             int need = BagCatalog.SlotsUsed(_lootChoiceShown.Loot.Where((_, i) => _lootChoiceShown.Picked[i]));
             int over = need - BagFree;
-            if (_lootTakeButton != null) _lootTakeButton.interactable = over <= 0;
+            bool searched = _lootChoiceShown.AllRevealed; // 다 열려야 가져간다(가려진 걸 모르고 가져가지 않게)
+            if (_lootTakeButton != null)
+            {
+                _lootTakeButton.interactable = over <= 0 && searched;
+                var takeTip = _lootTakeButton.GetComponent<TooltipTrigger>();
+                if (takeTip == null) takeTip = _lootTakeButton.gameObject.AddComponent<TooltipTrigger>();
+                takeTip.Text = !searched ? "수색이 끝나야 가져갈 수 있다 — [모두 열기]로 빨리 연다" : over > 0 ? "가방 칸이 모자라다" : "고른 것을 가방에 담는다";
+            }
             _lootSwapDrops = over > 0 ? SwapDrops(_lootChoiceShown, over) : new List<LootItem>();
             if (_lootSwapButton != null)
             {
@@ -1573,9 +2121,20 @@ namespace GN3.Battle
             ResolveLootChoice(true);
         }
 
+        private Vector2? _lootPanelPos; // 시체 수색 창을 끌어 옮긴 자리(이번 전투 동안 다음 창도 여기에)
+
+        /// <summary>매 프레임: 떠 있는 시체 수색 창이 옮겨졌으면 그 자리를 기억한다(창은 시체마다 새로 만든다).</summary>
+        private void TrackLootPanelPosition()
+        {
+            if (_lootChoicePanel == null) return;
+            var moved = DraggablePanel.MovedPosition((RectTransform)_lootChoicePanel.transform);
+            if (moved.HasValue) _lootPanelPos = moved;
+        }
+
         /// <summary>떠 있는 창을 치우고 대기열의 다음 시체 창을 띄운다(없으면 닫힌 채로).</summary>
         private void ShowNextLootChoice()
         {
+            StopLootReveal();
             if (_lootChoicePanel != null) Destroy(_lootChoicePanel);
             _lootChoicePanel = null;
             _lootChoiceShown = _lootChoices.Count > 0 ? _lootChoices.Dequeue() : null;
@@ -1593,6 +2152,7 @@ namespace GN3.Battle
         /// <summary>결과로 넘어갈 때: 아직 고르지 않은 창·대기열은 고른 것 중 값 높은 것부터 남은 가방 칸만큼 가져간다 — 뒤진 것을 되도록 잃지 않게.</summary>
         private void FlushLootChoices()
         {
+            StopLootReveal();
             if (_lootChoiceShown != null) TakeFitting(_lootChoiceShown);
             while (_lootChoices.Count > 0) TakeFitting(_lootChoices.Dequeue());
             _lootChoiceShown = null;
@@ -1601,8 +2161,8 @@ namespace GN3.Battle
         }
 
         /// <summary>
-        /// 뒤진 시체 창(화면 오른쪽 아래, 아래 패널 위): 제목 · 아이템 줄(고름 칸 · 등급 색 테두리 아이콘 · 이름 ×n · 등급 · 값) · [가져가기] [두고 가기].
-        /// 줄을 누르면 고름/안 고름. 판만 클릭을 받고 필드는 가리지 않는다. 전투는 멈추지 않는다.
+        /// 뒤진 시체 창(화면 오른쪽 아래, 아래 패널 위) — 비콘식 수색: 머리(○○의 소지품 · 수색 중 n/m · 가방) · 카드 격자(처음엔 "?"로 가려져
+        /// 하나씩 뜸 들여 열린다, RevealLoot) · [모두 열기] [가져가기] [두고 가기]. 열린 카드를 누르면 고름/안 고름. 전투는 멈추지 않는다.
         /// </summary>
         private void BuildLootChoicePanel(LootChoice choice)
         {
@@ -1613,127 +2173,353 @@ namespace GN3.Battle
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 0f);
             rect.anchoredPosition = new Vector2(-LootChoiceMargin, FieldBottom + 10f);
             rect.sizeDelta = new Vector2(LootChoiceWidth, 0f);
-            panel.GetComponent<Image>().color = new Color(0.1f, 0.09f, 0.11f, 0.94f);
+            DraggablePanel.Attach(rect, _lootPanelPos); // 끌어 옮기면 이번 전투 동안 다음 시체 창도 그 자리에(TrackLootPanelPosition)
+            StyleGamePanel(panel); // 짙은 판 + 금빛 줄·테두리(가방 창과 같은 모양)
             var layout = panel.GetComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(14, 14, 10, 12);
-            layout.spacing = 6f;
+            layout.padding = new RectOffset(16, 16, 14, 14);
+            layout.spacing = 8f;
             layout.childControlWidth = layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
             panel.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            var title = CreateText(panel.transform, "", 18, TextAnchor.MiddleLeft, UITheme.TitleText);
-            title.name = "Title";
-            title.supportRichText = true;
-            title.gameObject.AddComponent<LayoutElement>().minHeight = 26f;
+            // 머리: 왼쪽 "○○" + 작은 "소지품", 오른쪽 수색 상태 칩
+            var header = CreateRow(panel.transform, "Header", 8f, TextAnchor.MiddleLeft, 28f);
+            _lootTitleText = CreateText(header.transform, $"<b>{choice.Name}</b>  <size=13><color=#a3937c>{(choice.Pile != null ? "바닥" : "소지품")}</color></size>", 19, TextAnchor.MiddleLeft, UITheme.TitleText);
+            _lootTitleText.supportRichText = true;
+            _lootTitleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _lootTitleText.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            var chip = CreateImage(header.transform, "StatusChip", new Color(0f, 0f, 0f, 0.5f));
+            var chipLayout = chip.AddComponent<LayoutElement>();
+            chipLayout.minWidth = chipLayout.preferredWidth = 104f;
+            chipLayout.minHeight = chipLayout.preferredHeight = 24f;
+            chip.GetComponent<Image>().raycastTarget = false;
+            _lootStatusText = CreateText(chip.transform, "", 13, TextAnchor.MiddleCenter, new Color(1f, 0.83f, 0.42f));
+            _lootStatusText.fontStyle = FontStyle.Bold;
+            _lootStatusText.raycastTarget = false;
+            Stretch(_lootStatusText.rectTransform);
+            // 둘째 줄: 가방 용량 막대 + 다음 시체 수
+            _lootSubRow = CreateRow(panel.transform, "Sub", 10f, TextAnchor.MiddleLeft, 20f);
+            _lootSubText = CreateText(panel.transform, "", 12, TextAnchor.MiddleLeft, UITheme.MutedText);
+            _lootSubText.supportRichText = true;
+            _lootSubText.gameObject.AddComponent<LayoutElement>().minHeight = 16f;
 
-            PickWithinBag(choice); // 남은 가방 칸 안에서 값 높은 것부터 미리 고른다
+            // 카드 격자
+            var grid = new GameObject("Cards", typeof(RectTransform), typeof(GridLayoutGroup));
+            grid.transform.SetParent(panel.transform, false);
+            var g = grid.GetComponent<GridLayoutGroup>();
+            g.cellSize = new Vector2(LootCardWidth, LootCardHeight);
+            g.spacing = new Vector2(LootCardGap, LootCardGap);
+            g.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            g.constraintCount = LootCardColumns;
+            g.childAlignment = TextAnchor.UpperLeft;
+
+            PickWithinBag(choice); // 남은 가방 칸 안에서 값 높은 것부터 미리 고른다(열리면 카드에 보인다)
+            _lootCards.Clear();
             for (int i = 0; i < choice.Loot.Count; i++)
-                CreateLootChoiceRow(panel.transform, choice, i);
+                _lootCards.Add(CreateLootCard(grid.transform, choice, i));
 
-            _lootChoiceNote = CreateText(panel.transform, "", 14, TextAnchor.MiddleLeft, new Color(0.95f, 0.45f, 0.4f));
-            _lootChoiceNote.gameObject.AddComponent<LayoutElement>().minHeight = 20f;
+            _lootChoiceNote = CreateText(panel.transform, "", 13, TextAnchor.MiddleLeft, new Color(0.95f, 0.45f, 0.4f));
+            _lootChoiceNote.gameObject.AddComponent<LayoutElement>().minHeight = 18f;
 
             // 가방이 모자랄 때만 보이는 교체 버튼(창 폭 전체, 버튼 줄 위)
-            _lootSwapButton = ShopListUI.CreateButton(panel.transform, "싼 것 버리고 가져가기", SwapAndTake, LootChoiceWidth - 28f);
-            UIThemeApplier.ApplyNow(_lootSwapButton.transform);
+            _lootSwapButton = CreateGameButton(panel.transform, "싼 것 버리고 가져가기", null, GameButtonStyle.Danger, SwapAndTake, LootChoiceWidth - 32f);
 
-            var buttons = new GameObject("Buttons", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
-            buttons.transform.SetParent(panel.transform, false);
-            buttons.GetComponent<LayoutElement>().minHeight = 38f;
-            var h = buttons.GetComponent<HorizontalLayoutGroup>();
-            h.spacing = 10f;
-            h.childAlignment = TextAnchor.MiddleRight;
-            h.childControlWidth = h.childControlHeight = true;
-            h.childForceExpandWidth = h.childForceExpandHeight = false;
-            _lootTakeButton = ShopListUI.CreateButton(buttons.transform, "가져가기", () => ResolveLootChoice(true), 120f);
-            ShopListUI.CreateButton(buttons.transform, "두고 가기", () => ResolveLootChoice(false), 110f);
-            UIThemeApplier.ApplyNow(buttons.transform);
+            // 버튼 줄(게임식, 키캡 표시): [R 모두 열기] [X 두고 가기] [E 가져가기]
+            var buttons = CreateRow(panel.transform, "Buttons", 8f, TextAnchor.MiddleRight, 42f);
+            _lootRevealAllButton = CreateGameButton(buttons.transform, "모두 열기", "R", GameButtonStyle.Secondary, () => _lootRevealFast = true, 118f);
+            CreateGameButton(buttons.transform, "두고 가기", "X", GameButtonStyle.Secondary, () => ResolveLootChoice(false), 118f);
+            _lootTakeButton = CreateGameButton(buttons.transform, "가져가기", "E", GameButtonStyle.Primary, () => ResolveLootChoice(true), 130f);
             panel.transform.SetAsLastSibling();
-            UpdateLootChoiceState(); // 제목의 가방 칸 · [가져가기] 막힘
+            UpdateLootChoiceState(); // 머리의 가방 칸 · [가져가기] 막힘
+
+            _lootRevealFast = false;
+            _lootRevealRoutine = StartCoroutine(RevealLoot(choice));
         }
 
-        /// <summary>창 제목: "○○을(를) 뒤졌다" + 뒤에 기다리는 시체 수.</summary>
+        /// <summary>창 머리: "수색 중 n/m"(다 열리면 "수색 완료") · 아래 줄 "가방 n/m · 다음 시체 k".</summary>
         private void RefreshLootChoiceTitle()
         {
-            if (_lootChoicePanel == null || _lootChoiceShown == null) return;
-            var title = _lootChoicePanel.transform.Find("Title")?.GetComponent<Text>();
-            if (title == null) return;
-            int need = BagCatalog.SlotsUsed(_lootChoiceShown.Loot.Where((_, i) => _lootChoiceShown.Picked[i]));
-            title.text = $"<b>{Josa.EulReul(_lootChoiceShown.Unit.Combatant.Name)} 뒤졌다</b>"
-                + $"  <size=14><color=#ffd36b>가방 {BagUsed + need}/{_bagCapacity}</color></size>"
-                + (_lootChoices.Count > 0 ? $"  <size=14><color=#a3937c>다음 {_lootChoices.Count}</color></size>" : "");
+            if (_lootChoicePanel == null || _lootChoiceShown == null || _lootStatusText == null) return;
+            var choice = _lootChoiceShown;
+            int opened = choice.Revealed.Count(r => r);
+            _lootStatusText.text = choice.AllRevealed ? "수색 완료" : $"수색 중 {opened}/{choice.Loot.Count}";
+            _lootStatusText.color = choice.AllRevealed ? new Color(0.5f, 0.85f, 0.45f) : new Color(1f, 0.83f, 0.42f);
+            int need = BagCatalog.SlotsUsed(choice.Loot.Where((_, i) => choice.Picked[i]));
+            // 가방 용량 막대(고른 것을 담았을 때) + 다음 시체 수 — 막대는 다시 그린다
+            if (_lootSubRow != null)
+            {
+                for (int i = _lootSubRow.transform.childCount - 1; i >= 0; i--)
+                {
+                    var child = _lootSubRow.transform.GetChild(i);
+                    child.SetParent(null, false); // Destroy는 프레임 끝이라 먼저 떼어 레이아웃에 안 끼게
+                    Destroy(child.gameObject);
+                }
+                CreateCapacityBar(_lootSubRow.transform, BagUsed + need, _bagCapacity, 220f);
+                int value = choice.Loot.Where((_, i) => choice.Picked[i] && choice.Revealed[i]).Sum(l => l.item.Price * l.count);
+                var worth = CreateText(_lootSubRow.transform, $"<color=#ffd36b>≈ {value}G</color>", 12, TextAnchor.MiddleLeft, UITheme.MutedText);
+                worth.supportRichText = true;
+                worth.horizontalOverflow = HorizontalWrapMode.Overflow;
+                if (_lootChoices.Count > 0)
+                {
+                    var next = CreateText(_lootSubRow.transform, $"다음 시체 {_lootChoices.Count}", 12, TextAnchor.MiddleLeft, UITheme.MutedText);
+                    next.horizontalOverflow = HorizontalWrapMode.Overflow;
+                }
+            }
+            _lootSubText.text = choice.AllRevealed ? "눌러서 가져갈지 고르기 · 대원 가방(아래 카드)으로 끌어 바로 넣기" : "수색 중… 좋은 물건일수록 오래 걸린다 · 열린 카드는 끌어서 바로 넣기";
+            if (_lootRevealAllButton != null) _lootRevealAllButton.gameObject.SetActive(!choice.AllRevealed);
         }
 
-        /// <summary>아이템 한 줄(누르면 고름/안 고름): 고름 칸 · 등급 색 테두리 아이콘 · 이름 ×n · 등급 · 값.</summary>
-        private void CreateLootChoiceRow(Transform parent, LootChoice choice, int index)
+        private void StopLootReveal()
+        {
+            if (_lootRevealRoutine != null) StopCoroutine(_lootRevealRoutine);
+            _lootRevealRoutine = null;
+            _lootCards.Clear();
+        }
+
+        /// <summary>
+        /// 비콘식 수색: 가려진 칸을 순서대로 하나씩 연다. 칸마다 수색 막대가 차는 동안 "?"가 숨 쉬고(등급이 높을수록 오래 — LootSearchSeconds),
+        /// 다 차면 카드가 튀며 등급 색 빛·소리와 함께 열린다. 일시정지 중엔 멈추고, [모두 열기]면 빠르게.
+        /// </summary>
+        private IEnumerator RevealLoot(LootChoice choice)
+        {
+            for (int i = 0; i < choice.Loot.Count; i++)
+            {
+                if (choice.Revealed[i] || i >= _lootCards.Count) continue;
+                var card = _lootCards[i];
+                var item = choice.Loot[i].item;
+                float duration = _lootRevealFast ? LootSearchFast : item.HasGrade ? LootSearchSeconds[(int)item.Grade] : LootSearchPlain;
+                for (float t = 0f; t < duration;)
+                {
+                    if (card.Root == null) yield break;
+                    if (!_paused) t += Time.unscaledDeltaTime;
+                    if (_lootRevealFast) duration = Mathf.Min(duration, LootSearchFast);
+                    SetLength(card.SearchFill, t / duration);
+                    var q = card.Question.color;
+                    q.a = 0.45f + 0.55f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 6f)); // "?"가 숨 쉰다
+                    card.Question.color = q;
+                    yield return null;
+                }
+                choice.Revealed[i] = true;
+                RevealCard(card, item);
+                card.Group.alpha = choice.Picked[i] ? 1f : LootChoiceUnpickedAlpha; // 가방에 안 들어가 미리 빼 둔 것은 흐리게
+                card.Check.gameObject.SetActive(!choice.Picked[i]);                   // + "제외" 띠
+                UpdateLootChoiceState();
+                if (!_lootRevealFast) yield return new WaitForSecondsRealtime(0.08f); // 다음 칸 전 짧은 숨
+            }
+            _lootRevealRoutine = null;
+            UpdateLootChoiceState();
+        }
+
+        /// <summary>카드가 열린다: 덮개를 걷고 등급 색 테두리·빛, 1.25배로 튀었다 돌아오고, 상급 이상은 반짝 가루와 묵직한 소리.</summary>
+        private void RevealCard(LootCard card, LootItem item)
+        {
+            if (card.Root == null) return;
+            card.Cover.SetActive(false);
+            bool rare = item.HasGrade && item.Grade >= LootGrade.High;
+            Color gradeColor = item.HasGrade ? LootGrades.ColorOf(item.Grade) : new Color(0.75f, 0.68f, 0.55f);
+            card.Border.effectColor = gradeColor;
+            card.Border.enabled = true;
+            StartCoroutine(RevealPunch(card, gradeColor, rare));
+            if (rare) StartCoroutine(RevealSparkles(card.Root, gradeColor));
+            string sfx = rare ? (GameAudio.HasSfx("loot_reveal_rare") ? "loot_reveal_rare" : ButtonSounds.SaveLoadSound)
+                : (GameAudio.HasSfx("loot_reveal") ? "loot_reveal" : ButtonSounds.ClickSound);
+            GameAudio.PlaySfx(sfx, rare ? 1f : 0.7f);
+        }
+
+        private IEnumerator RevealPunch(LootCard card, Color glow, bool rare)
+        {
+            float duration = rare ? 0.6f : 0.35f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                if (card.Root == null) yield break;
+                float k = t / duration;
+                card.Root.localScale = Vector3.one * Mathf.Lerp(rare ? 1.32f : 1.2f, 1f, Mathf.Clamp01(k / 0.4f));
+                card.Glow.color = new Color(glow.r, glow.g, glow.b, Mathf.Lerp(rare ? 0.95f : 0.7f, rare ? 0.4f : 0.22f, k)); // 번쩍 → 은은히 남는다
+                yield return null;
+            }
+            if (card.Root == null) yield break;
+            card.Root.localScale = Vector3.one;
+            card.Glow.color = new Color(glow.r, glow.g, glow.b, rare ? 0.4f : 0.22f);
+        }
+
+        /// <summary>상급 이상: 카드에서 작은 빛 가루가 위로 흩어진다.</summary>
+        private IEnumerator RevealSparkles(RectTransform root, Color color)
+        {
+            var bits = new List<(RectTransform rect, Image image, Vector2 velocity)>();
+            for (int i = 0; i < 8; i++)
+            {
+                var bit = CreateImage(root, "Spark", color);
+                var r = (RectTransform)bit.transform;
+                r.anchorMin = r.anchorMax = new Vector2(0.5f, 0.55f);
+                r.sizeDelta = new Vector2(5f, 5f);
+                r.anchoredPosition = Vector2.zero;
+                var img = bit.GetComponent<Image>();
+                img.raycastTarget = false;
+                float angle = Mathf.Lerp(25f, 155f, i / 7f) * Mathf.Deg2Rad;
+                bits.Add((r, img, new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * UnityEngine.Random.Range(70f, 120f)));
+            }
+            const float life = 0.7f;
+            for (float t = 0f; t < life; t += Time.unscaledDeltaTime)
+            {
+                if (root == null) yield break;
+                foreach (var (rect, image, velocity) in bits)
+                {
+                    if (rect == null) continue;
+                    rect.anchoredPosition = velocity * t + new Vector2(0f, -60f * t * t);
+                    image.color = new Color(color.r, color.g, color.b, 1f - t / life);
+                }
+                yield return null;
+            }
+            foreach (var (rect, _, _) in bits) if (rect != null) Destroy(rect.gameObject);
+        }
+
+        /// <summary>
+        /// 카드 한 칸: 어두운 칸 · 등급 빛(열리면) · 아이콘 · 이름 · 값 · 개수 배지 · 고름 체크. 처음엔 덮개("?" + 수색 막대)로 가려져 있고
+        /// RevealLoot가 걷는다. 열린 카드를 누르면 고름/안 고름(가려진 카드는 누를 수 없다).
+        /// </summary>
+        private LootCard CreateLootCard(Transform parent, LootChoice choice, int index)
         {
             var (item, count) = choice.Loot[index];
-            Color gradeColor = item.HasGrade ? LootGrades.ColorOf(item.Grade) : UITheme.BodyText;
-            var row = new GameObject("LootRow", typeof(RectTransform), typeof(Image), typeof(Button), typeof(CanvasGroup), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
-            row.transform.SetParent(parent, false);
-            row.GetComponent<LayoutElement>().minHeight = LootChoiceRowHeight;
-            var rowImage = row.GetComponent<Image>();
-            rowImage.color = new Color(1f, 1f, 1f, 0.05f);
-            var rowLayout = row.GetComponent<HorizontalLayoutGroup>();
-            rowLayout.padding = new RectOffset(8, 10, 4, 4);
-            rowLayout.spacing = 10f;
-            rowLayout.childAlignment = TextAnchor.MiddleLeft;
-            rowLayout.childControlWidth = rowLayout.childControlHeight = true;
-            rowLayout.childForceExpandWidth = rowLayout.childForceExpandHeight = false;
+            var cell = new GameObject("LootCard", typeof(RectTransform), typeof(Image), typeof(Button), typeof(CanvasGroup), typeof(Outline));
+            cell.transform.SetParent(parent, false);
+            var root = (RectTransform)cell.transform;
+            var bg = cell.GetComponent<Image>();
+            bg.color = new Color(0.07f, 0.065f, 0.08f, 0.96f);
+            var border = cell.GetComponent<Outline>();
+            border.effectDistance = new Vector2(2f, -2f);
+            border.enabled = false; // 열릴 때 등급 색
 
-            // 고름 칸: 고르면 금빛으로 채워진 네모, 안 고르면 빈 네모
-            var box = CreateImage(row.transform, "Pick", Color.white);
-            var boxLayout = box.AddComponent<LayoutElement>();
-            boxLayout.minWidth = boxLayout.preferredWidth = 18f;
-            boxLayout.minHeight = boxLayout.preferredHeight = 18f;
-            var boxImage = box.GetComponent<Image>();
-            boxImage.raycastTarget = false;
+            // 등급 빛: 카드 안쪽 전체를 은은히(열릴 때 번쩍 — RevealPunch)
+            var glow = CreateImage(cell.transform, "Glow", new Color(0f, 0f, 0f, 0f));
+            Stretch((RectTransform)glow.transform);
+            var glowImage = glow.GetComponent<Image>();
+            glowImage.raycastTarget = false;
 
-            var icon = CreateImage(row.transform, "Icon", Color.white);
+            var icon = CreateImage(cell.transform, "Icon", item.Icon == null ? new Color(1f, 0.8f, 0.3f) : Color.white);
+            var iconRect = (RectTransform)icon.transform;
+            iconRect.anchorMin = iconRect.anchorMax = new Vector2(0.5f, 1f);
+            iconRect.pivot = new Vector2(0.5f, 1f);
+            iconRect.anchoredPosition = new Vector2(0f, -10f);
+            iconRect.sizeDelta = new Vector2(50f, 50f);
             var iconImage = icon.GetComponent<Image>();
             iconImage.sprite = item.Icon;
             iconImage.preserveAspect = true;
             iconImage.raycastTarget = false;
-            var iconLayout = icon.AddComponent<LayoutElement>();
-            iconLayout.minWidth = iconLayout.preferredWidth = LootChoiceIcon;
-            iconLayout.minHeight = iconLayout.preferredHeight = LootChoiceIcon;
-            if (item.HasGrade)
+
+            Color nameColor = item.HasGrade ? LootGrades.ColorOf(item.Grade) : UITheme.BodyText;
+            var name = CreateText(cell.transform, item.Name, 12, TextAnchor.MiddleCenter, nameColor);
+            name.raycastTarget = false;
+            name.verticalOverflow = VerticalWrapMode.Truncate;
+            var nameRect = name.rectTransform;
+            nameRect.anchorMin = new Vector2(0f, 0f);
+            nameRect.anchorMax = new Vector2(1f, 0f);
+            nameRect.pivot = new Vector2(0.5f, 0f);
+            nameRect.offsetMin = new Vector2(3f, 20f);
+            nameRect.offsetMax = new Vector2(-3f, 38f);
+
+            var price = CreateText(cell.transform, $"{item.Price * count}G", 11, TextAnchor.MiddleCenter, UITheme.MutedText);
+            price.raycastTarget = false;
+            var priceRect = price.rectTransform;
+            priceRect.anchorMin = new Vector2(0f, 0f);
+            priceRect.anchorMax = new Vector2(1f, 0f);
+            priceRect.pivot = new Vector2(0.5f, 0f);
+            priceRect.offsetMin = new Vector2(3f, 5f);
+            priceRect.offsetMax = new Vector2(-3f, 20f);
+
+            if (count > 1) // 개수 배지(오른쪽 위)
             {
-                var outline = icon.AddComponent<Outline>();
-                outline.effectColor = gradeColor;
-                outline.effectDistance = new Vector2(LootGradeOutline, -LootGradeOutline);
+                var badge = CreateText(cell.transform, $"×{count}", 12, TextAnchor.UpperRight, Color.white);
+                badge.raycastTarget = false;
+                badge.fontStyle = FontStyle.Bold;
+                badge.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
+                var badgeRect = badge.rectTransform;
+                badgeRect.anchorMin = badgeRect.anchorMax = badgeRect.pivot = Vector2.one;
+                badgeRect.anchoredPosition = new Vector2(-4f, -3f);
+                badgeRect.sizeDelta = new Vector2(40f, 16f);
             }
 
-            string gradeText = item.HasGrade ? $"  <size=13><color={LootGrades.HexOf(item.Grade)}>{item.GradeTag}</color></size>" : "";
-            var label = CreateText(row.transform, $"{item.Name}{(count > 1 ? $" ×{count}" : "")}{gradeText}", 16, TextAnchor.MiddleLeft, UITheme.BodyText);
-            label.supportRichText = true;
-            label.raycastTarget = false;
-            label.horizontalOverflow = HorizontalWrapMode.Overflow;
-            label.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
+            // 뺀 카드(가방에 안 들어가 미리 빼 둠·눌러서 뺌): 아래쪽 "제외" 띠(카드는 흐려진다)
+            var excluded = CreateImage(cell.transform, "Excluded", new Color(0.35f, 0.12f, 0.1f, 0.92f));
+            var exRect = (RectTransform)excluded.transform;
+            exRect.anchorMin = new Vector2(0f, 0f);
+            exRect.anchorMax = new Vector2(1f, 0f);
+            exRect.pivot = new Vector2(0.5f, 0f);
+            exRect.offsetMin = new Vector2(0f, 0f);
+            exRect.offsetMax = new Vector2(0f, 18f);
+            excluded.GetComponent<Image>().raycastTarget = false;
+            var exText = CreateText(excluded.transform, "제외", 11, TextAnchor.MiddleCenter, new Color(1f, 0.82f, 0.75f));
+            exText.fontStyle = FontStyle.Bold;
+            exText.raycastTarget = false;
+            Stretch(exText.rectTransform);
+            var checkImage = excluded.GetComponent<Image>();
 
-            var price = CreateText(row.transform, $"{item.Price * count}G", 15, TextAnchor.MiddleRight, UITheme.MutedText);
-            price.raycastTarget = false;
-            price.gameObject.AddComponent<LayoutElement>().minWidth = 52f;
+            // 덮개: "?" + 아래 수색 막대(RevealLoot가 채운다)
+            var cover = CreateImage(cell.transform, "Cover", new Color(0.05f, 0.045f, 0.06f, 1f));
+            Stretch((RectTransform)cover.transform);
+            cover.GetComponent<Image>().raycastTarget = true; // 가려진 칸은 눌러도 아무 일 없게(아래 버튼을 막는다)
+            var question = CreateText(cover.transform, "?", 34, TextAnchor.MiddleCenter, new Color(1f, 0.83f, 0.42f));
+            question.fontStyle = FontStyle.Bold;
+            question.raycastTarget = false;
+            var qRect = question.rectTransform;
+            Stretch(qRect);
+            qRect.offsetMin = new Vector2(0f, 14f);
+            var track = CreateImage(cover.transform, "SearchTrack", new Color(1f, 1f, 1f, 0.12f));
+            var trackRect = (RectTransform)track.transform;
+            trackRect.anchorMin = new Vector2(0f, 0f);
+            trackRect.anchorMax = new Vector2(1f, 0f);
+            trackRect.pivot = new Vector2(0.5f, 0f);
+            trackRect.offsetMin = new Vector2(10f, 10f);
+            trackRect.offsetMax = new Vector2(-10f, 15f);
+            track.GetComponent<Image>().raycastTarget = false;
+            var searchFill = CreateBarFill(track.transform, new Color(1f, 0.78f, 0.35f, 0.95f));
+            SetLength((RectTransform)searchFill.transform, 0f);
 
-            var group = row.GetComponent<CanvasGroup>();
+            var card = new LootCard
+            {
+                Root = root, Group = cell.GetComponent<CanvasGroup>(), Cover = cover, SearchFill = (RectTransform)searchFill.transform,
+                Question = question, Glow = glowImage, Border = border, Check = checkImage,
+            };
             void Refresh()
             {
                 bool picked = choice.Picked[index];
-                boxImage.color = picked ? new Color(0.95f, 0.75f, 0.3f) : new Color(1f, 1f, 1f, 0.15f);
-                group.alpha = picked ? 1f : LootChoiceUnpickedAlpha;
+                bool shown = choice.Revealed[index];
+                excluded.SetActive(shown && !picked); // 열린 카드만 "제외" 표시
+                card.Group.alpha = picked || !shown ? 1f : LootChoiceUnpickedAlpha;
             }
-            var button = row.GetComponent<Button>();
-            button.transition = Selectable.Transition.None;
+            // 끌어서 대원 가방(가방 창·아래 대원 카드)에 바로 넣기 — 열린 카드만
+            var drag = cell.AddComponent<DragItem>();
+            drag.Payload = new LootDrag { Choice = choice, Index = index };
+            drag.Icon = item.Icon;
+            drag.CanDrag = () => index < choice.Revealed.Length && choice.Revealed[index];
+            var button = cell.GetComponent<Button>();
+            button.targetGraphic = bg; // 마우스를 올리면 살짝 밝게
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.6f, 1.55f, 1.45f, 1f);
+            colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+            colors.selectedColor = Color.white;
+            colors.colorMultiplier = 2f;
+            colors.fadeDuration = 0.06f;
+            button.colors = colors;
             button.onClick.AddListener(() =>
             {
+                if (!choice.Revealed[index]) return;
+                if (ShiftHeld) // Shift+클릭: 빈 칸 가장 많은 대원 가방에 바로
+                {
+                    int to = BestReceiver();
+                    if (to >= 0) TakeSingleLoot(choice, index, to);
+                    return;
+                }
                 choice.Picked[index] = !choice.Picked[index];
                 Refresh();
                 UpdateLootChoiceState();
             });
-            row.AddComponent<TooltipTrigger>().Text = $"<b>{item.Name}</b>" + (item.HasGrade ? $" <color={LootGrades.HexOf(item.Grade)}>{item.GradeTag}</color>" : "")
-                + $"\n팔면 개당 {item.Price}G · 눌러서 가져갈지 고른다";
+            cell.AddComponent<TooltipTrigger>().Text = $"<b>{item.Name}</b>" + (item.HasGrade ? $" <color={LootGrades.HexOf(item.Grade)}>{item.GradeTag}</color>" : "")
+                + $"\n팔면 개당 {item.Price}G\n눌러서 가져갈지 고르기 · 끌어서 대원 가방에 바로 넣기";
+            if (choice.Revealed[index]) { cover.SetActive(false); border.effectColor = nameColor; border.enabled = true; }
             Refresh();
+            return card;
         }
 
         /// <summary>시체에서 아이템 아이콘이 위로 툭 튀었다가 조금 떨어지며 사라지고, 그 위에 "+이름" 글자가 뜬다.</summary>
@@ -1814,9 +2600,10 @@ namespace GN3.Battle
             int remaining = RemainingCorpses();
             if (_salvageText != null)
                 _salvageText.text = $"<b>전리품 수습</b>  시체를 눌러 뒤지세요 · 남은 시체 {remaining}" +
+                                    (_piles.Count + _leftovers.Count > 0 ? $" · 남겨 둔 곳 {_piles.Count + _leftovers.Count}" : "") +
                                     $"  <color=#ffd36b>가방 {BagUsed}/{_bagCapacity}</color>";
             var kb = Keyboard.current;
-            if (kb != null && kb.escapeKey.wasPressedThisFrame)
+            if (kb != null && kb.escapeKey.wasPressedThisFrame && _escConsumedFrame != Time.frameCount) // 가방 창을 닫은 Esc는 넘어가지 않는다
             {
                 ShowResult();
                 return;
@@ -1866,6 +2653,7 @@ namespace GN3.Battle
                 NamedArchers = true, // 궁수는 "고블린 궁수"로 이름이 붙어 있다
                 Direct = true,       // 이기면 보상·명성·성장을 더 받는다
                 PreLooted = new List<(LootItem, int)>(_lootedItems), // 시체를 뒤져 챙긴 것만(안 뒤진 시체 몫은 없다)
+                PreAssigned = _bagNew.Select(b => new List<LootItem>(b)).ToList(), // 대원별 가방(끌어 옮긴 그대로)
             };
             EndSalvage();
             var report = ExpeditionBattle.ConcludeReport(_expedition, battle, alertShown: true); // 이 씬의 결과 화면이 보여 준다
@@ -2180,6 +2968,7 @@ namespace GN3.Battle
             _bagButtonText.fontSize = 16;
             _bagButton.onClick.AddListener(ToggleBagWindow);
             UpdateBagButton();
+            CreateMeterButton(root); // 가방 버튼 아래 [통계 (D)] — 왼쪽 위 딜량·힐량·받은 피해 창
 
             // 필드: 피벗을 왼쪽 아래에 둬서 로컬 좌표 = 필드 좌표. 판 그림은 투명(땅 클릭만 받는다) — 바닥 타일이 판 밖까지 이어져 경계가 안 보인다
             var fieldGO = CreateImage(root, "Field", Color.clear);
@@ -2190,7 +2979,7 @@ namespace GN3.Battle
             _field.localScale = new Vector3(FieldZoom, FieldZoom, 1f);
             _field.anchoredPosition = new Vector2(-FieldBattleSession.FieldWidth * FieldZoom / 2f, FieldBottom);
             fieldGO.AddComponent<BattleClickTarget>().OnClick = OnGroundClicked;
-            BattleGroundTiles.Build(_field, quest.Region, quest.Title.GetHashCode(), // 지역별 바닥 타일(맨 아래 층)
+            var frontTrees = BattleGroundTiles.Build(_field, quest.Region, quest.Title.GetHashCode(), // 지역별 바닥 타일(맨 아래 층)
                 deepForest: quest.Waves.Any(w => w.IsBoss)); // 보스전은 숲 한가운데(양옆까지 숲)
             if (quest.Waves.Any(w => w.IsBoss))
             {
@@ -2203,6 +2992,12 @@ namespace GN3.Battle
             _unitLayer = CreateLayer("UnitLayer");
             _fxLayer = CreateLayer("FxLayer");
             BattleLighting.Create(_field, _unitLayer); // 마을과 같은 시간대 빛·날씨·유닛 그림자 층
+            if (frontTrees != null)
+            {
+                // 아래쪽 숲은 근처 유닛보다 앞이라 유닛 바로 위에(효과·빛은 그 위). 뒤에 선 유닛이 가려지면 나무가 반쯤 비친다.
+                frontTrees.transform.SetSiblingIndex(_unitLayer.GetSiblingIndex() + 1);
+                frontTrees.UnitFeet = () => _views.Values.Select(v => v.Root.anchoredPosition);
+            }
 
             BuildPauseOverlay();
             BuildActionPanel(root);
@@ -2673,11 +3468,14 @@ namespace GN3.Battle
             hintRect.anchoredPosition = new Vector2(28f, -128f);
             hintRect.sizeDelta = new Vector2(420f, 80f);
 
+            // 가운데: 대원 카드 줄(상태 + 장비칸) — 왼쪽 조종 영역과 오른쪽 기록 사이
+            BuildPartyStrip(panel.transform);
+
             var logBg = CreateImage(panel.transform, "LogPanel", Color.white);
             var logRect = (RectTransform)logBg.transform;
-            logRect.anchorMin = new Vector2(0f, 0f);
+            logRect.anchorMin = new Vector2(1f, 0f);
             logRect.anchorMax = new Vector2(1f, 1f);
-            logRect.offsetMin = new Vector2(480f, 16f);
+            logRect.offsetMin = new Vector2(-(LogWidth + 28f), 16f);
             logRect.offsetMax = new Vector2(-28f, -16f);
             var logBgImage = logBg.GetComponent<Image>();
             logBgImage.sprite = UITheme.Inset;
@@ -2691,6 +3489,505 @@ namespace GN3.Battle
             logTextRect.offsetMin = new Vector2(12f, 8f);
             logTextRect.offsetMax = new Vector2(-12f, -8f);
             _logText.verticalOverflow = VerticalWrapMode.Truncate;
+        }
+
+        // ---------- 게임식 창·버튼(가방 창·수색 창·라운드 정리 막대 공용) ----------
+
+        private enum GameButtonStyle { Primary, Secondary, Danger }
+        private static readonly Color GamePanelColor = new Color(0.07f, 0.065f, 0.08f, 0.97f);
+        private static readonly Color GameGold = new Color(0.85f, 0.64f, 0.25f);
+
+        /// <summary>짙은 판 + 위쪽 금빛 줄 + 얇은 금빛 테두리(테마 판 그림 대신 — 깔끔하게).</summary>
+        private void StyleGamePanel(GameObject panel)
+        {
+            var image = panel.GetComponent<Image>();
+            image.sprite = null;
+            image.color = GamePanelColor;
+            var border = panel.GetComponent<Outline>();
+            if (border == null) border = panel.AddComponent<Outline>();
+            border.effectColor = new Color(GameGold.r, GameGold.g, GameGold.b, 0.45f);
+            border.effectDistance = new Vector2(1.5f, -1.5f);
+            var accent = CreateImage(panel.transform, "Accent", new Color(GameGold.r, GameGold.g, GameGold.b, 0.9f));
+            accent.AddComponent<LayoutElement>().ignoreLayout = true;
+            var r = (RectTransform)accent.transform;
+            r.anchorMin = new Vector2(0f, 1f);
+            r.anchorMax = new Vector2(1f, 1f);
+            r.pivot = new Vector2(0.5f, 1f);
+            r.offsetMin = new Vector2(0f, -3f);
+            r.offsetMax = Vector2.zero;
+            accent.GetComponent<Image>().raycastTarget = false;
+        }
+
+        /// <summary>
+        /// 게임식 버튼: 왼쪽 키캡 배지(key가 있으면) + 글자. Primary 금빛 채움 · Secondary 짙은 회갈 + 금빛 테두리 · Danger 짙은 적갈.
+        /// 올림·누름·꺼짐 색은 ColorTint. 테마 자동 칠하기를 쓰지 않는다.
+        /// </summary>
+        private Button CreateGameButton(Transform parent, string label, string key, GameButtonStyle style, UnityEngine.Events.UnityAction onClick, float width)
+        {
+            var go = CreateImage(parent, label + "Button", Color.white);
+            var layout = go.AddComponent<LayoutElement>();
+            layout.minWidth = layout.preferredWidth = width;
+            layout.minHeight = layout.preferredHeight = 40f;
+            var image = go.GetComponent<Image>();
+            Color fill = style == GameButtonStyle.Primary ? new Color(0.85f, 0.64f, 0.25f)
+                : style == GameButtonStyle.Danger ? new Color(0.45f, 0.17f, 0.15f)
+                : new Color(0.17f, 0.15f, 0.14f);
+            image.color = fill;
+            if (style == GameButtonStyle.Secondary)
+            {
+                var outline = go.AddComponent<Outline>();
+                outline.effectColor = new Color(GameGold.r, GameGold.g, GameGold.b, 0.55f);
+                outline.effectDistance = new Vector2(1f, -1f);
+            }
+            var button = go.AddComponent<Button>();
+            button.targetGraphic = image;
+            var colors = button.colors;
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.18f, 1.15f, 1.1f, 1f);
+            colors.pressedColor = new Color(0.78f, 0.75f, 0.7f, 1f);
+            colors.selectedColor = Color.white;
+            colors.disabledColor = new Color(0.55f, 0.55f, 0.55f, 0.45f);
+            colors.colorMultiplier = 1f;
+            colors.fadeDuration = 0.08f;
+            button.colors = colors;
+            button.onClick.AddListener(() => { EventSystem.current?.SetSelectedGameObject(null); onClick(); }); // Space에 다시 눌리지 않게
+
+            Color textColor = style == GameButtonStyle.Primary ? new Color(0.12f, 0.08f, 0.04f) : new Color(0.95f, 0.9f, 0.82f);
+            float textLeft = 10f;
+            if (!string.IsNullOrEmpty(key)) // 키캡 배지
+            {
+                var cap = CreateImage(go.transform, "Key", style == GameButtonStyle.Primary ? new Color(0.12f, 0.08f, 0.04f, 0.85f) : new Color(0f, 0f, 0f, 0.55f));
+                var capRect = (RectTransform)cap.transform;
+                capRect.anchorMin = capRect.anchorMax = capRect.pivot = new Vector2(0f, 0.5f);
+                capRect.anchoredPosition = new Vector2(8f, 0f);
+                capRect.sizeDelta = new Vector2(key.Length > 1 ? 44f : 24f, 24f);
+                cap.GetComponent<Image>().raycastTarget = false;
+                var capText = CreateText(cap.transform, key, 12, TextAnchor.MiddleCenter, style == GameButtonStyle.Primary ? new Color(1f, 0.88f, 0.6f) : GameGold);
+                capText.fontStyle = FontStyle.Bold;
+                capText.raycastTarget = false;
+                Stretch(capText.rectTransform);
+                textLeft = 8f + capRect.sizeDelta.x + 6f;
+            }
+            var text = CreateText(go.transform, label, 15, TextAnchor.MiddleCenter, textColor);
+            text.fontStyle = FontStyle.Bold;
+            text.raycastTarget = false;
+            text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            Stretch(text.rectTransform);
+            text.rectTransform.offsetMin = new Vector2(textLeft, 0f);
+            text.rectTransform.offsetMax = new Vector2(-8f, 0f);
+            return button;
+        }
+
+        /// <summary>가방 용량 막대(짙은 칸 + 채움 + "가방 n/m"). 차면 주황 → 빨강.</summary>
+        private void CreateCapacityBar(Transform parent, int used, int capacity, float width)
+        {
+            var bar = CreateImage(parent, "Capacity", new Color(0f, 0f, 0f, 0.55f));
+            var layout = bar.AddComponent<LayoutElement>();
+            layout.minWidth = layout.preferredWidth = width;
+            layout.minHeight = layout.preferredHeight = 18f;
+            bar.GetComponent<Image>().raycastTarget = false;
+            float ratio = capacity > 0 ? Mathf.Clamp01((float)used / capacity) : 1f;
+            var fill = CreateBarFill(bar.transform, ratio >= 1f ? new Color(0.8f, 0.3f, 0.24f) : ratio >= 0.75f ? new Color(0.9f, 0.6f, 0.25f) : new Color(0.85f, 0.7f, 0.3f, 0.85f));
+            SetLength((RectTransform)fill.transform, ratio);
+            var text = CreateText(bar.transform, $"가방 {used}/{capacity}", 12, TextAnchor.MiddleCenter, Color.white);
+            text.fontStyle = FontStyle.Bold;
+            text.raycastTarget = false;
+            text.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+            Stretch(text.rectTransform);
+        }
+
+        /// <summary>가로 줄(레이아웃 그룹) 하나.</summary>
+        private static GameObject CreateRow(Transform parent, string name, float spacing, TextAnchor align, float minHeight)
+        {
+            var row = new GameObject(name, typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            row.transform.SetParent(parent, false);
+            row.GetComponent<LayoutElement>().minHeight = minHeight;
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.spacing = spacing;
+            h.childAlignment = align;
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = h.childForceExpandHeight = false;
+            return row;
+        }
+
+        // ---------- 아래 패널 대원 카드(상태 + 장비칸) ----------
+        // 줄에는 대원마다 간단 카드(초상 · 체력 막대·숫자, ★ 분대장, 조종 중이면 흰 테두리)만 늘 보인다.
+        // 간단 카드를 누르면 그 위에 상세 카드가 뜬다: 초상 · 이름 · 직업·분대 · 체력 · 스킬 쿨타임 · 상태 · 무기/가방 칸(한 번에 하나, 다시 누르거나 ESC로 닫기).
+        // 매 프레임 글자·막대 길이만 바꾼다(RefreshPartyCards). 가방 n/m은 주울 때·버릴 때(RefreshBag).
+
+        private const float LogWidth = 440f;            // 오른쪽 전투 기록 폭
+        private const float PartyCardGap = 8f;
+        private const float PartyEquipSlot = 30f;
+        private const int CompactPortrait = 80;
+        private const float CompactCardWidth = 96f, CompactCardHeight = 128f; // 칸 하나 = 간단 카드 하나
+        private const int PartySlotCount = 6; // 빈 칸 틀 수 = 원정 최대 인원(Lv5 앤트킹 두 분대 6명)
+        private static readonly Color PartySlotColor = new Color(0.25f, 0.25f, 0.3f, 0.45f);
+        private const float DetailCardWidth = 184f, DetailCardHeight = 256f, DetailPadding = 6f; // 능력치·활약 두 줄 포함
+        private class PartyCard
+        {
+            public Mercenary Merc;
+            public FieldUnit Unit;
+            public CanvasGroup Group;
+            public GameObject Frame;
+            public Text Name, Hp, Skill, Status, Bag;
+            public RectTransform HpFill, SkillFill;
+            public Image HpFillImage;
+            public TooltipTrigger Tip;
+            // 간단 카드(줄에 늘 보임)
+            public RectTransform Compact;
+            public CanvasGroup CompactGroup;
+            public GameObject CompactFrame;
+            public RectTransform CompactHpFill;
+            public Image CompactHpFillImage;
+            public Text CompactHp, Star;
+            public Text CompactStatus; // 간단 카드 초상 아래 "기절·중독·쓰러짐"
+            public GameObject Detail; // 상세 카드 창(누르면 뜬다)
+            public Text Stats, Activity; // 상세 카드: 능력치 · 이번 전투 활약
+        }
+        private readonly List<PartyCard> _partyCards = new List<PartyCard>();
+        private PartyCard _openDetail; // 지금 떠 있는 상세 카드
+
+        private void BuildPartyStrip(Transform panel)
+        {
+            var strip = new GameObject("PartyStrip", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            strip.transform.SetParent(panel, false);
+            var rect = (RectTransform)strip.transform;
+            rect.anchorMin = new Vector2(0f, 0f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.offsetMin = new Vector2(480f, 16f);
+            rect.offsetMax = new Vector2(-(LogWidth + 28f + 12f), -16f);
+            var h = strip.GetComponent<HorizontalLayoutGroup>();
+            h.spacing = PartyCardGap;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = false;
+            h.childForceExpandHeight = false; // 칸은 제 크기로
+            _partyCards.Clear();
+            _openDetail = null;
+            var team = _session.PlayerTeam;
+            var members = new List<(Mercenary merc, FieldUnit unit)>();
+            for (int i = 0; i < _fighters.Count && i < team.Count; i++)
+            {
+                var unit = _session.Units.FirstOrDefault(u => u.Combatant == team[i]);
+                if (unit != null) members.Add((_fighters[i], unit));
+            }
+            // 원정 최대 인원만큼 빈 칸 틀을 늘 깔고, 왼쪽 칸부터 대원 카드를 채운다(혼자면 첫 칸만)
+            int slots = Math.Max(PartySlotCount, members.Count);
+            for (int s = 0; s < slots; s++)
+            {
+                var slot = CreateImage(strip.transform, "PartySlot", PartySlotColor);
+                var slotImage = slot.GetComponent<Image>();
+                slotImage.sprite = UITheme.Inset;
+                slotImage.type = Image.Type.Sliced;
+                slotImage.raycastTarget = false;
+                var slotLayout = slot.AddComponent<LayoutElement>();
+                slotLayout.minWidth = slotLayout.preferredWidth = CompactCardWidth;
+                slotLayout.minHeight = slotLayout.preferredHeight = CompactCardHeight;
+                if (s >= members.Count) continue;
+                var (merc, unit) = members[s];
+                var card = CreatePartyCard(CreateDetailWindow(panel, merc), merc, unit);
+                CreateCompactCard(slot.transform, card);
+                _partyCards.Add(card);
+            }
+            RefreshPartyBags();
+            RefreshPartyCards();
+        }
+
+        /// <summary>상세 카드를 담는 떠 있는 창(아래 패널 위 가장자리 바로 위, 처음엔 꺼짐). 자리는 ToggleDetail이 누른 카드 위로 맞춘다.</summary>
+        private Transform CreateDetailWindow(Transform panel, Mercenary merc)
+        {
+            var go = CreateImage(panel, "PartyDetail_" + merc.Name, new Color(1f, 1f, 1f, 0.97f));
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = new Vector2(0f, 8f);
+            rect.sizeDelta = new Vector2(DetailCardWidth, DetailCardHeight);
+            var image = go.GetComponent<Image>();
+            image.sprite = UITheme.Panel;
+            image.type = Image.Type.Sliced;
+            image.raycastTarget = true; // 창 위 클릭이 필드로 새지 않게
+            DraggablePanel.Attach(rect, persist: false); // 잡고 끌어 옮길 수 있다(열 때마다 누른 카드 위로 다시 맞춘다 — 자리 저장 안 함)
+            go.SetActive(false);
+            return go.transform;
+        }
+
+        /// <summary>칸 안을 꽉 채우는 간단 카드: 초상 + 체력 막대·숫자. 누르면 상세 카드, 끌어 놓기·툴팁은 예전 카드와 같다.</summary>
+        private void CreateCompactCard(Transform slot, PartyCard card)
+        {
+            var go = CreateImage(slot, "PartyChip_" + card.Merc.Name, Color.white);
+            card.CompactGroup = go.AddComponent<CanvasGroup>();
+            card.Compact = (RectTransform)go.transform;
+            card.Compact.anchorMin = Vector2.zero;
+            card.Compact.anchorMax = Vector2.one;
+            card.Compact.offsetMin = card.Compact.offsetMax = Vector2.zero;
+            var bg = go.GetComponent<Image>();
+            bg.sprite = UITheme.Inset;
+            bg.type = Image.Type.Sliced;
+            var v = go.AddComponent<VerticalLayoutGroup>();
+            v.padding = new RectOffset(7, 7, 7, 5);
+            v.spacing = 4f;
+            v.childAlignment = TextAnchor.UpperCenter;
+            v.childControlWidth = v.childControlHeight = true;
+            v.childForceExpandWidth = v.childForceExpandHeight = false;
+
+            CharacterPortraitUI.Create(go.transform, card.Merc.Appearance, CompactPortrait);
+            card.CompactHpFillImage = CreateCardBar(go.transform, 8f, HpHigh, out card.CompactHpFill);
+            card.CompactHpFill.parent.GetComponent<LayoutElement>().flexibleWidth = 1f; // 카드 폭만큼
+            card.CompactHp = CreateText(go.transform, "", 11, TextAnchor.MiddleCenter, UITheme.BodyText);
+            card.CompactHp.horizontalOverflow = HorizontalWrapMode.Overflow;
+            card.CompactHp.raycastTarget = false;
+
+            // 분대장 ★(초상 왼쪽 위에 겹침)
+            card.Star = CreateText(go.transform, "★", 16, TextAnchor.UpperLeft, LeaderColor);
+            card.Star.raycastTarget = false;
+            card.Star.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            var starRect = card.Star.rectTransform;
+            starRect.anchorMin = starRect.anchorMax = starRect.pivot = new Vector2(0f, 1f);
+            starRect.anchoredPosition = new Vector2(5f, -3f);
+            starRect.sizeDelta = new Vector2(22f, 22f);
+
+            // 상태 글: 초상 아래쪽 가운데(기절·중독·쓰러짐, 이상 없으면 숨김)
+            card.CompactStatus = CreateText(go.transform, "", 11, TextAnchor.MiddleCenter, Color.white);
+            card.CompactStatus.fontStyle = FontStyle.Bold;
+            card.CompactStatus.supportRichText = true;
+            card.CompactStatus.horizontalOverflow = HorizontalWrapMode.Overflow;
+            card.CompactStatus.raycastTarget = false;
+            card.CompactStatus.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            card.CompactStatus.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+            var statusRect = card.CompactStatus.rectTransform;
+            statusRect.anchorMin = statusRect.anchorMax = statusRect.pivot = new Vector2(0.5f, 1f);
+            statusRect.anchoredPosition = new Vector2(0f, -7f - CompactPortrait + 16f); // 초상 아래 끝 위에 겹침
+            statusRect.sizeDelta = new Vector2(CompactCardWidth, 16f);
+
+            card.CompactFrame = UITheme.CreateSelectFrame(go.transform); // 조종 중인 분대장(ignoreLayout)
+            card.Tip = go.AddComponent<TooltipTrigger>();                // 이름·능력치·이번 전투 활약
+            MakeMercDropTarget(go, _fighters.IndexOf(card.Merc));       // 시체 카드·가방 칸을 끌어 놓으면 이 대원 가방에
+            RowClickHandler.Attach(go, () => ToggleDetail(card));
+        }
+
+        /// <summary>간단 카드를 누르면 그 위에 상세 카드. 같은 카드를 다시 누르면 닫고, 다른 카드면 바꾼다.</summary>
+        private void ToggleDetail(PartyCard card)
+        {
+            bool reopen = _openDetail != card;
+            CloseDetail();
+            if (!reopen || _resultShown || card.Detail == null || card.Compact == null) return;
+            var panel = (RectTransform)card.Detail.transform.parent;
+            var rect = (RectTransform)card.Detail.transform;
+            float x = panel.InverseTransformPoint(card.Compact.TransformPoint(card.Compact.rect.center)).x;
+            float half = panel.rect.width * 0.5f - DetailCardWidth * 0.5f - 8f; // 화면 밖으로 나가지 않게
+            rect.anchoredPosition = new Vector2(Mathf.Clamp(x, -half, half), 8f);
+            card.Detail.SetActive(true);
+            card.Detail.transform.SetAsLastSibling();
+            _openDetail = card;
+        }
+
+        /// <summary>상세 카드가 떠 있을 때 그 창과 간단 카드 밖을 누르면 닫는다(간단 카드 클릭은 ToggleDetail이 맡는다).</summary>
+        private void CloseDetailOnOutsideClick()
+        {
+            if (_openDetail == null) return;
+            var mouse = Mouse.current;
+            if (mouse == null || !mouse.leftButton.wasPressedThisFrame) return;
+            Vector2 point = mouse.position.ReadValue();
+            if (_openDetail.Detail != null && RectTransformUtility.RectangleContainsScreenPoint((RectTransform)_openDetail.Detail.transform, point, null)) return;
+            foreach (var card in _partyCards)
+                if (card.Compact != null && RectTransformUtility.RectangleContainsScreenPoint(card.Compact, point, null)) return;
+            CloseDetail();
+        }
+
+        private void CloseDetail()
+        {
+            if (_openDetail?.Detail != null) _openDetail.Detail.SetActive(false);
+            _openDetail = null;
+        }
+
+        /// <summary>상세 카드(예전 카드 전체). parent = 떠 있는 창(CreateDetailWindow) — 창 안을 여백만 두고 채운다.</summary>
+        private PartyCard CreatePartyCard(Transform parent, Mercenary merc, FieldUnit unit)
+        {
+            var go = CreateImage(parent, "PartyCard_" + merc.Name, Color.white);
+            go.AddComponent<CanvasGroup>();
+            var cardRect = (RectTransform)go.transform;
+            cardRect.anchorMin = Vector2.zero;
+            cardRect.anchorMax = Vector2.one;
+            cardRect.offsetMin = new Vector2(DetailPadding, DetailPadding);
+            cardRect.offsetMax = new Vector2(-DetailPadding, -DetailPadding);
+            var bg = go.GetComponent<Image>();
+            bg.sprite = UITheme.Inset;
+            bg.type = Image.Type.Sliced;
+            var v = go.AddComponent<VerticalLayoutGroup>();
+            v.padding = new RectOffset(7, 7, 6, 6);
+            v.spacing = 3f;
+            v.childAlignment = TextAnchor.UpperLeft;
+            v.childControlWidth = v.childControlHeight = true;
+            v.childForceExpandWidth = true;
+            v.childForceExpandHeight = false;
+            var card = new PartyCard { Merc = merc, Unit = unit, Group = go.GetComponent<CanvasGroup>(), Detail = parent.gameObject };
+
+            // 위: 초상 + 이름 / 직업·분대
+            var top = new GameObject("Top", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            top.transform.SetParent(go.transform, false);
+            var th = top.GetComponent<HorizontalLayoutGroup>();
+            th.spacing = 5f;
+            th.childAlignment = TextAnchor.MiddleLeft;
+            th.childControlWidth = th.childControlHeight = true;
+            th.childForceExpandWidth = th.childForceExpandHeight = false;
+            CharacterPortraitUI.Create(top.transform, merc.Appearance, 38);
+            var names = new GameObject("Names", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(LayoutElement));
+            names.transform.SetParent(top.transform, false);
+            names.GetComponent<LayoutElement>().flexibleWidth = 1f;
+            var nv = names.GetComponent<VerticalLayoutGroup>();
+            nv.childControlWidth = nv.childControlHeight = true;
+            nv.childForceExpandWidth = true;
+            nv.childForceExpandHeight = false;
+            card.Name = CreateText(names.transform, "", 14, TextAnchor.MiddleLeft, UITheme.BodyText);
+            card.Name.fontStyle = FontStyle.Bold;
+            card.Name.horizontalOverflow = HorizontalWrapMode.Overflow;
+            card.Name.raycastTarget = false;
+            string squad = _session.Units.Any(u => u.IsPlayerSide && u.Squad > 0) ? $" · {unit.Squad + 1}분대" : "";
+            var cls = CreateText(names.transform, merc.Class.ClassName + squad, 11, TextAnchor.MiddleLeft, UITheme.MutedText);
+            cls.horizontalOverflow = HorizontalWrapMode.Overflow;
+            cls.raycastTarget = false;
+
+            // 체력 막대 + 글자
+            card.HpFillImage = CreateCardBar(go.transform, 8f, HpHigh, out card.HpFill);
+            card.Hp = CreateText(go.transform, "", 11, TextAnchor.MiddleLeft, UITheme.BodyText);
+            card.Hp.raycastTarget = false;
+
+            // 스킬 쿨타임
+            card.Skill = CreateText(go.transform, "", 11, TextAnchor.MiddleLeft, new Color(0.6f, 0.85f, 1f));
+            card.Skill.horizontalOverflow = HorizontalWrapMode.Overflow;
+            card.Skill.raycastTarget = false;
+            CreateCardBar(go.transform, 4f, new Color(0.45f, 0.7f, 1f), out card.SkillFill);
+
+            // 상태(기절·중독·쓰러짐)
+            card.Status = CreateText(go.transform, "", 11, TextAnchor.MiddleLeft, UITheme.MutedText);
+            card.Status.supportRichText = true;
+            card.Status.raycastTarget = false;
+
+            // 능력치 · 이번 전투 활약(예전엔 툴팁에만)
+            card.Stats = CreateText(go.transform, "", 11, TextAnchor.MiddleLeft, UITheme.BodyText);
+            card.Stats.raycastTarget = false;
+            card.Activity = CreateText(go.transform, "", 11, TextAnchor.UpperLeft, UITheme.MutedText);
+            card.Activity.horizontalOverflow = HorizontalWrapMode.Wrap;
+            card.Activity.raycastTarget = false;
+
+            // 장비칸: 무기 · 가방(마을 용병 정보 창과 같은 칸 — BagSlotsUI.CreateEquipSlot) + 가방 n/m
+            var equip = new GameObject("Equip", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            equip.transform.SetParent(go.transform, false);
+            var eh = equip.GetComponent<HorizontalLayoutGroup>();
+            eh.spacing = 4f;
+            eh.childAlignment = TextAnchor.UpperLeft;
+            eh.childControlWidth = eh.childControlHeight = true;
+            eh.childForceExpandWidth = eh.childForceExpandHeight = false;
+            var weapon = merc.Weapon;
+            BagSlotsUI.CreateEquipSlot(equip.transform, "무기", weapon?.Icon,
+                weapon != null ? $"무기: {weapon.Name}\n{weapon.DescribeFor(merc.Class.Kind)}" : "무기: 맨손", PartyEquipSlot);
+            BagSlotsUI.CreateEquipSlot(equip.transform, "가방", merc.Bag.Icon,
+                $"가방 {merc.Bag.Name} ({merc.Bag.Slots}칸)\n눌러서 가방 창 (B)", PartyEquipSlot, ToggleBagWindow);
+            card.Bag = CreateText(equip.transform, "", 11, TextAnchor.UpperLeft, new Color(1f, 0.83f, 0.42f));
+            card.Bag.horizontalOverflow = HorizontalWrapMode.Overflow;
+            card.Bag.raycastTarget = false;
+
+            // 조종 중인 분대장 표시(흰 테두리). 툴팁(능력치·이번 전투 활약)은 간단 카드에 단다.
+            card.Frame = UITheme.CreateSelectFrame(go.transform); // 레이아웃에 끼지 않는다(ignoreLayout)
+            MakeMercDropTarget(go, _fighters.IndexOf(merc)); // 시체 카드·가방 칸을 이 대원 카드로 끌어 놓으면 이 대원 가방에
+            return card;
+        }
+
+        /// <summary>카드 안 가로 막대(어두운 칸 + 채움). 채움 Image를 돌려주고 길이 조절용 RectTransform을 out으로.</summary>
+        private static Image CreateCardBar(Transform parent, float height, Color color, out RectTransform fill)
+        {
+            var track = CreateImage(parent, "Bar", new Color(0f, 0f, 0f, 0.55f));
+            var trackLayout = track.AddComponent<LayoutElement>();
+            trackLayout.minHeight = trackLayout.preferredHeight = height;
+            track.GetComponent<Image>().raycastTarget = false;
+            var image = CreateBarFill(track.transform, color);
+            fill = (RectTransform)image.transform;
+            return image;
+        }
+
+        /// <summary>체력·스킬 쿨타임·상태·조종 표시(매 프레임, 글자와 막대 길이만).</summary>
+        private void RefreshPartyCards()
+        {
+            if (_session == null) return;
+            if (_resultShown && _openDetail != null) CloseDetail(); // 결과 화면에선 상세 카드를 닫는다
+            var leader = _session.Leader;
+            foreach (var card in _partyCards)
+            {
+                if (card.Group == null) continue;
+                var unit = card.Unit;
+                var c = unit.Combatant;
+                bool alive = unit.IsAlive;
+                int max = Math.Max(1, c.Stats.MaxHealth);
+                float ratio = Mathf.Clamp01((float)c.CurrentHealth / max);
+                SetLength(card.HpFill, ratio);
+                card.HpFillImage.color = ratio > 0.5f ? HpHigh : ratio > 0.25f ? HpMid : HpLow;
+                card.Hp.text = $"체력 {Mathf.Max(0, c.CurrentHealth)}/{max}";
+
+                bool controlled = alive && unit == leader;
+                bool isLeader = _leaderMercs.Contains(card.Merc);
+                card.Name.text = (isLeader ? "★ " : "") + card.Merc.Name;
+                card.Name.color = controlled ? LeaderColor : UITheme.BodyText;
+                card.Frame.SetActive(controlled);
+
+                // 간단 카드: 체력 막대·숫자 · 조종 테두리 · ★ · 쓰러지면 흐리게
+                if (card.CompactGroup != null)
+                {
+                    SetLength(card.CompactHpFill, ratio);
+                    card.CompactHpFillImage.color = card.HpFillImage.color;
+                    card.CompactHp.text = $"{Mathf.Max(0, c.CurrentHealth)}/{max}";
+                    card.CompactFrame.SetActive(controlled);
+                    card.Star.gameObject.SetActive(isLeader);
+                    card.Star.color = controlled ? LeaderColor : UITheme.BodyText;
+                    card.CompactGroup.alpha = alive ? 1f : 0.45f;
+                }
+
+                if (unit.Skill != null)
+                {
+                    float total = Mathf.Max(0.01f, unit.Skill.CooldownSeconds);
+                    bool ready = unit.Cooldown <= 0f;
+                    card.Skill.text = ready ? $"{unit.Skill.Name} 준비" : $"{unit.Skill.Name} {Mathf.CeilToInt(unit.Cooldown)}초";
+                    SetLength(card.SkillFill, ready ? 1f : 1f - unit.Cooldown / total);
+                }
+                else
+                {
+                    card.Skill.text = "스킬 없음";
+                    SetLength(card.SkillFill, 0f);
+                }
+
+                card.Status.text = !alive ? "<color=#e05a4a>쓰러짐</color>"
+                    : unit.IsStunned ? "<color=#ffd34a>기절</color>"
+                    : c.IsPoisoned ? "<color=#9ad06a>중독</color>"
+                    : "이상 없음";
+                card.Group.alpha = alive ? 1f : 0.45f;
+                card.Stats.text = (c.Stats.Magic > 0 ? $"마력 {c.Stats.Magic}" : $"공격 {c.Stats.Attack}") + $" · 방어 {c.Stats.Defense} · 속도 {c.Stats.MoveSpeed}";
+                card.Activity.text = $"피해 {c.DamageDealt} · 처치 {c.Kills}" + (c.HealingDone > 0 ? $" · 치유 {c.HealingDone}" : "");
+
+                // 간단 카드: 상태 글
+                if (card.CompactStatus != null)
+                {
+                    string status = !alive ? "<color=#e05a4a>쓰러짐</color>"
+                        : unit.IsStunned ? "<color=#ffd34a>기절</color>"
+                        : c.IsPoisoned ? "<color=#9ad06a>중독</color>" : "";
+                    card.CompactStatus.text = status;
+                    card.CompactStatus.gameObject.SetActive(status.Length > 0);
+                }
+                if (card.Tip != null) card.Tip.Text = $"<b>{card.Merc.Name}</b> ({card.Merc.Class.ClassName})\n" +
+                                $"공격 {c.Stats.Attack} · 방어 {c.Stats.Defense} · 속도 {c.Stats.MoveSpeed}\n" +
+                                $"이번 전투: {BattleRating.Describe(c)}";
+            }
+        }
+
+        /// <summary>카드마다 "가방 n/m": 지난 원정부터 든 것 + 이번에 주운 몫(가방 창과 같은 나눔 — BagSlotsUI.Split).</summary>
+        private void RefreshPartyBags()
+        {
+            if (_partyCards.Count == 0) return;
+            foreach (var card in _partyCards)
+            {
+                if (card.Bag == null) continue;
+                int i = _fighters.IndexOf(card.Merc);
+                int carried = card.Merc.BagContents.Count + (i >= 0 && i < _bagNew.Length ? _bagNew[i].Count : 0); // 대원별 배정(끌어 옮긴 것 포함)
+                card.Bag.text = $"가방\n{carried}/{card.Merc.Bag.Slots}";
+            }
         }
 
         private Button CreateActionButton(Transform parent, Vector2 anchoredPosition, out Text label)
@@ -2715,9 +4012,9 @@ namespace GN3.Battle
 
         // ---------- 결과(보상) 화면 ----------
 
-        private const float ResultWidth = 640f;
+        private const float ResultWidth = 860f;         // 평점·MVP·활약 줄·성장이 한 줄에 들게 넓게(예전 640)
         private const float ResultPad = 40f;            // 판 안쪽 좌우 여백
-        private const float ResultRowHeight = 46f;
+        private const float ResultRowHeight = 62f;      // 두 줄(이름·체력 / MVP·활약 수치)
         private const float ResultIconSize = 40f;
         private const float ResultEmblemSize = 46f;    // 늑대 휘장은 교차한 검 때문에 가로로 넓어 방패가 작아 보여 조금 더 크게
         private static readonly Color VictoryColor = new Color(1f, 0.82f, 0.35f);   // 승리 쪽 강조(장식선·골드)
@@ -2753,7 +4050,8 @@ namespace GN3.Battle
             float bagHeight = ResultBagHeader + 6f + cardsHeight + (hasOutside ? 6f + ResultBagOutside : 0f);
             float lootExtra = loot.Count > 0 ? bagHeight + 8f : 0f;
             float membersTop = -196f - lootExtra;
-            float height = -membersTop + ResultRowHeight * rows + 124f;
+            float meterHeight = ResultMeterHeight(_session.PlayerTeam.Count); // 대원 줄 아래 세 칸 그래프(딜량·힐량·받은 피해)
+            float height = -membersTop + ResultRowHeight * rows + 124f + 14f + meterHeight;
             var panel = CreateImage(overlay.transform, "ResultPanel", Color.white);
             panel.AddComponent<CanvasGroup>();
             var panelRect = (RectTransform)panel.transform;
@@ -2829,7 +4127,8 @@ namespace GN3.Battle
                 bagLayout.childForceExpandHeight = false;
                 string left = (report.BagLeft > 0 ? $"  <color=#a3937c>· 칸이 모자라 {report.BagLeft}개는 두고 왔다</color>" : "")
                     + (report.BagLost > 0 ? $"  <color=#a3937c>· 쓰러진 대원의 가방과 함께 {report.BagLost}개를 잃었다</color>" : "");
-                var header = CreateText(bag.transform, $"<b>가방</b>  <color=#ffd36b>{BagCatalog.SlotsUsed(loot)}/{report.BagCapacity}칸</color>{left}",
+                int lootValue = loot.Sum(l => l.item.Price * l.count); // 가방 + 가방 밖(재료·동전) 합계
+                var header = CreateText(bag.transform, $"<b>가방</b>  <color=#ffd36b>{BagCatalog.SlotsUsed(loot)}/{report.BagCapacity}칸</color>  <color=#ffd36b>· 전리품 ≈ {lootValue}G</color>{left}",
                     16, TextAnchor.MiddleCenter, UITheme.BodyText);
                 header.supportRichText = true;
                 header.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -2855,6 +4154,12 @@ namespace GN3.Battle
                 CreateResultRow(panel.transform, m, y);
                 y -= ResultRowHeight;
             }
+
+            // 전투 통계: 구분선 + 딜량 · 힐량 · 받은 피해 세 칸
+            var meterDivider = CreateImage(panel.transform, "MeterDivider", DividerColor);
+            PlaceTop((RectTransform)meterDivider.transform, y - 6f, 1f, ResultPad);
+            meterDivider.GetComponent<Image>().raycastTarget = false;
+            BuildResultMeters(panel.transform, y - 14f, panelRect.sizeDelta.x);
 
             // 귀환 안내 + 버튼
             int survivors = report.Members.Count(m => !m.Fallen);
@@ -2933,7 +4238,7 @@ namespace GN3.Battle
         // 결과 화면 가방(BagSlotsUI 용병별 카드): 한 줄 10칸(가장 큰 가방), 칸 44
         private const int ResultBagPerLine = 10;
         private const float ResultBagSlot = 44f, ResultBagGap = 4f, ResultBagCardGap = 6f;
-        private const float ResultBagWidth = 760f;   // 가방이 있으면 결과 판을 이만큼 넓힌다(카드 폭 ≈ 초상 44 + 정보 112 + 칸 476 + 여백)
+        private const float ResultBagWidth = 860f;   // 가방이 있어도 같은 폭(카드 폭 ≈ 초상 44 + 정보 112 + 칸 476 + 여백보다 넉넉)
         private const float ResultBagHeader = 22f;   // "가방 n/m칸" 줄
         private const float ResultBagOutside = 28f;  // 가방 밖(재료·동전) 줄
 
@@ -2953,12 +4258,27 @@ namespace GN3.Battle
             PlaceTop((RectTransform)row.transform, y, ResultRowHeight, ResultPad);
             if (m.Fallen) row.GetComponent<CanvasGroup>().alpha = 0.5f;
 
-            var portrait = CharacterPortraitUI.Create(row.transform, m.Merc.Appearance, 36);
+            // 줄 배치(왼쪽부터): 초상 40 · 큰 평점 등급 · [1줄] 이름 + 체력선 / [2줄] MVP 배지 + 활약 수치 · 오른쪽에 성장(또는 전사)
+            var portrait = CharacterPortraitUI.Create(row.transform, m.Merc.Appearance, 40);
             var pr = (RectTransform)portrait.transform;
             pr.anchorMin = pr.anchorMax = new Vector2(0f, 0.5f);
             pr.pivot = new Vector2(0f, 0.5f);
             pr.anchoredPosition = Vector2.zero;
-            pr.sizeDelta = new Vector2(36f, 36f);
+            pr.sizeDelta = new Vector2(40f, 40f);
+
+            // 평점 등급(BattleRating): 초상 옆에 크게. 마우스를 올리면 점수
+            var grade = CreateText(row.transform, BattleRating.RichGrade(m.Score), 26, TextAnchor.MiddleCenter, UITheme.BodyText);
+            grade.supportRichText = true;
+            grade.fontStyle = FontStyle.Bold;
+            grade.horizontalOverflow = HorizontalWrapMode.Overflow;
+            grade.raycastTarget = true;
+            grade.gameObject.AddComponent<Shadow>().effectColor = new Color(0f, 0f, 0f, 0.6f);
+            var gradeRect = grade.rectTransform;
+            gradeRect.anchorMin = gradeRect.anchorMax = new Vector2(0f, 0.5f);
+            gradeRect.pivot = new Vector2(0f, 0.5f);
+            gradeRect.anchoredPosition = new Vector2(48f, 0f);
+            gradeRect.sizeDelta = new Vector2(58f, 40f);
+            grade.gameObject.AddComponent<TooltipTrigger>().Text = $"평점 {BattleRating.Grade(m.Score)} ({m.Score}점){(m.Mvp ? " · MVP" : "")}\n{m.Stats}";
 
             bool leader = _leaderMercs.Contains(m.Merc);
             var name = CreateText(row.transform, leader ? $"★ {m.Merc.Name}" : m.Merc.Name, 17, TextAnchor.MiddleLeft,
@@ -2969,20 +4289,35 @@ namespace GN3.Battle
             var nameRect = name.rectTransform;
             nameRect.anchorMin = nameRect.anchorMax = new Vector2(0f, 0.5f);
             nameRect.pivot = new Vector2(0f, 0.5f);
-            nameRect.anchoredPosition = new Vector2(50f, 0f);
-            nameRect.sizeDelta = new Vector2(104f, 26f);
+            nameRect.anchoredPosition = new Vector2(ResultLineX, 12f);
+            nameRect.sizeDelta = new Vector2(180f, 24f);
 
-            // 평점 등급(BattleRating): 이름과 체력선 사이. 마우스를 올리면 활약 수치
-            var grade = CreateText(row.transform, BattleRating.RichGrade(m.Score), 18, TextAnchor.MiddleCenter, UITheme.BodyText);
-            grade.supportRichText = true;
-            grade.fontStyle = FontStyle.Bold;
-            grade.raycastTarget = true;
-            var gradeRect = grade.rectTransform;
-            gradeRect.anchorMin = gradeRect.anchorMax = new Vector2(0f, 0.5f);
-            gradeRect.pivot = new Vector2(0f, 0.5f);
-            gradeRect.anchoredPosition = new Vector2(156f, 0f);
-            gradeRect.sizeDelta = new Vector2(48f, 30f);
-            grade.gameObject.AddComponent<TooltipTrigger>().Text = $"평점 {BattleRating.Grade(m.Score)} ({m.Score}점){(m.Mvp ? " · MVP" : "")}\n{m.Stats}";
+            // 2줄: MVP 배지(금빛) + 활약 수치(준 피해·받은 피해·처치·치유 — 예전엔 툴팁에만 있었다)
+            float statsX = ResultLineX;
+            if (m.Mvp)
+            {
+                var badge = CreateImage(row.transform, "Mvp", new Color(1f, 0.78f, 0.25f, 1f));
+                var badgeRect = (RectTransform)badge.transform;
+                badgeRect.anchorMin = badgeRect.anchorMax = new Vector2(0f, 0.5f);
+                badgeRect.pivot = new Vector2(0f, 0.5f);
+                badgeRect.anchoredPosition = new Vector2(ResultLineX, -13f);
+                badgeRect.sizeDelta = new Vector2(44f, 18f);
+                badge.GetComponent<Image>().raycastTarget = false;
+                var badgeText = CreateText(badge.transform, "MVP", 12, TextAnchor.MiddleCenter, new Color(0.2f, 0.12f, 0.02f));
+                badgeText.fontStyle = FontStyle.Bold;
+                badgeText.raycastTarget = false;
+                Stretch(badgeText.rectTransform);
+                statsX += 50f;
+            }
+            var stats = CreateText(row.transform, m.Stats ?? "", 12, TextAnchor.MiddleLeft, UITheme.MutedText);
+            stats.supportRichText = true;
+            stats.horizontalOverflow = HorizontalWrapMode.Overflow;
+            stats.raycastTarget = false;
+            var statsRect = stats.rectTransform;
+            statsRect.anchorMin = statsRect.anchorMax = new Vector2(0f, 0.5f);
+            statsRect.pivot = new Vector2(0f, 0.5f);
+            statsRect.anchoredPosition = new Vector2(statsX, -13f);
+            statsRect.sizeDelta = new Vector2(ResultGainsX - statsX - 10f, 20f);
 
             // 가는 체력선: 남은 체력(색) + 이번 전투에서 잃은 부분(옅은 빨강). 숫자는 툴팁으로.
             float max = Math.Max(1, m.MaxHealth);
@@ -2991,8 +4326,8 @@ namespace GN3.Battle
             var trackRect = (RectTransform)track.transform;
             trackRect.anchorMin = trackRect.anchorMax = new Vector2(0f, 0.5f);
             trackRect.pivot = new Vector2(0f, 0.5f);
-            trackRect.anchoredPosition = new Vector2(210f, 0f);
-            trackRect.sizeDelta = new Vector2(170f, 6f);
+            trackRect.anchoredPosition = new Vector2(ResultLineX + 190f, 12f); // 1줄: 이름 오른쪽
+            trackRect.sizeDelta = new Vector2(150f, 6f);
             var lost = CreateBarFill(track.transform, new Color(1f, 0.45f, 0.4f, 0.45f));
             SetLength((RectTransform)lost.transform, before);
             var hp = CreateBarFill(track.transform, after > 0.5f ? HpHigh : after > 0.25f ? HpMid : HpLow);
@@ -3002,23 +4337,28 @@ namespace GN3.Battle
             var hoverRect = (RectTransform)hover.transform;
             hoverRect.anchorMin = hoverRect.anchorMax = new Vector2(0f, 0.5f);
             hoverRect.pivot = new Vector2(0f, 0.5f);
-            hoverRect.anchoredPosition = new Vector2(210f, 0f);
-            hoverRect.sizeDelta = new Vector2(170f, 24f);
+            hoverRect.anchoredPosition = new Vector2(ResultLineX + 190f, 12f);
+            hoverRect.sizeDelta = new Vector2(150f, 24f);
             hover.AddComponent<TooltipTrigger>().Text = m.Fallen ? $"체력 {m.HealthBefore} → 0"
                 : m.HealthAfter < m.HealthBefore ? $"체력 {m.HealthBefore} → {m.HealthAfter} / {m.MaxHealth}"
                 : $"체력 {m.HealthAfter} / {m.MaxHealth}";
 
+            // 오른쪽: 성장(길면 두 줄로 — 줄 높이 안) 또는 전사. MVP는 왼쪽 배지로 보인다.
             string result = m.Fallen ? "전사" : m.Gains.Count > 0 ? "▲ " + string.Join(", ", m.Gains) : "";
-            if (m.Mvp) result = result.Length > 0 ? $"MVP · {result}" : "MVP"; // 이번 판 최고 평점
             var resultText = CreateText(row.transform, result, 15, TextAnchor.MiddleRight, m.Fallen ? DefeatColor : GainColor);
             resultText.fontStyle = FontStyle.Bold;
+            resultText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            resultText.verticalOverflow = VerticalWrapMode.Overflow;
             resultText.raycastTarget = false;
             var resultRect = resultText.rectTransform;
             resultRect.anchorMin = new Vector2(0f, 0f);
             resultRect.anchorMax = new Vector2(1f, 1f);
-            resultRect.offsetMin = new Vector2(396f, 0f);
+            resultRect.offsetMin = new Vector2(ResultGainsX, 0f);
             resultRect.offsetMax = Vector2.zero;
         }
+
+        private const float ResultLineX = 112f;  // 결과 대원 줄: 이름·활약 줄이 시작하는 x(초상 40 + 등급 58 뒤)
+        private const float ResultGainsX = 480f; // 결과 대원 줄: 오른쪽 성장 글이 시작하는 x(줄 폭 780 중 오른쪽 300)
 
         /// <summary>결과 창이 아래에서 살짝 올라오며 흐릿함 → 또렷하게 나타난다(실제 시간 기준).</summary>
         private IEnumerator RiseIn(RectTransform panel)
@@ -3034,6 +4374,7 @@ namespace GN3.Battle
             }
             panel.anchoredPosition = Vector2.zero;
             group.alpha = 1f;
+            DraggablePanel.Attach(panel, persist: false); // 다 떠오른 뒤부터 잡고 끌어 옮길 수 있다(떠오르는 동안엔 위치를 덮어쓴다, 매번 가운데)
         }
 
         /// <summary>보상 골드를 0부터 올라가며 센다.</summary>

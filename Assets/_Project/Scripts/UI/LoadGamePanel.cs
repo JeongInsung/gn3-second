@@ -104,6 +104,7 @@ namespace GN3.UI
             var panel = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(Button));
             panel.transform.SetParent(transform, false);
             panel.GetComponent<RectTransform>().sizeDelta = new Vector2(Width, Height);
+            DraggablePanel.Attach(panel.GetComponent<RectTransform>()); // 잡고 끌어 옮길 수 있다(뒤 어두운 막은 고정)
             panel.GetComponent<Image>().color = new Color(0.1f, 0.1f, 0.13f, 0.96f);
             panel.GetComponent<Button>().transition = Selectable.Transition.None;
 
@@ -111,15 +112,7 @@ namespace GN3.UI
             title.fontStyle = FontStyle.Bold;
             Place(title.rectTransform, new Vector2(0f, -16f), new Vector2(Width - 40f, 36f));
 
-            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            close.transform.SetParent(panel.transform, false);
-            var closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = Vector2.one;
-            closeRect.anchoredPosition = new Vector2(-12f, -12f);
-            closeRect.sizeDelta = new Vector2(36f, 36f);
-            close.GetComponent<Image>().color = new Color(0.3f, 0.28f, 0.33f, 1f);
-            close.GetComponent<Button>().onClick.AddListener(Close);
-            Stretch(CreateText(close.transform, "X", 20, TextAnchor.MiddleCenter, UITheme.BodyText).rectTransform);
+            UITheme.CreateCloseX(panel.transform, Close); // 공통 닫기 X(32px, 오른쪽 위)
 
             // 목록(스크롤)
             var list = new GameObject("List", typeof(RectTransform), typeof(Image), typeof(ScrollRect), typeof(RectMask2D));
@@ -144,6 +137,7 @@ namespace GN3.UI
             scroll.content = contentRect;
             scroll.horizontal = false;
             SmoothWheelScroll.Attach(scroll);
+            ScrollListWrapper.AddOverlayScrollbar(scroll); // 공통 스크롤바(내용이 짧으면 숨음)
 
             var saves = SaveSystem.ListSaves();
             if (saves.Count == 0)

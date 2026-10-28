@@ -192,6 +192,7 @@ namespace GN3.Mercenaries
         {
             merc.SetHealth(0);
             MercenaryCondition.AfterDeath(merc); // 친한 동료가 슬퍼한다(떠날 수도). 친밀도를 읽어야 해서 파티에서 빼기 전에
+            GN3.Economy.Achievements.Memorialize(merc, $"병사 ({cause.displayName})"); // 명예의 전당
             PlayerParty.Instance.Remove(merc);
             string line = $"{Josa.IGa(merc.Name)} {Josa.EulReul(cause.displayName)} 치료받지 못해 세상을 떠났다.";
             ToastLog.Show(line, false);

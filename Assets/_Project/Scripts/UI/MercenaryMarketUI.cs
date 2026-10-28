@@ -170,16 +170,14 @@ namespace GN3.UI
 
             row.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.06f);
 
-            var layoutElement = row.GetComponent<LayoutElement>();
-            layoutElement.minHeight = 64;
-            layoutElement.preferredHeight = 64;
+            FitRowHeight.Attach(row, 64, 16f); // 높이 64, 이름("(X 출신)" 등)이 길어 접히면 줄이 늘어난다
 
             var hLayout = row.GetComponent<HorizontalLayoutGroup>();
             hLayout.padding = new RectOffset(16, 16, 8, 8);
             hLayout.spacing = 12;
             hLayout.childAlignment = TextAnchor.MiddleLeft;
             hLayout.childForceExpandWidth = false;
-            hLayout.childForceExpandHeight = true;
+            hLayout.childForceExpandHeight = false; // 줄이 커져도 초상·버튼은 제 크기로 가운데
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
@@ -190,12 +188,14 @@ namespace GN3.UI
             string from = origin != null ? $"  <size=15><color=#a3937c>({origin.Name} 출신)</color></size>" : "";
             var nameText = CreateText(row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}{from}", UITheme.HeadingSize, TextAnchor.MiddleLeft); // 큰 주황 글씨는 창 제목만
             nameText.fontStyle = FontStyle.Bold;
-            nameText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            nameText.gameObject.AddComponent<LayoutElement>().minWidth = 220;
+            nameText.horizontalOverflow = HorizontalWrapMode.Wrap; // 옆 칸을 덮지 않고 줄을 바꾼다
+            var nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
+            nameLayout.minWidth = nameLayout.preferredWidth = 300;
 
             var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세 · {GrowthTuning.RateLabel(merc.Age)}", 18, TextAnchor.MiddleLeft); // 재능은 숨은 값
-            classText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            classText.gameObject.AddComponent<LayoutElement>().minWidth = 140;
+            classText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var classLayout = classText.gameObject.AddComponent<LayoutElement>();
+            classLayout.minWidth = classLayout.preferredWidth = 220;
 
             // 전투력 + 주급 대략(에이전트 귀띔 범위 — 고용하기 전에 비교할 수 있게)
             var demand = ContractTerms.For(merc, renewal: false);
@@ -204,15 +204,17 @@ namespace GN3.UI
             var powerText = CreateText(row.transform, $"전투력 {merc.CombatPower}{wage}", 18, TextAnchor.MiddleLeft);
             powerText.supportRichText = true;
             powerText.color = UITheme.TitleText;
-            powerText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            powerText.gameObject.AddComponent<LayoutElement>().minWidth = 140;
+            powerText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            var powerLayout = powerText.gameObject.AddComponent<LayoutElement>();
+            powerLayout.minWidth = powerLayout.preferredWidth = 160;
 
             // 관심도(명성·등급 차이·성격): 관심 없으면 협상도 못 한다
             var interestText = CreateText(row.transform, ContractTerms.InterestLabel(demand.Interest), 16, TextAnchor.MiddleLeft);
             interestText.color = ContractTerms.InterestColor(demand.Interest);
-            interestText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            interestText.horizontalOverflow = HorizontalWrapMode.Wrap;
             var interestLayout = interestText.gameObject.AddComponent<LayoutElement>();
             interestLayout.minWidth = 90;
+            interestLayout.preferredWidth = 0;
             interestLayout.flexibleWidth = 1; // 남는 폭을 차지해 협상 버튼을 오른쪽 끝으로 민다
 
             RowClickHandler.Attach(row, () => MercenaryInfoPanel.ShowGlobal(merc));

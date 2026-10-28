@@ -110,7 +110,7 @@ namespace GN3.Economy
             if (Block(f) != null) return false;
             int next = Level(f) + 1;
             var (gold, stones) = CostFor(next);
-            if (!Wallet.TrySpend(gold)) return false;
+            if (!Wallet.TrySpend(gold, "시설 강화")) return false;
             foreach (var (color, count) in stones) LootBag.ConsumeManaColor(color, count);
             _levels[f] = next;
             if (f == Facility.Dormitory) Guild.ApplyPartySize();

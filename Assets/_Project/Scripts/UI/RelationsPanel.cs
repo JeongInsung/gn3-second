@@ -15,7 +15,7 @@ namespace GN3.UI
     /// </summary>
     public class RelationsPanel : MonoBehaviour
     {
-        private const float Width = 640f;
+        private const float Width = 760f; // 이름 칸("이름 (온천 중)")이 접히지 않게 넓게(예전 640)
         private const float Pad = 20f;
         private const float TabWidth = 104f;
         private const float TabHeight = 30f;
@@ -80,7 +80,7 @@ namespace GN3.UI
                 MailboxButton.Margin + (MailboxButton.Size - ButtonHeight) * 0.5f);
             rect.sizeDelta = new Vector2(ButtonWidth, ButtonHeight);
             go.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
-            go.GetComponent<TooltipTrigger>().Text = "용병 관계(친밀도)";
+            go.GetComponent<TooltipTrigger>().Text = "용병 관계(친밀도) (R)";
             go.GetComponent<Button>().onClick.AddListener(() => { if (Instance != null) Instance.Toggle(); });
 
             var label = new GameObject("Text", typeof(RectTransform), typeof(Text));
@@ -215,10 +215,11 @@ namespace GN3.UI
                 : RestVenues.IsResting(other) ? " <size=12><color=" + Dim + ">(" + RestVenues.Find(other).Name + " 중)</color></size>"
                 : Hospital.IsAdmitted(other) ? " <size=12><color=" + Dim + ">(입원 중)</color></size>" : "";
             var name = CreateText("Name", 15, row.transform, other.Name + status);
-            Place(name.rectTransform, 10f, 160f);
+            Place(name.rectTransform, 10f, 260f);
+            name.horizontalOverflow = HorizontalWrapMode.Overflow; // 한 줄(줄 높이 34를 넘지 않게)
 
             // 가운데가 0인 막대: 양수는 오른쪽, 음수는 왼쪽으로 단계 색이 찬다.
-            const float barX = 175f;
+            const float barX = 275f;
             var back = CreateBox("BarBack", row.transform, new Color(0f, 0f, 0f, 0.6f));
             Place(back.rectTransform, barX, BarWidth, BarHeight);
             float half = BarWidth * 0.5f;
@@ -273,17 +274,7 @@ namespace GN3.UI
             _header = CreateText("Header", 17, _panel.transform, "");
 
             // 닫기
-            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            close.transform.SetParent(_panel.transform, false);
-            var closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-8f, -8f);
-            closeRect.sizeDelta = new Vector2(28f, 28f);
-            close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
-            close.GetComponent<Button>().onClick.AddListener(Hide);
-            var x = CreateText("Text", 16, close.transform, "X");
-            x.alignment = TextAnchor.MiddleCenter;
-            Stretch(x.rectTransform);
+            UITheme.CreateCloseX(_panel.transform, Hide); // 공통 닫기 X(32px, 오른쪽 위)
 
             _panel.SetActive(false);
             EscapeCloser.Register(_panel, Hide);

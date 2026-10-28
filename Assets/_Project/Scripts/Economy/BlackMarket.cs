@@ -57,16 +57,16 @@ namespace GN3.Economy
             if (n <= 0 || !LootBag.Consume(item, n)) return 0;
             int gold = price * n;
             _purse -= gold;
-            Wallet.Add(gold);
+            Wallet.Add(gold, "전리품 판매");
             OnChanged?.Invoke();
             return gold;
         }
 
-        /// <summary>사 가는 것을 값 높은 것부터 남은 돈 안에서 모두 판다. 받은 금화를 돌려준다.</summary>
+        /// <summary>사 가는 것을 값 높은 것부터 남은 돈 안에서 모두 판다(제작 재료·마정석은 남긴다 — 하나씩 팔기는 된다). 받은 금화를 돌려준다.</summary>
         public static int SellAll()
         {
             int total = 0;
-            foreach (var (item, count) in LootBag.Entries.Where(e => Buys(e.item)).OrderByDescending(e => PriceOf(e.item)).ToList())
+            foreach (var (item, count) in LootBag.Entries.Where(e => Buys(e.item) && LootBag.SellsInBulk(e.item)).OrderByDescending(e => PriceOf(e.item)).ToList())
                 total += Sell(item, count);
             return total;
         }

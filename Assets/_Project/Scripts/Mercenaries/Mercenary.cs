@@ -71,6 +71,15 @@ namespace GN3.Mercenaries
             return added;
         }
 
+        /// <summary>가방 index번째 칸을 꺼낸다(전투 중 다른 대원 가방으로 옮길 때). 없으면 null.</summary>
+        public LootItem RemoveFromBagAt(int index)
+        {
+            if (index < 0 || index >= _bagContents.Count) return null;
+            var item = _bagContents[index];
+            _bagContents.RemoveAt(index);
+            return item;
+        }
+
         /// <summary>가방을 비우고 들어 있던 것을 돌려준다.</summary>
         public List<LootItem> TakeAllFromBag()
         {

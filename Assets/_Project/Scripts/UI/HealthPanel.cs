@@ -16,13 +16,13 @@ namespace GN3.UI
     /// </summary>
     public class HealthPanel : MonoBehaviour
     {
-        private const float Width = 820f;
+        private const float Width = 1060f; // 이름·상태이상·위치 칸이 겹치지 않게 넓게(예전 820)
         private const float Pad = 20f;
         private const float RowHeight = 38f;
         private const float RowGap = 4f;
         private const float HealthBarWidth = 120f;
         private const float BarHeight = 12f;
-        private const float ChipWidth = 96f;
+        private const float ChipWidth = 120f; // "골절(중) 회복 45%"가 칩 안에 들어가게
         private const float ChipGap = 6f;
         private const float ButtonHeight = 40f;
         private const float RefreshSeconds = 1f;
@@ -32,11 +32,13 @@ namespace GN3.UI
 
         // 열 위치(줄 왼쪽 기준)
         private const float NameX = 10f;
-        private const float HealthX = 165f;
-        private const float FatigueX = 365f;
-        private const float MoraleX = 415f;
-        private const float AilmentX = 465f;
-        private const float PlaceX = 670f;
+        private const float HealthX = 205f;
+        private const float FatigueX = 405f;
+        private const float MoraleX = 455f;
+        private const float AilmentX = 505f;
+        private const float NameWidth = 190f;
+        private const float PlaceWidth = 120f; // 줄 끝(1020)까지
+        private const float PlaceX = 890f; // 상태이상 칩 3개(3 × 126) 뒤
 
         public static HealthPanel Instance { get; private set; }
 
@@ -90,7 +92,7 @@ namespace GN3.UI
                 MailboxButton.Margin + (MailboxButton.Size - ButtonHeight) * 0.5f);
             rect.sizeDelta = new Vector2(RelationsPanel.ButtonWidth, ButtonHeight);
             go.GetComponent<Image>().color = new Color(0.3f, 0.3f, 0.35f, 0.9f);
-            go.GetComponent<TooltipTrigger>().Text = "용병 건강(체력·부상·질병·입원)";
+            go.GetComponent<TooltipTrigger>().Text = "용병 건강(체력·부상·질병·입원) (K)";
             go.GetComponent<Button>().onClick.AddListener(() => { if (Instance != null) Instance.Toggle(); });
 
             var label = new GameObject("Text", typeof(RectTransform), typeof(Text));
@@ -232,12 +234,12 @@ namespace GN3.UI
             // 머리말에 마우스를 올리면 수치가 뜻하는 것(색만 보고 짐작하지 않게)
             foreach (var (x, w, title, tip) in new[]
                      {
-                         (NameX, 150f, "이름", null),
+                         (NameX, NameWidth, "이름", null),
                          (HealthX, 190f, "체력", "지금 체력 / 최대 체력"),
                          (FatigueX, 44f, "피로", $"피로 0~100 (마을에서 쉬면 준다)\n{Mercenary.TiredFatigue} 이상: 공격·방어 -10% (주황)\n{Mercenary.ExhaustedFatigue} 이상: 지침 — 공격·방어 -25%, 파견·훈련 불가 (빨강)"),
                          (MoraleX, 44f, "사기", $"사기 0~100\n{Mercenary.LowMorale} 미만: 공격·방어 -10%, 오래 낮으면 떠날 수 있다 (빨강)"),
-                         (AilmentX, 200f, "부상·질병", "이름 옆 %는 회복 진행도(100%면 낫는다)\n(중): 중한 상태 — 파견 불가, 병원 치료 권장"),
-                         (PlaceX, 105f, "위치", null),
+                         (AilmentX, PlaceX - AilmentX - 10f, "부상·질병", "이름 옆 %는 회복 진행도(100%면 낫는다)\n(중): 중한 상태 — 파견 불가, 병원 치료 권장"),
+                         (PlaceX, PlaceWidth, "위치", null),
                      })
             {
                 var text = CreateText("Col", 13, header.transform, $"<color={Dim}>{title}</color>");
@@ -258,7 +260,7 @@ namespace GN3.UI
             RowClickHandler.Attach(row.gameObject, () => MercenaryInfoPanel.ShowGlobal(merc));
 
             var name = CreateText("Name", 15, row.transform, $"{GradeTable.RichLabel(merc.Grade)} {merc.Name}");
-            Place(name.rectTransform, NameX, 150f);
+            Place(name.rectTransform, NameX, NameWidth);
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
             AddTip(name, Tooltip(merc));
 
@@ -295,7 +297,7 @@ namespace GN3.UI
             string place = PlaceText(merc);
             string placeColor = Hospital.IsAdmitted(merc) ? "#ffffff" : place == "마을" ? Dim : Warn;
             var placeText = CreateText("Place", 13, row.transform, $"<color={placeColor}>{place}</color>");
-            Place(placeText.rectTransform, PlaceX, 105f);
+            Place(placeText.rectTransform, PlaceX, PlaceWidth);
             placeText.horizontalOverflow = HorizontalWrapMode.Overflow;
         }
 
@@ -362,17 +364,7 @@ namespace GN3.UI
             _rows = CreateLayer("Rows");
 
             // 닫기
-            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            close.transform.SetParent(_panel.transform, false);
-            var closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-8f, -8f);
-            closeRect.sizeDelta = new Vector2(28f, 28f);
-            close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
-            close.GetComponent<Button>().onClick.AddListener(Hide);
-            var x = CreateText("Text", 16, close.transform, "X");
-            x.alignment = TextAnchor.MiddleCenter;
-            Stretch(x.rectTransform);
+            UITheme.CreateCloseX(_panel.transform, Hide); // 공통 닫기 X(32px, 오른쪽 위)
 
             _panel.SetActive(false);
             EscapeCloser.Register(_panel, Hide);

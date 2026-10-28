@@ -43,6 +43,13 @@ namespace GN3.Mercenaries
         private static readonly Dictionary<string, string> LeavingIds = new Dictionary<string, string>();
         private static readonly System.Random LeaveRng = new System.Random();
 
+        /// <summary>불러오기: 저장하지 않는 셈(한가한 날·파견 피로 소수점)을 0부터 다시 센다(떠날 용병은 저장에서 따로 복원).</summary>
+        public static void ResetTransient()
+        {
+            IdleDays.Clear();
+            PendingTravelFatigue.Clear();
+        }
+
         // GameClock.ResetForPlaySession(SubsystemRegistration)이 이벤트를 비운 뒤에 구독한다(InnRest와 같은 방식).
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Subscribe()
@@ -134,7 +141,7 @@ namespace GN3.Mercenaries
             foreach (var merc in members)
             {
                 int wage = WeeklyWage(merc);
-                if (Wallet.TrySpend(wage))
+                if (Wallet.TrySpend(wage, "임금"))
                 {
                     paid++;
                     spent += wage;

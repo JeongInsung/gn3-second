@@ -12,7 +12,9 @@ namespace GN3.Combat
 
         public override void OnRoundStart(Combatant self, int round, Random rng)
         {
+            bool was = self.IsTaunting;
             self.IsTaunting = rng.NextDouble() < ProcChance;
+            if (self.IsTaunting && !was) PassiveEvents.Push(new BattleEvent(round, self, self, 0, false, proc: "도발!")); // 직접 전투: 머리 위 글자
         }
     }
 }

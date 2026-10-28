@@ -92,18 +92,21 @@ namespace GN3.Mercenaries
             if (changed) OnChanged?.Invoke();
         }
 
-        /// <summary>저장 파일에서 불러올 때(파티·상태이상 복원 뒤). 쌓인 치료비는 저장하지 않아 0부터 다시 센다.</summary>
-        public static void Restore(IEnumerable<string> ids)
+        /// <summary>저장 파일에서 불러올 때(파티·상태이상 복원 뒤). 입원한 시간(치료비 기준)은 hours(ids와 같은 순서, 버전 15)에서 —
+        /// 예전엔 0부터 다시 세어 퇴원 직전 저장/불러오기로 치료비가 거의 0이 됐다.</summary>
+        public static void Restore(IEnumerable<string> ids, IReadOnlyList<float> hours = null)
         {
             _patientIds.Clear();
             _admittedHours.Clear();
+            int index = -1;
             if (ids != null)
                 foreach (var id in ids)
                 {
+                    index++;
                     var merc = Find(id);
                     if (_patientIds.Count >= Capacity || _patientIds.Contains(id) || merc == null || !merc.HasAilment) continue;
                     _patientIds.Add(id);
-                    _admittedHours[id] = 0f;
+                    _admittedHours[id] = hours != null && index < hours.Count ? Mathf.Max(0f, hours[index]) : 0f;
                 }
             OnChanged?.Invoke();
         }
@@ -114,6 +117,10 @@ namespace GN3.Mercenaries
             Cleanup();
             return new List<string>(_patientIds);
         }
+
+        /// <summary>저장용: SaveIds와 같은 순서의 입원한 시간(퇴원 때 치료비).</summary>
+        public static List<float> SaveHours() =>
+            _patientIds.Select(id => _admittedHours.TryGetValue(id, out float h) ? h : 0f).ToList();
 
         private static void Treat(float hours)
         {
@@ -134,7 +141,7 @@ namespace GN3.Mercenaries
                 int fee = Fee(merc);
                 _patientIds.Remove(merc.Id);
                 _admittedHours.Remove(merc.Id);
-                if (fee <= 0 || Wallet.TrySpend(fee))
+                if (fee <= 0 || Wallet.TrySpend(fee, "치료비"))
                 {
                     DailyLog.Add($"{Josa.IGa(merc.Name)} 병원에서 퇴원했다. 치료비 {fee}G");
                 }

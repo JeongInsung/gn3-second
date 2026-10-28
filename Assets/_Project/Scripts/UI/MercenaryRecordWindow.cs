@@ -52,6 +52,7 @@ namespace GN3.UI
             var rect = (RectTransform)_panel.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(Width, 0f);
+            DraggablePanel.Attach(rect); // 잡고 끌어 옮길 수 있다
             var background = _panel.GetComponent<Image>();
             background.sprite = UITheme.Panel;
             background.type = Image.Type.Sliced;
@@ -74,7 +75,8 @@ namespace GN3.UI
             var title = ShopListUI.CreateText(header.transform, $"<b>{merc.Name}의 기록</b>", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             title.supportRichText = true;
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            ShopListUI.CreateButton(header.transform, "X", Close, 40f);
+            header.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 32, 0, 0); // 오른쪽 위 X 자리
+            UITheme.CreateCloseX(_panel.transform, Close); // 공통 닫기 X
 
             var r = merc.Record;
             if (r.Battles == 0 && r.Injuries == 0 && r.Illnesses == 0)

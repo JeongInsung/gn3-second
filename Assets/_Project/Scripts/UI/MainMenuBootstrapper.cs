@@ -435,6 +435,8 @@ namespace GN3.UI
         {
             var group = new GameObject("Gold", typeof(RectTransform), typeof(HorizontalLayoutGroup));
             group.transform.SetParent(parent, false);
+            // 모양은 그대로, 아이콘·숫자를 누르면 금고 장부(Button을 붙이면 테마가 진홍 버튼으로 칠하므로 RowClickHandler)
+            RowClickHandler.Attach(group, GoldLedgerWindow.Open);
             var groupLayout = group.GetComponent<HorizontalLayoutGroup>();
             groupLayout.spacing = 4f;
             groupLayout.childAlignment = TextAnchor.MiddleLeft;
@@ -449,7 +451,7 @@ namespace GN3.UI
                 var iconImage = iconGO.GetComponent<Image>();
                 iconImage.sprite = icon;
                 iconImage.preserveAspect = true;
-                iconImage.raycastTarget = false;
+                iconImage.raycastTarget = true; // 눌러서 장부
                 var iconLayout = iconGO.GetComponent<LayoutElement>();
                 iconLayout.minWidth = iconLayout.preferredWidth = 32f;
                 iconLayout.minHeight = iconLayout.preferredHeight = 32f;
@@ -467,10 +469,10 @@ namespace GN3.UI
             text.alignment = TextAnchor.MiddleLeft;
             text.color = UITheme.TitleText;
             text.text = Format();
-            text.raycastTarget = false;
+            text.raycastTarget = true; // 눌러서 장부
 
             Coroutine flash = null;
-            Wallet.OnChanged += delta =>
+            System.Action<int> onGold = delta =>
             {
                 if (text == null) return;
                 text.text = Format();
@@ -478,14 +480,22 @@ namespace GN3.UI
                 flash = CoroutineHost.Instance.StartCoroutine(FlashGold(text, delta > 0 ? new Color(0.5f, 0.9f, 0.45f) : new Color(1f, 0.4f, 0.35f)));
             };
             // 주급날이 가까운데 골드가 모자라면 알림(표시 모양은 그대로)
-            GameClock.OnDayAdvanced += () =>
+            System.Action onDay = () =>
             {
-                if (text == null) return; // 씬이 바뀌어 사라진 표시(정적 이벤트라 구독이 남는다)
+                if (text == null) return;
                 int wage = MercenaryCondition.TotalWeeklyWage();
                 int daysLeft = MercenaryCondition.NextPayday - GameClock.CurrentDay;
                 if (daysLeft <= WageWarnDays && Wallet.Gold < wage)
                     ToastLog.Show($"{(daysLeft <= 1 ? "내일" : $"{daysLeft}일 뒤")} 주급 {wage}G — {wage - Wallet.Gold}G 부족", true, ToastKind.Warn);
             };
+            Wallet.OnChanged += onGold;
+            GameClock.OnDayAdvanced += onDay;
+            // 정적 이벤트라 씬을 다시 열 때마다(전투 뒤·불러오기) 구독이 쌓였다 → 표시가 사라질 때 푼다
+            DestroyHook.Attach(go, () =>
+            {
+                Wallet.OnChanged -= onGold;
+                GameClock.OnDayAdvanced -= onDay;
+            });
         }
 
         private const int WageWarnDays = 2; // 주급날 며칠 전부터 골드가 모자라면 알린다
@@ -515,8 +525,15 @@ namespace GN3.UI
                 tip.Text = Guild.Tooltip() + "\n\n" + ForestProgress.GoalText; // 지금 목표(은월의 숲·앤트킹)도 함께
             }
             Refresh();
-            Guild.OnChanged += _ => Refresh();
-            ForestProgress.OnChanged += Refresh;
+            System.Action<bool> onGuild = _ => Refresh();
+            System.Action onForest = Refresh;
+            Guild.OnChanged += onGuild;
+            ForestProgress.OnChanged += onForest;
+            DestroyHook.Attach(go, () => // 정적 이벤트 구독이 씬을 열 때마다 쌓이지 않게
+            {
+                Guild.OnChanged -= onGuild;
+                ForestProgress.OnChanged -= onForest;
+            });
         }
 
         private static IEnumerator FlashGold(Text text, Color flashColor)
@@ -559,10 +576,25 @@ namespace GN3.UI
             CreateMenuButton(barGO.transform, "용병시장", "UIIcons/menu_market", () => OpenPanel(marketPanel), "M");
             CreateMenuButton(barGO.transform, "파티 구성", "UIIcons/menu_party", () => OpenPanel(partyPanel), "T");
             CreateMenuButton(barGO.transform, "퀘스트", "UIIcons/menu_quest", () => OpenPanel(questPanel), "Q");
-            CreateMenuButton(barGO.transform, "도감", "UIIcons/menu_bestiary", BestiaryPanel.ShowGlobal); // 몬스터 도감 창
-            CreateMenuButton(barGO.transform, "근처 길드", "UIIcons/menu_guilds", RivalGuildsPanel.ShowGlobal); // 근처 길드 순위·관계·거래 창
+            CreateMenuButton(barGO.transform, "도감", "UIIcons/menu_bestiary", BestiaryPanel.ShowGlobal, "J"); // 몬스터 도감 창
+            CreateMenuButton(barGO.transform, "근처 길드", "UIIcons/menu_guilds", RivalGuildsPanel.ShowGlobal, "N"); // 근처 길드 순위·관계·거래 창
             CreateMenuButton(barGO.transform, "건설", "UIIcons/menu_build", BuildMenuPanel.ShowGlobal, "B"); // 마을에 건물 짓기(BuildPlacement)
-            barGO.AddComponent<VillageHotkeys>().Init(marketPanel, partyPanel, questPanel); // M·T·Q·L·B 단축키
+            barGO.AddComponent<VillageHotkeys>().Init(marketPanel, partyPanel, questPanel); // M·T·Q·L·B… 단축키
+
+            // 둘째 줄(기록·일정): 첫 줄은 MenuButtonCount개 — 날짜 줄이 그 오른쪽에 붙으므로 더 붙이면 날짜 줄에 가려진다
+            var second = new GameObject("MenuButtonBar2", typeof(RectTransform), typeof(HorizontalLayoutGroup));
+            second.transform.SetParent(canvasTransform, false);
+            var secondRect = second.GetComponent<RectTransform>();
+            secondRect.anchorMin = secondRect.anchorMax = secondRect.pivot = new Vector2(0f, 1f);
+            secondRect.anchoredPosition = new Vector2(MenuBarMargin, -MenuBarMargin - MenuButtonHeight - MenuSpacing);
+            var secondLayout = second.GetComponent<HorizontalLayoutGroup>();
+            secondLayout.spacing = MenuSpacing;
+            secondLayout.childForceExpandWidth = secondLayout.childForceExpandHeight = false;
+            secondLayout.childControlWidth = secondLayout.childControlHeight = true;
+            CreateMenuButton(second.transform, "장부", "UIIcons/gold", GoldLedgerWindow.Open, "G"); // 금고 장부(골드 수입·지출 기록)
+            CreateMenuButton(second.transform, "의뢰 기록", "UIIcons/menu_quest", QuestHistoryWindow.Open, "H"); // 끝낸 의뢰 목록·성공률
+            CreateMenuButton(second.transform, "일정", "UIIcons/menu_quest", CalendarPanel.Open, "C"); // 상인 방문·주급·계약 만료·생일
+            CreateMenuButton(second.transform, "업적", "UIIcons/menu_guilds", AchievementsPanel.Open, "Y"); // 업적·명예의 전당·전체 통계
         }
 
         private static void OpenPanel(GameObject panel) => PanelActivator.Open(panel);
@@ -609,23 +641,8 @@ namespace GN3.UI
             buttonGO.GetComponent<Button>().onClick.AddListener(onClick);
         }
 
-        private static void CreateCloseButton(Transform panelTransform, GameObject panel)
-        {
-            var buttonGO = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            buttonGO.transform.SetParent(panelTransform, false);
-
-            var rect = buttonGO.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(1f, 1f);
-            rect.anchorMax = new Vector2(1f, 1f);
-            rect.pivot = new Vector2(1f, 1f);
-            rect.anchoredPosition = new Vector2(-8f, -8f);
-            rect.sizeDelta = new Vector2(32f, 32f);
-
-            buttonGO.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
-
-            CreateFillText(buttonGO.transform, "X", 18);
-            buttonGO.GetComponent<Button>().onClick.AddListener(() => panel.SetActive(false));
-        }
+        private static void CreateCloseButton(Transform panelTransform, GameObject panel) =>
+            UITheme.CreateCloseX(panelTransform, () => panel.SetActive(false)); // 공통 닫기 X
 
         private static Text CreateFillText(Transform parent, string content, int fontSize)
         {

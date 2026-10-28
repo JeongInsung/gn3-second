@@ -20,7 +20,7 @@ namespace GN3.UI
         private const float DefaultRight = -16f; // 화면 오른쪽 끝에서
         private const float DefaultTop = -120f;  // 위쪽 버튼·시간 바 아래
         private const float PanelWidth = 340f; // 화면 오른쪽 빈 곳에 들어가게(시장·퀘스트 창 오른쪽 끝을 덮지 않게) — 퀘스트 상세 창과 같은 폭
-        private const float PanelHeight = 382f; // 최소 높이. 아래 30px은 버튼 자리(관계 보기·개발 빌드 테스트)
+        private const float PanelHeight = 300f; // 최소 높이(접힌 상태에 맞춤). 아래 30px은 버튼 자리(관계 보기·개발 빌드 테스트)
         private const float BottomSpace = 58f; // 마지막 줄 아래 ~ 창 아래(버튼 자리 포함)
         private const int PortraitSize = 110;
 
@@ -57,17 +57,72 @@ namespace GN3.UI
         private GameObject _relationsButton;
         private GameObject _renewButton; // 계약 재협상(고용된 용병만)
         private GameObject _lockButton;  // 잠금 토글(고용된 용병만)
-        private Text _recordText;        // "전적 …" 한 줄(누르면 기록 창)
-        private TooltipTrigger _recordTip;
+        private Text _compareText;       // 계약 전 후보: 내 용병과 비교(누르면 비교 대상이 바뀐다)
+        private Mercenary _compareWith;  // 지금 비교하는 파티 용병(null이면 같은 직업 중 가장 강한 사람)
+        // 늘 보이는 건 핵심(이름·상태·체력·피로·사기·능력치 한 줄·장비)뿐 — 나머지는 [자세히 보기]로 펼친다
+        private Text _contractText;      // 자세히: 계약 조건(고용된 용병만)
+        private Text _statsDetailText;   // 자세히: 능력치 + 이번 달 변화 괄호
+        private TooltipTrigger _statsDetailTip;
+        private RectTransform _detailsButton;
+        private RectTransform _compareButton; // 계약 전 후보만: 비교 줄 펼치기
+        private Text _detailsLabel;
+        private Text _compareLabel;
+        private static bool _detailsOpen; // 펼침 상태는 다른 용병을 열어도 그대로
+        private static bool _compareOpen;
+        private const float ToggleRowHeight = 26f;
 
-        /// <summary>전적 한 줄: 전투가 있으면 "전적 12전 9승 · 평균 B+ · 처치 31 · 부상 3", 없으면 "전적 없음".</summary>
-        private void RefreshRecord(Mercenary merc)
+        /// <summary>비교 후보 순서: 살아 있는 파티 용병, 같은 직업 먼저, 그 안에서 전투력 높은 순.</summary>
+        private static List<Mercenary> CompareCandidates(Mercenary merc) =>
+            PlayerParty.Instance.Members.Where(m => m.IsAlive && m != merc)
+                .OrderByDescending(m => m.Class.Kind == merc.Class.Kind).ThenByDescending(m => m.CombatPower).ToList();
+
+        private void NextCompareTarget()
         {
-            var r = merc.Record;
-            string line = r.Battles > 0
-                ? $"전적 {r.Battles}전 {r.Wins}승 · 평균 {BattleRating.RichGrade(r.AverageScore)} · 처치 {r.Kills} · 부상 {r.Injuries}"
-                : r.Injuries + r.Illnesses > 0 ? $"전적 없음 · 부상 {r.Injuries} · 질병 {r.Illnesses}" : "전적 없음";
-            SetTipLine(_recordText, _recordTip, line, "눌러서 기록 보기 (레벨별 의뢰 성공·최근 전투 평점)");
+            if (_shown == null) return;
+            var list = CompareCandidates(_shown);
+            if (list.Count == 0) return;
+            int at = _compareWith != null ? list.IndexOf(_compareWith) : 0;
+            _compareWith = list[(at + 1) % list.Count];
+            Refresh();
+        }
+
+        /// <summary>
+        /// 계약 전 후보 비교 줄: "비교: ★브렌(전사)" 다음 줄에 항목마다 "후보 값(▲차이)" — 높을수록 좋은 것은 ▲초록,
+        /// 주급은 높을수록 빨강. 끝에 한 줄 요약. 파티가 비었으면 숨긴다.
+        /// </summary>
+        private void RefreshCompare(Mercenary merc, bool hired)
+        {
+            var list = hired ? new List<Mercenary>() : CompareCandidates(merc);
+            _compareButton.gameObject.SetActive(list.Count > 0);
+            _compareLabel.text = _compareOpen ? "비교 접기 ▲" : "내 용병과 비교 ▼";
+            _compareText.gameObject.SetActive(list.Count > 0 && _compareOpen);
+            if (list.Count == 0) { _compareWith = null; return; }
+            if (_compareWith == null || !list.Contains(_compareWith)) _compareWith = list[0];
+            var other = _compareWith;
+            var a = merc.CurrentStats;
+            var b = other.CurrentStats;
+            string Diff(int mine, int theirs, bool lowerIsBetter = false)
+            {
+                int d = mine - theirs;
+                if (d == 0) return $"{mine} <color=#a3937c>(=)</color>";
+                bool good = lowerIsBetter ? d < 0 : d > 0;
+                return $"{mine} <color={(good ? "#7fd36a" : "#e06050")}>({(d > 0 ? "▲" : "▼")}{System.Math.Abs(d)})</color>";
+            }
+            int wageMine = ContractTerms.For(merc, renewal: false).WeeklyWage;
+            int wageTheirs = MercenaryCondition.WeeklyWage(other);
+            string line = $"<b>비교</b> <color=#a3937c>vs</color> {GradeTable.RichLabel(other.Grade)} {other.Name} <color=#a3937c>({other.Class.ClassName} {other.Age}세 · 눌러서 바꾸기)</color>\n"
+                + $"전투력 {Diff(merc.CombatPower, other.CombatPower)}  ·  {merc.OffenseLabel} {Diff(a.Offense, b.Offense)}  ·  방어 {Diff(a.Defense, b.Defense)}\n"
+                + $"체력 {Diff(a.MaxHealth, b.MaxHealth)}  ·  속도 {Diff(a.MoveSpeed, b.MoveSpeed)}"
+                + (a.Holy > 0 || b.Holy > 0 ? $"  ·  신성력 {Diff(a.Holy, b.Holy)}" : "")
+                + $"  ·  나이 {Diff(merc.Age, other.Age, lowerIsBetter: true)}\n"
+                + $"주급 {Diff(wageMine, wageTheirs, lowerIsBetter: true)}G";
+            int powerGap = merc.CombatPower - other.CombatPower, wageGap = wageMine - wageTheirs;
+            string verdict = powerGap > 0 && wageGap <= 0 ? "더 강하고 더 싸다"
+                : powerGap > 0 ? "더 강하지만 더 비싸다"
+                : powerGap < 0 && wageGap < 0 ? "약하지만 더 싸다"
+                : powerGap < 0 ? "더 약하고 더 비싸다" : "전투력이 비슷하다";
+            line += $"  <color=#ffd36b>— {verdict}</color>";
+            _compareText.text = line;
         }
 
         private void RefreshLock(Mercenary merc)
@@ -149,8 +204,25 @@ namespace GN3.UI
 
             // 아래: 능력치·성격·패시브 (전체 폭)
             float bottomWidth = PanelWidth - 28f;
-            // 능력치 두 줄: 공격·방어·속도 / 전투력 — 괄호(이번 달 변화)가 붙어도 잘리지 않게
-            _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -150f), new Vector2(bottomWidth, 38f));
+            // 능력치 한 줄: 공격·방어·속도·전투력(지금 값). 이번 달 변화 괄호가 붙은 두 줄은 자세히 칸(_statsDetailText)
+            _statsText = CreateText("Stats", 15, FontStyle.Normal, new Vector2(14f, -150f), new Vector2(bottomWidth, 22f));
+            _statsDetailText = CreateText("StatsDetail", 14, FontStyle.Normal, new Vector2(14f, -150f), new Vector2(bottomWidth, 38f));
+            _statsDetailTip = AddTooltip(_statsDetailText);
+            _contractText = CreateText("Contract", 14, FontStyle.Normal, new Vector2(14f, -150f), new Vector2(bottomWidth, 22f));
+            var details = CreateBottomButton("DetailsButton", "자세히 보기 ▼", Vector2.zero, new Color(0.25f, 0.27f, 0.33f, 1f), () =>
+            {
+                _detailsOpen = !_detailsOpen;
+                if (_shown != null) Refresh();
+            });
+            _detailsButton = TopAnchored(details);
+            _detailsLabel = details.GetComponentInChildren<Text>();
+            var compare = CreateBottomButton("CompareButton", "내 용병과 비교 ▼", Vector2.zero, new Color(0.25f, 0.27f, 0.33f, 1f), () =>
+            {
+                _compareOpen = !_compareOpen;
+                if (_shown != null) Refresh();
+            });
+            _compareButton = TopAnchored(compare);
+            _compareLabel = compare.GetComponentInChildren<Text>();
             // 성격·패시브는 이름만 쓰고, 마우스를 올리면 설명이 툴팁으로 뜬다.
             _personalityText = CreateText("Personality", 15, FontStyle.Normal, new Vector2(14f, -218f), new Vector2(bottomWidth, 22f));
             _passiveText = CreateText("Passive", 15, FontStyle.Normal, new Vector2(14f, -246f), new Vector2(bottomWidth, 22f));
@@ -164,13 +236,13 @@ namespace GN3.UI
             _healthStatusText = CreateText("HealthStatus", 15, FontStyle.Normal, new Vector2(14f, -302f), new Vector2(bottomWidth, 22f));
             _healthStatusText.supportRichText = true; // 상태이상 이름 색(에셋 이름에는 태그가 없다)
             _healthStatusTip = AddTooltip(_healthStatusText);
-            // 전적: "전적 12전 9승 · 평균 B+ · 처치 31 · 부상 3" — 누르면 기록 창(MercenaryRecordWindow)
-            _recordText = CreateText("Record", 15, FontStyle.Normal, new Vector2(14f, -330f), new Vector2(bottomWidth, 22f));
-            _recordText.supportRichText = true; // 평균 등급 색
-            _recordTip = AddTooltip(_recordText);
-            var recordButton = _recordText.gameObject.AddComponent<Button>();
-            recordButton.transition = Selectable.Transition.None;
-            recordButton.onClick.AddListener(() => { if (_shown != null) MercenaryRecordWindow.Open(_shown); });
+            // 비교(계약 전 후보만): 내 용병과 능력치·주급 나란히 — 누르면 다음 파티 용병과 비교
+            _compareText = CreateText("Compare", 14, FontStyle.Normal, new Vector2(14f, -358f), new Vector2(bottomWidth, 22f));
+            _compareText.supportRichText = true;
+            AddTooltip(_compareText).Text = "눌러서 비교할 내 용병 바꾸기 (같은 직업이 먼저)";
+            var compareButton = _compareText.gameObject.AddComponent<Button>();
+            compareButton.transition = Selectable.Transition.None;
+            compareButton.onClick.AddListener(NextCompareTarget);
             _relationsButton = CreateRelationsButton();
             _renewButton = CreateBottomButton("RenewButton", "재계약", new Vector2(122f, 8f), new Color(0.62f, 0.5f, 0.2f, 1f),
                 () => { if (_shown != null) ContractNegotiationPanel.OpenRenewal(_shown); });
@@ -329,6 +401,14 @@ namespace GN3.UI
             return go;
         }
 
+        /// <summary>CreateBottomButton으로 만든 버튼을 위 기준 앵커로 바꾼다(자리·폭은 LayoutRows가 정한다).</summary>
+        private static RectTransform TopAnchored(GameObject button)
+        {
+            var rect = (RectTransform)button.transform;
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
+            return rect;
+        }
+
         /// <summary>[테스트] 보고 있는 용병 체력 -30%. 치료 아이템 시험용(에디터·개발 빌드에서만).</summary>
         private void CreateDebugDamageButton()
         {
@@ -363,31 +443,7 @@ namespace GN3.UI
             text.raycastTarget = false;
         }
 
-        private void CreateCloseButton()
-        {
-            var go = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            go.transform.SetParent(_panel.transform, false);
-            var rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 1f);
-            rect.anchoredPosition = new Vector2(-8f, -8f);
-            rect.sizeDelta = new Vector2(28f, 28f);
-            go.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
-            go.GetComponent<Button>().onClick.AddListener(Hide);
-
-            var label = new GameObject("Text", typeof(RectTransform), typeof(Text));
-            label.transform.SetParent(go.transform, false);
-            var labelRect = label.GetComponent<RectTransform>();
-            labelRect.anchorMin = Vector2.zero;
-            labelRect.anchorMax = Vector2.one;
-            labelRect.offsetMin = labelRect.offsetMax = Vector2.zero;
-            var text = label.GetComponent<Text>();
-            text.text = "X";
-            text.font = UITheme.Font;
-            text.fontSize = 16;
-            text.alignment = TextAnchor.MiddleCenter;
-            text.color = Color.white;
-            text.raycastTarget = false;
-        }
+        private void CreateCloseButton() => UITheme.CreateCloseX(_panel.transform, Hide); // 공통 닫기 X
 
         /// <summary>마을에서 캐릭터를 클릭해 연 창인지. 그 캐릭터가 마을에서 사라지면(여관·파견·밤) 이런 창만 자동으로 닫는다.</summary>
         public bool OpenedFromVillage { get; private set; }
@@ -416,6 +472,7 @@ namespace GN3.UI
         /// </summary>
         private void PlaceBesideParty()
         {
+            if (DraggablePanel.MovedPosition(_panelRect).HasValue) return; // 끌어 옮긴(저장된) 자리가 있으면 그대로
             var parent = (RectTransform)_panelRect.parent;
             float x = DefaultRight;
             var partyPanel = GameObject.Find("PartyPanel"); // 씬의 파티 창 판(꺼져 있으면 못 찾는다)
@@ -479,7 +536,8 @@ namespace GN3.UI
             else
                 _statusText.text = merc.IsExhausted ? "상태: 지쳐서 쉬는 중 (파견 불가)"
                     : wounded ? "상태: 다침 (마을에서 쉬는 중)" : "상태: 마을에서 쉬는 중";
-            if (hired) _statusText.text += $"\n계약: {Contracts.Describe(merc)}"; // 좁은 칸에서 끊기지 않게 줄을 나눈다
+            _contractText.gameObject.SetActive(hired && _detailsOpen); // 계약 조건은 자세히 칸
+            if (hired) _contractText.text = $"계약: {Contracts.Describe(merc)}";
             string ailmentTip = Ailments.EffectTooltip(merc); // 효과는 글에 쓰지 않고 마우스를 올리면 보여 준다(건강 줄·능력치 줄)
             SetTipLine(_statusText, _statusTip, _statusText.text, null);
 
@@ -493,10 +551,11 @@ namespace GN3.UI
                 _healthText.text += $"\n피로 {merc.Fatigue} · 사기 {merc.Morale}"; // 좁은 칸에서 "사기 / 70"처럼 끊기지 않게 줄을 나눈다
                 float condition = merc.ConditionMultiplier;
                 string hit = merc.UsesMagic ? "마·방" : stats.Holy > 0 ? "공·방·신" : "공·방";
-                if (condition < 1f) _healthText.text += $"\n{hit} -{Mathf.RoundToInt((1f - condition) * 100f)}%"; // 깎인 능력치는 따로 한 줄
+                if (condition < 1f) _healthText.text += $" · {hit} -{Mathf.RoundToInt((1f - condition) * 100f)}%"; // 깎인 능력치는 같은 줄 끝
             }
 
-            // 나이 칸: 나이와 생일만(성장 속도·재능은 숨은 값)
+            // 생일·은퇴(자세히 칸): 나이와 생일만(성장 속도·재능은 숨은 값)
+            _growthText.gameObject.SetActive(_detailsOpen);
             int toRetire = GrowthTuning.RetireAge - merc.Age; // 은퇴가 가까우면 미리 보인다(그 나이 생일에 은퇴)
             _growthText.text = $"{merc.Age}세 · {MercenaryAge.BirthdayText(merc)}생" + (toRetire <= 2 ? $" · 은퇴까지 {toRetire}년" : "");
 
@@ -530,8 +589,18 @@ namespace GN3.UI
             string statsTip = monthTip;
             if (!string.IsNullOrEmpty(ailmentTip)) statsTip += "\n" + ailmentTip;
             if (researchTip != null) statsTip += "\n" + researchTip;
+            // 한 줄(늘 보임): 지금 값만. 부상·피로 등으로 영구 수치보다 낮으면 빨강
+            string Now(string label, int perm, int now) => now < perm ? $"{label} <color=#e06050>{now}</color>" : $"{label} {now}";
             SetTipLine(_statsText, _statsTip,
-                $"{Stat(merc.OffenseLabel, merc.MonthBaseAttack, permanent.Offense, stats.Offense)}  ·  {Stat("방어", merc.MonthBaseDefense, permanent.Defense, stats.Defense)}  ·  "
+                $"{Now(merc.OffenseLabel, permanent.Offense, stats.Offense)} · {Now("방어", permanent.Defense, stats.Defense)} · {Now("속도", permanent.MoveSpeed, stats.MoveSpeed)}"
+                + (permanent.Holy > 0 ? $" · {Now("신성력", permanent.Holy, stats.Holy)}" : "")
+                + $" · {Now("전투력", permanentPower, merc.CombatPower)}",
+                statsTip);
+            // 자세히: 이번 달 변화 괄호가 붙은 두 줄
+            _statsDetailText.supportRichText = true;
+            _statsDetailText.gameObject.SetActive(_detailsOpen);
+            SetTipLine(_statsDetailText, _statsDetailTip,
+                "<color=#a3937c>이번 달 변화</color>\n" + $"{Stat(merc.OffenseLabel, merc.MonthBaseAttack, permanent.Offense, stats.Offense)}  ·  {Stat("방어", merc.MonthBaseDefense, permanent.Defense, stats.Defense)}  ·  "
                 + $"{Stat("속도", merc.MonthBaseSpeed, permanent.MoveSpeed, stats.MoveSpeed)}\n"
                 + (permanent.Holy > 0 ? $"{Stat("신성력", merc.MonthBaseHoly, permanent.Holy, stats.Holy)}  ·  " : "")
                 + Stat("전투력", merc.MonthBasePower, permanentPower, merc.CombatPower),
@@ -539,10 +608,11 @@ namespace GN3.UI
             RefreshEquipRow(merc); // 장비칸(무기·가방)은 능력치 아래 줄
 
             var personality = PersonalityTable.Get(merc.Personality);
+            _personalityText.gameObject.SetActive(_detailsOpen);
             SetTipLine(_personalityText, _personalityTip, $"성격 [{personality.Label}]", personality.Description);
 
             var passives = ClassPassiveFactory.Create(merc.Class.Kind, merc.HasRarePassive);
-            _passiveText.gameObject.SetActive(passives.Count > 0);
+            _passiveText.gameObject.SetActive(_detailsOpen && passives.Count > 0);
             if (passives.Count > 0)
             {
                 string rare = merc.HasRarePassive ? " (레어)" : "";
@@ -553,12 +623,13 @@ namespace GN3.UI
             }
 
             // 친한 동료(고용된 용병만): 지인 이상 상위 3명
-            _friendsText.gameObject.SetActive(hired);
+            _friendsText.gameObject.SetActive(hired && _detailsOpen);
+            _detailsLabel.text = _detailsOpen ? "접기 ▲" : "자세히 보기 ▼";
             _relationsButton.SetActive(hired);
             _renewButton.SetActive(hired);
             _lockButton.SetActive(hired);
             if (hired) RefreshLock(merc);
-            RefreshRecord(merc); // 시장·근처 길드 용병도 경력이 따라다닌다
+            RefreshCompare(merc, hired); // 계약 전 후보: 내 용병과 비교
             if (hired)
             {
                 var friends = Affinity.Friends(merc, Affinity.Acquaintance.MinValue).Take(3).ToList();
@@ -568,8 +639,8 @@ namespace GN3.UI
                 SetTipLine(_friendsText, _friendsTip, label, null); // 툴팁 없음(자세한 건 "관계 보기")
             }
 
-            // 건강(고용된 용병만): 앓는 것 이름·진행도 한 줄, 마우스를 올리면 떨어진 능력치
-            _healthStatusText.gameObject.SetActive(hired);
+            // 건강(고용된 용병이 아플 때만): 앓는 것 이름·진행도 한 줄, 마우스를 올리면 떨어진 능력치
+            _healthStatusText.gameObject.SetActive(hired && merc.HasAilment);
             if (hired) SetTipLine(_healthStatusText, _healthStatusTip, HealthLine(merc), HealthTip(merc, ailmentTip));
 
             LayoutRows();
@@ -590,15 +661,24 @@ namespace GN3.UI
             _healthBarRect.anchoredPosition = new Vector2(_infoX, y);
             y -= _healthBarRect.sizeDelta.y + 2f;
             y = Place(_healthText, _infoX, y, rightWidth, 18f, false) - 4f;
-            y = Place(_growthText, _infoX, y, rightWidth, 18f, false) - 4f;
 
-            // 아래 칸(전체 폭): 초상 아래부터
-            y = Mathf.Min(y, -14f - PortraitSize - 26f);
+            // 아래 칸(전체 폭): 초상 아래부터 — 능력치 한 줄 · 장비칸 · (아프면) 건강 · [자세히][비교] · 펼친 줄들
+            y = Mathf.Min(y, -14f - PortraitSize - 12f);
             float bottomWidth = PanelWidth - 28f;
-            y = Place(_statsText, 14f, y, bottomWidth, 38f, true) - 4f;
+            y = Place(_statsText, 14f, y, bottomWidth, 22f, true) - 4f;
             _equipRow.anchoredPosition = new Vector2(14f, y); // 능력치 바로 아래 장비칸 줄
             y -= EquipRowHeight + 6f;
-            foreach (var row in new[] { _personalityText, _passiveText, _friendsText, _healthStatusText, _recordText })
+            if (_healthStatusText.gameObject.activeSelf) y = Place(_healthStatusText, 14f, y, bottomWidth, 22f, true) - 6f;
+
+            bool compareShown = _compareButton.gameObject.activeSelf;
+            float half = (bottomWidth - 8f) / 2f;
+            _detailsButton.anchoredPosition = new Vector2(14f, y);
+            _detailsButton.sizeDelta = new Vector2(compareShown ? half : bottomWidth, ToggleRowHeight);
+            _compareButton.anchoredPosition = new Vector2(14f + half + 8f, y);
+            _compareButton.sizeDelta = new Vector2(half, ToggleRowHeight);
+            y -= ToggleRowHeight + 8f;
+
+            foreach (var row in new[] { _contractText, _growthText, _statsDetailText, _personalityText, _passiveText, _friendsText, _compareText })
             {
                 if (!row.gameObject.activeSelf) continue;
                 y = Place(row, 14f, y, bottomWidth, 22f, true) - 6f;

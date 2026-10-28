@@ -232,7 +232,7 @@ namespace GN3.World
                 return;
             }
             int cost = BuildingCatalog.CostOf(_entry); // 용병 텐트는 첫 채 무료 — 짓기 전에 센다
-            if (!Wallet.TrySpend(cost)) return;
+            if (!Wallet.TrySpend(cost, "건설")) return;
             BuildMaterials.Consume(BuildingCatalog.MaterialsOf(_entry)); // Block이 방금 재료를 확인했다
             if (_entry.Replaces != null) VillageLayout.RemoveBuilding(_entry.Replaces);
             VillageLayout.Add(_slot.Key, position);

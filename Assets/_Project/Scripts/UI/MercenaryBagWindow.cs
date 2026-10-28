@@ -45,6 +45,7 @@ namespace GN3.UI
 
         private void Build(Mercenary merc)
         {
+            Vector2? moved = _panel != null ? DraggablePanel.MovedPosition((RectTransform)_panel.transform) : null; // [창고에 넣기] 뒤에도 옮긴 자리 그대로
             if (_panel != null) Destroy(_panel);
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
             _panel.transform.SetParent(transform, false);
@@ -53,6 +54,7 @@ namespace GN3.UI
             var rect = (RectTransform)_panel.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(Width, 0f);
+            DraggablePanel.Attach(rect, moved); // 잡고 끌어 옮길 수 있다
             var background = _panel.GetComponent<Image>();
             background.sprite = UITheme.Panel;
             background.type = Image.Type.Sliced;
@@ -75,7 +77,8 @@ namespace GN3.UI
             var title = ShopListUI.CreateText(header.transform, $"<b>{merc.Name}의 가방</b>", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             title.supportRichText = true;
             title.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1f;
-            ShopListUI.CreateButton(header.transform, "X", Close, 40f);
+            header.GetComponent<HorizontalLayoutGroup>().padding = new RectOffset(0, 32, 0, 0); // 오른쪽 위 X 자리
+            UITheme.CreateCloseX(_panel.transform, Close); // 공통 닫기 X
 
             BagSlotsUI.CreateMercBagCard(_panel.transform, merc, merc.BagContents,
                 BagSlotsUI.LargeSlot, BagSlotsUI.LargePerLine, BagSlotsUI.LargeGap);

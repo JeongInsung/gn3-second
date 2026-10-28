@@ -42,7 +42,7 @@ namespace GN3.Economy
         {
             if (!IsHere) return false;
             int i = _stock.FindIndex(s => s.item == item);
-            if (i < 0 || _stock[i].count <= 0 || !Wallet.TrySpend(PriceOf(item))) return false;
+            if (i < 0 || _stock[i].count <= 0 || !Wallet.TrySpend(PriceOf(item), "상점 구매")) return false;
             _stock[i] = (item, _stock[i].count - 1);
             LootBag.Add(new[] { (item, 1) });
             ToastLog.Show($"{DisplayName}에게서 {item.Name} 1개를 샀습니다 (−{PriceOf(item)}G)", false);

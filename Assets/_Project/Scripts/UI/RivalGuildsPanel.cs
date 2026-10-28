@@ -15,10 +15,10 @@ namespace GN3.UI
     /// </summary>
     public class RivalGuildsPanel : MonoBehaviour
     {
-        private const float Width = 1040f;
+        private const float Width = 1120f; // 상세 칸을 넓혀 대원·교역 줄 글이 접히지 않게(예전 1040)
         private const float Height = 690f;
         private const float ListX = 20f, ListWidth = 340f, ListTop = 64f, RowHeight = 80f;
-        private const float DetailX = 380f, DetailWidth = 640f;
+        private const float DetailX = 380f, DetailWidth = 720f;
         private const float TabTop = 172f, TabWidth = 152f, TabGap = 8f;
         private const float RosterTop = 240f, RosterBottom = 570f; // 아래 소식 3줄이 창 테두리에 닿지 않게
         private const int NewsLines = 3;
@@ -291,8 +291,7 @@ namespace GN3.UI
             var image = row.GetComponent<Image>();
             image.sprite = _white;
             image.color = RowColor;
-            var layoutElement = row.GetComponent<LayoutElement>();
-            layoutElement.minHeight = layoutElement.preferredHeight = 46f;
+            FitRowHeight.Attach(row, 46f, 8f); // 두 줄 글이 접히면 줄이 늘어난다(글이 줄 밖으로 안 넘치게)
             var h = row.GetComponent<HorizontalLayoutGroup>();
             h.padding = new RectOffset(10, 8, 4, 4);
             h.spacing = 10;
@@ -308,6 +307,7 @@ namespace GN3.UI
             label.verticalOverflow = VerticalWrapMode.Overflow;
             var labelLayout = label.gameObject.AddComponent<LayoutElement>();
             labelLayout.minWidth = 200f;
+            labelLayout.preferredWidth = 0f; // 버튼 앞까지만 쓰고 줄을 바꾼다
             labelLayout.flexibleWidth = 1f;
 
             if (theirs) AddRosterButtons(row.transform, g, merc);
@@ -324,8 +324,7 @@ namespace GN3.UI
             var image = row.GetComponent<Image>();
             image.sprite = _white;
             image.color = RowColor;
-            var layoutElement = row.GetComponent<LayoutElement>();
-            layoutElement.minHeight = layoutElement.preferredHeight = 46f;
+            FitRowHeight.Attach(row, 46f, 8f); // 두 줄 글이 접히면 줄이 늘어난다(글이 줄 밖으로 안 넘치게)
             var h = row.GetComponent<HorizontalLayoutGroup>();
             h.padding = new RectOffset(10, 8, 4, 4);
             h.spacing = 10;
@@ -342,6 +341,7 @@ namespace GN3.UI
             label.verticalOverflow = VerticalWrapMode.Overflow;
             var labelLayout = label.gameObject.AddComponent<LayoutElement>();
             labelLayout.minWidth = 200f;
+            labelLayout.preferredWidth = 0f; // 버튼 앞까지만 쓰고 줄을 바꾼다
             labelLayout.flexibleWidth = 1f;
             if (item == null) return row;
 
@@ -536,17 +536,7 @@ namespace GN3.UI
             _news.lineSpacing = 1.1f;
 
             // 닫기
-            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            close.transform.SetParent(_panel.transform, false);
-            var closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-8f, -8f);
-            closeRect.sizeDelta = new Vector2(28f, 28f);
-            close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
-            close.GetComponent<Button>().onClick.AddListener(Hide);
-            var x = CreateText("Text", 16, close.transform, "X", 0f, 0f, 0f, 0f);
-            x.alignment = TextAnchor.MiddleCenter;
-            Stretch(x.rectTransform);
+            UITheme.CreateCloseX(_panel.transform, Hide); // 공통 닫기 X(32px, 오른쪽 위)
 
             _panel.SetActive(false);
             EscapeCloser.Register(_panel, Hide);

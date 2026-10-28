@@ -14,8 +14,8 @@ namespace GN3.UI
     /// </summary>
     public class MailboxPanel : MonoBehaviour
     {
-        private const float Width = 680f;
-        private const float Height = 560f;
+        private const float Width = 840f;  // 긴 제목·본문이 덜 접히게(예전 680)
+        private const float Height = 620f;
         private const float ListTop = 94f;
         private const float RowHeight = 30f;
         private const float WhenWidth = 170f;
@@ -156,7 +156,8 @@ namespace GN3.UI
             ShopListUI.SetBlocked(autoButton, autoCount > 0 ? null : "자동/직접을 기다리는 도착 편지가 없습니다.");
             if (autoCount > 0)
             {
-                var tip = autoButton.GetComponent<TooltipTrigger>() ?? autoButton.gameObject.AddComponent<TooltipTrigger>();
+                var tip = autoButton.GetComponent<TooltipTrigger>();
+                if (tip == null) tip = autoButton.gameObject.AddComponent<TooltipTrigger>();
                 tip.Text = "자동/직접을 기다리는 도착 편지를 모두 자동 진행한다(사건 선택지는 따로 고른다)";
             }
             for (int i = 0; i < Tabs.Length; i++)
@@ -239,8 +240,6 @@ namespace GN3.UI
         {
             var go = new GameObject("MailRow", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
             go.transform.SetParent(_list, false);
-            var layout = go.GetComponent<LayoutElement>();
-            layout.minHeight = layout.preferredHeight = RowHeight;
             go.GetComponent<Image>().color = new Color(0.2f, 0.2f, 0.24f, 0.9f);
             go.GetComponent<Button>().onClick.AddListener(() => ToggleExpand(mail));
 
@@ -252,7 +251,8 @@ namespace GN3.UI
             string pending = mail.IsPendingChoice ? " " + Mailbox.Colored("선택 대기", new Color(1f, 0.6f, 0.2f)) : "";
             var text = CreateText(go.transform, $"{arrow}{mark}{tag} {title}{pending}", 14, TextAnchor.MiddleLeft, UITheme.BodyText);
             text.supportRichText = true;
-            text.verticalOverflow = VerticalWrapMode.Truncate; // 한 줄만(넘치면 날짜 칸을 덮지 않고 잘린다)
+            text.verticalOverflow = VerticalWrapMode.Overflow; // 길면 줄을 바꾸고 줄 높이가 늘어난다(날짜 칸은 덮지 않는다)
+            FitRowHeight.Attach(go, RowHeight, 8f).AddColumn(0f, text);
             text.rectTransform.anchorMin = Vector2.zero;
             text.rectTransform.anchorMax = Vector2.one;
             text.rectTransform.offsetMin = new Vector2(10f, 0f);
@@ -396,6 +396,7 @@ namespace GN3.UI
             scroll.content = rect;
             scroll.horizontal = false;
             SmoothWheelScroll.Attach(scroll);
+            ScrollListWrapper.AddOverlayScrollbar(scroll); // 공통 스크롤바(내용이 짧으면 숨음)
             return rect;
         }
 

@@ -84,6 +84,19 @@ namespace GN3.Economy
         public static IEnumerable<CraftRecipe> ManaRecipesFor(int color) =>
             Enumerable.Range(0, WeaponCatalog.ManaLineCount).Select(line => ManaRecipes[line * 5 + color]);
 
+        /// <summary>제작·시설 강화에 쓰는 전리품인가(마정석 전부 + 제작법 재료). [모두 팔기]가 남겨 둔다.</summary>
+        public static bool IsIngredient(LootItem item) =>
+            item != null && (LootCatalog.ManaColorOf(item) >= 0 || Recipes.Any(r => r.Materials.Any(m => m.item == item)));
+
+        /// <summary>"마정 무기 · 시설 강화" / "롱소드 · 대검 제작"(쓰이는 곳, 없으면 null) — 창고·암거래 줄의 툴팁.</summary>
+        public static string UsesOf(LootItem item)
+        {
+            if (item == null) return null;
+            if (LootCatalog.ManaColorOf(item) >= 0) return "마정 무기 제작 · 시설 강화에 쓰는 마정석";
+            var names = Recipes.Where(r => r.Materials.Any(m => m.item == item)).Select(r => r.Result.Name).ToList();
+            return names.Count > 0 ? string.Join(" · ", names) + " 제작 재료" : null;
+        }
+
         /// <summary>만들 수 없으면 이유, 되면 null.</summary>
         public static string Block(CraftRecipe recipe)
         {
@@ -96,7 +109,7 @@ namespace GN3.Economy
         /// <summary>재료·금화를 쓰고 무기를 창고에 넣는다.</summary>
         public static bool Craft(CraftRecipe recipe)
         {
-            if (Block(recipe) != null || !Wallet.TrySpend(recipe.Gold)) return false;
+            if (Block(recipe) != null || !Wallet.TrySpend(recipe.Gold, "제작")) return false;
             foreach (var (item, count) in recipe.Materials) LootBag.Consume(item, count);
             if (recipe.Stones.count > 0) LootBag.ConsumeManaColor(recipe.Stones.color, recipe.Stones.count);
             GuildStorage.TryAdd(recipe.Result);

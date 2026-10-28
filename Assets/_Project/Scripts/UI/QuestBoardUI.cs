@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using GN3.Economy;
 using GN3.Mercenaries;
 using GN3.Quests;
@@ -133,17 +134,70 @@ namespace GN3.UI
                 Destroy(row);
             _cardRows.Clear();
 
-            // 중개인 의뢰(중개인이 떠나도 기한까지 남는다)를 맨 위에 — 카드 끝 "기한 N일"로 게시판 의뢰와 구분된다
-            foreach (var quest in QuestBroker.Quests)
-                _cardRows.Add(CreateCard(quest, ExpiryText(QuestBroker.DaysLeft(quest))));
+            _cardRows.Add(CreateSortRow());
+            // 기본 순서: 중개인 의뢰(중개인이 떠나도 기한까지 남는다)를 맨 위에 — 카드 끝 "기한 N일"로 게시판 의뢰와 구분된다
             bool hasBoard = QuestBroker.HasBoard;
-            if (hasBoard)
-                foreach (var quest in QuestBoardListings.Current)
-                    _cardRows.Add(CreateCard(quest));
+            var quests = QuestBroker.Quests.ToList();
+            if (hasBoard) quests.AddRange(QuestBoardListings.Current);
+            var shown = Sorted(quests.Where(q => (!_onlyJoint || q.IsJoint) && (!_onlyChallenge || q.IsChallenge))).ToList();
+            foreach (var quest in shown)
+                _cardRows.Add(CreateCard(quest, QuestBroker.Contains(quest) ? ExpiryText(QuestBroker.DaysLeft(quest)) : ""));
+            if (shown.Count == 0 && quests.Count > 0)
+                _cardRows.Add(CreateText(listContainer, "  거르기에 맞는 의뢰가 없습니다.", 16, TextAnchor.MiddleLeft).gameObject);
             _nextText.text = hasBoard ? ListingTimer.Label("의뢰", QuestBoardListings.DaysUntilRefresh) : "";
             if (_goalText != null) _goalText.text = ForestProgress.GoalText;
 
             LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)listContainer);
+        }
+
+        // ---------- 정렬·거르기(이번 실행 동안 기억, 용병시장 정렬 줄과 같은 모양) ----------
+        private static readonly string[] SortNames = { "기본", "보상", "쉬운 순", "기한 임박" };
+        private static int _sort;
+        private static bool _onlyJoint, _onlyChallenge;
+
+        private static IEnumerable<Quest> Sorted(IEnumerable<Quest> list) => _sort switch
+        {
+            1 => list.OrderByDescending(Pricing.QuestReward),
+            // 쉬운 순: 지금 보낼 수 있는 최선의 팀 전투력 ÷ 권장 전투력이 큰 것부터
+            2 => list.OrderByDescending(q => (float)QuestDifficulty.BestTeamPower(q) / Mathf.Max(1, QuestDifficulty.RecommendedPower(q))),
+            // 기한 임박: 중개인 의뢰(남은 날) → 게시판 의뢰(다음 갈이까지)
+            3 => list.OrderBy(q => QuestBroker.Contains(q) ? QuestBroker.DaysLeft(q) : QuestBoardListings.DaysUntilRefresh + 0.5f),
+            _ => list,
+        };
+
+        /// <summary>목록 맨 위: 정렬 [기본][보상][쉬운 순][기한 임박] · 거르기 [연합][도전] — 고른 것은 흰 테두리.</summary>
+        private GameObject CreateSortRow()
+        {
+            var row = new GameObject("Sort", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            row.transform.SetParent(listContainer, false);
+            var layout = row.GetComponent<LayoutElement>();
+            layout.minHeight = layout.preferredHeight = 40;
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(4, 4, 2, 2);
+            h.spacing = 8;
+            h.childAlignment = TextAnchor.MiddleLeft;
+            h.childForceExpandWidth = h.childForceExpandHeight = false;
+            h.childControlWidth = h.childControlHeight = true;
+            var label = CreateText(row.transform, "정렬", 16, TextAnchor.MiddleLeft);
+            label.color = UITheme.MutedText;
+            label.gameObject.AddComponent<LayoutElement>().minWidth = 44;
+            for (int i = 0; i < SortNames.Length; i++)
+            {
+                int mode = i;
+                var button = ShopListUI.CreateButton(row.transform, SortNames[i], () => { _sort = mode; Redraw(); }, 96f);
+                if (i == _sort) UITheme.CreateSelectFrame(button.transform);
+            }
+            var filter = CreateText(row.transform, "   거르기", 16, TextAnchor.MiddleLeft);
+            filter.color = UITheme.MutedText;
+            filter.gameObject.AddComponent<LayoutElement>().minWidth = 70;
+            var joint = ShopListUI.CreateButton(row.transform, "연합", () => { _onlyJoint = !_onlyJoint; Redraw(); }, 70f);
+            if (_onlyJoint) UITheme.CreateSelectFrame(joint.transform);
+            joint.gameObject.AddComponent<TooltipTrigger>().Text = "근처 길드와 함께하는 연합 의뢰만 보기";
+            var challenge = ShopListUI.CreateButton(row.transform, "도전", () => { _onlyChallenge = !_onlyChallenge; Redraw(); }, 70f);
+            if (_onlyChallenge) UITheme.CreateSelectFrame(challenge.transform);
+            challenge.gameObject.AddComponent<TooltipTrigger>().Text = "깨면 다음 숲 레벨이 열리는 도전 의뢰만 보기";
+            UIThemeApplier.ApplyNow(row.transform); // 상점 버튼과 같은 테마
+            return row;
         }
 
         /// <summary>중개인 의뢰 기한 꼬리 글: "· 기한 3일", 마지막 날이면 주황 "· 오늘까지".</summary>
@@ -157,16 +211,12 @@ namespace GN3.UI
 
             row.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.06f);
 
-            var layoutElement = row.GetComponent<LayoutElement>();
-            layoutElement.minHeight = 64;
-            layoutElement.preferredHeight = 64;
-
             var hLayout = row.GetComponent<HorizontalLayoutGroup>();
             hLayout.padding = new RectOffset(16, 16, 8, 8);
             hLayout.spacing = 12;
             hLayout.childAlignment = TextAnchor.MiddleLeft;
             hLayout.childForceExpandWidth = false;
-            hLayout.childForceExpandHeight = true;
+            hLayout.childForceExpandHeight = false; // 줄이 글에 맞춰 커져도 버튼은 제 크기로 가운데
             hLayout.childControlWidth = true;
             hLayout.childControlHeight = true;
 
@@ -175,8 +225,9 @@ namespace GN3.UI
             string challengeTag = quest.IsChallenge ? "<color=#ffd36b>[도전]</color> " : ""; // 깨면 다음 숲 레벨이 열린다(ForestProgress)
             var titleText = CreateText(row.transform, challengeTag + jointTag + QuestDifficulty.RichTitle(quest), UITheme.HeadingSize, TextAnchor.MiddleLeft); // 큰 주황 글씨는 창 제목만
             titleText.fontStyle = FontStyle.Bold;
-            titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            titleText.gameObject.AddComponent<LayoutElement>().minWidth = 520;
+            titleText.horizontalOverflow = HorizontalWrapMode.Wrap; // 길면 줄을 바꾸고 줄이 늘어난다(보상 칸을 덮지 않게)
+            var titleLayout = titleText.gameObject.AddComponent<LayoutElement>();
+            titleLayout.minWidth = titleLayout.preferredWidth = 480;
 
             string rounds = quest.WaveCount > 1 ? $"<color=#a3937c>{quest.WaveCount}라운드</color>  " : "";
             var rival = RivalGuilds.TargetOf(quest); // 내일 자정에 가져갈 근처 길드
@@ -189,10 +240,12 @@ namespace GN3.UI
             var rewardText = CreateText(row.transform, $"{verdict}{rounds}보상 {Pricing.QuestReward(quest)}G{materials}{targeted}{extra}", 18, TextAnchor.MiddleLeft);
             rewardText.supportRichText = true;
             rewardText.color = UITheme.TitleText;
-            rewardText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            rewardText.horizontalOverflow = HorizontalWrapMode.Wrap; // 길면 [수락] 앞에서 줄을 바꾼다(버튼 밑으로 안 들어가게)
             var rewardLayout = rewardText.gameObject.AddComponent<LayoutElement>();
             rewardLayout.minWidth = 120;
+            rewardLayout.preferredWidth = 0;
             rewardLayout.flexibleWidth = 1; // 남는 폭을 차지해 수락 버튼을 오른쪽 끝으로 민다
+            FitRowHeight.Attach(row, 64, 16f).AddColumn(0f, titleText).AddColumn(0f, rewardText); // 글이 접히면 줄이 늘어난다
 
             RowClickHandler.Attach(row, () => QuestInfoPanel.ShowGlobal(quest, () => Accept(quest, row)));
 

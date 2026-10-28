@@ -20,7 +20,8 @@ namespace GN3.UI
     /// </summary>
     public class ContractNegotiationPanel : MonoBehaviour
     {
-        private const float Width = 940f, Height = 660f;
+        private const float Width = 940f, Height = 690f; // 대답 말풍선을 키운 만큼 높게(예전 660)
+        private const float ReplyHeight = 104f;        // 대답 말풍선(세 줄까지 칸 안에, 예전 74)
         private const float StartRatio = 0.9f; // 첫 제안은 요구보다 조금 낮게(협상할 여지 — 대개 역제안이 온다)
 
         private static ContractNegotiationPanel _open;
@@ -210,14 +211,14 @@ namespace GN3.UI
                 Say("자리가 없는 길드와는 계약할 수 없군요. (파티 정원이 가득 찼습니다)");
                 return;
             }
-            if (!Wallet.TrySpend(offer.SigningFee))
+            if (!Wallet.TrySpend(offer.SigningFee, "고용 계약금"))
             {
                 Say($"계약금 {offer.SigningFee}G를 먼저 준비해 오십시오. (보유 {Wallet.Gold}G)");
                 return;
             }
             if (!_renewal && !party.TryAdd(_merc))
             {
-                Wallet.Add(offer.SigningFee);
+                Wallet.Add(offer.SigningFee, "고용 계약금");
                 return;
             }
             Contracts.Sign(_merc, offer);
@@ -482,6 +483,7 @@ namespace GN3.UI
             panel.transform.SetParent(transform, false);
             var panelRect = (RectTransform)panel.transform;
             panelRect.sizeDelta = new Vector2(Width, Height);
+            DraggablePanel.Attach(panelRect); // 잡고 끌어 옮길 수 있다(뒤 어두운 막은 고정)
             var panelImage = panel.GetComponent<Image>();
             panelImage.sprite = UITheme.Panel;
             panelImage.type = Image.Type.Sliced;
@@ -490,7 +492,7 @@ namespace GN3.UI
             var title = Label(p, _renewal ? "재계약 협상" : "계약 협상", UITheme.TitleSize, UITheme.TitleText, TextAnchor.MiddleCenter, new Vector2(0f, -18f), new Vector2(Width - 120f, 40f), centerX: true);
             title.name = "Title";
             title.font = UITheme.BoldFont;
-            MakeButton(p, "X", Close, new Vector2(Width - 52f, -16f), new Vector2(36f, 32f));
+            UITheme.CreateCloseX(p, Close); // 공통 닫기 X
 
             // 왼쪽: 용병
             var portrait = CharacterPortraitUI.Create(p, _merc.Appearance, 150, PortraitCrop.FullBody);
@@ -551,15 +553,15 @@ namespace GN3.UI
             var bubbleRect = (RectTransform)bubble.transform;
             bubbleRect.anchorMin = bubbleRect.anchorMax = bubbleRect.pivot = new Vector2(0f, 1f);
             bubbleRect.anchoredPosition = new Vector2(30f, -486f);
-            bubbleRect.sizeDelta = new Vector2(Width - 60f, 74f);
+            bubbleRect.sizeDelta = new Vector2(Width - 60f, ReplyHeight);
             var bubbleImage = bubble.GetComponent<Image>();
             bubbleImage.sprite = UITheme.Inset;
             bubbleImage.type = Image.Type.Sliced;
-            _replyText = Label(bubble.transform, "", UITheme.BodySize, UITheme.BodyText, TextAnchor.MiddleLeft, new Vector2(16f, 0f), new Vector2(Width - 92f, 74f));
+            _replyText = Label(bubble.transform, "", UITheme.BodySize, UITheme.BodyText, TextAnchor.MiddleLeft, new Vector2(16f, 0f), new Vector2(Width - 92f, ReplyHeight));
             _replyText.rectTransform.anchorMin = _replyText.rectTransform.anchorMax = _replyText.rectTransform.pivot = new Vector2(0f, 1f);
 
             // 버튼
-            float by = -582f;
+            float by = -486f - ReplyHeight - 22f; // 말풍선 아래
             var quit = MakeButton(p, "그만두기", Close, new Vector2(30f, by), new Vector2(120f, 44f));
             _walkAwayButton = MakeButton(p, "자리 뜨기", WalkAway, new Vector2(160f, by), new Vector2(120f, 44f));
             _acceptCounterButton = MakeButton(p, "역제안 받아들이기", AcceptCounter, new Vector2(Width - 650f, by), new Vector2(310f, 44f));

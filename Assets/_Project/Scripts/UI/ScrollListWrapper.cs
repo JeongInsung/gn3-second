@@ -50,14 +50,47 @@ namespace GN3.UI
             LayoutRebuilder.ForceRebuildLayoutImmediate(content);
 
             // 오른쪽 스크롤바 (마우스로 잡고 드래그하는 실제 바)
+            var scrollbar = CreateBar(scrollRect3D, ScrollbarWidth, 0f);
+
+            var scrollRect = scrollGO.GetComponent<ScrollRect>();
+            scrollRect.content = content;
+            scrollRect.viewport = viewportRect;
+            scrollRect.verticalScrollbar = scrollbar;
+            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.scrollSensitivity = 20f;
+            SmoothWheelScroll.Attach(scrollRect); // 휠로 부드럽게(기본 휠 처리는 끈다)
+        }
+
+        /// <summary>
+        /// 손수 만든 ScrollRect(뷰포트 = 자기 자신, RectMask2D)에 같은 모양 스크롤바를 붙인다. 목록 오른쪽 안쪽에 얇게 겹쳐 그리고,
+        /// 내용이 짧아 스크롤할 게 없으면 숨는다. 내용(content)을 다시 채운 뒤에도 바가 위에 오게 맨 뒤 형제로 둔다.
+        /// </summary>
+        public static Scrollbar AddOverlayScrollbar(ScrollRect scroll)
+        {
+            if (scroll == null || scroll.verticalScrollbar != null) return scroll != null ? scroll.verticalScrollbar : null;
+            var bar = CreateBar(scroll.transform, OverlayWidth, 2f);
+            bar.transform.SetAsLastSibling();
+            scroll.verticalScrollbar = bar;
+            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+            return bar;
+        }
+
+        private const float OverlayWidth = 10f;
+
+        /// <summary>parent 오른쪽 끝(안쪽 margin)에 세로 스크롤바: 옅은 바탕 + 잡는 손잡이.</summary>
+        private static Scrollbar CreateBar(Transform parent, float width, float margin)
+        {
             var scrollbarGO = new GameObject("Scrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
             var scrollbarRect = (RectTransform)scrollbarGO.transform;
-            scrollbarRect.SetParent(scrollRect3D, false);
+            scrollbarRect.SetParent(parent, false);
             scrollbarRect.anchorMin = new Vector2(1f, 0f);
             scrollbarRect.anchorMax = new Vector2(1f, 1f);
             scrollbarRect.pivot = new Vector2(1f, 1f);
-            scrollbarRect.offsetMin = new Vector2(-ScrollbarWidth, 0f);
-            scrollbarRect.offsetMax = Vector2.zero;
+            scrollbarRect.offsetMin = new Vector2(-width - margin, margin);
+            scrollbarRect.offsetMax = new Vector2(-margin, -margin);
             scrollbarGO.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.08f);
 
             var handleGO = new GameObject("Handle", typeof(RectTransform), typeof(Image));
@@ -74,17 +107,7 @@ namespace GN3.UI
             scrollbar.direction = Scrollbar.Direction.BottomToTop;
             scrollbar.handleRect = handleRect;
             scrollbar.targetGraphic = handleImage;
-
-            var scrollRect = scrollGO.GetComponent<ScrollRect>();
-            scrollRect.content = content;
-            scrollRect.viewport = viewportRect;
-            scrollRect.verticalScrollbar = scrollbar;
-            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
-            scrollRect.horizontal = false;
-            scrollRect.vertical = true;
-            scrollRect.movementType = ScrollRect.MovementType.Clamped;
-            scrollRect.scrollSensitivity = 20f;
-            SmoothWheelScroll.Attach(scrollRect); // 휠로 부드럽게(기본 휠 처리는 끈다)
+            return scrollbar;
         }
     }
 }

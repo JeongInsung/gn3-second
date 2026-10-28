@@ -176,7 +176,7 @@ namespace GN3.Economy
         /// <summary>선물(하루 한 번 100G): 관계 +5.</summary>
         public static bool Gift(RivalGuild g)
         {
-            if (!CanGift(g) || !Wallet.TrySpend(GiftCost)) return false;
+            if (!CanGift(g) || !Wallet.TrySpend(GiftCost, "길드 거래")) return false;
             g.LastGiftDay = GameClock.CurrentDay;
             g.Gold += GiftCost;
             AddRelation(g, GiftRelation, $"우리 길드가 {GiftCost}G를 선물했다");

@@ -18,7 +18,11 @@ namespace GN3.Save
         // 9: 길드 시설 단계(facilities). 예전 저장은 0단계.
         // 10: 지은 마을 건물과 자리(buildings). 9 이하는 건물이 다 있던 시절이라 프리팹 자리 그대로 전부 지은 마을이 된다.
         // 11: 건설 재료(loot에 같이). 10 이하는 재료가 없던 시절이라 불러올 때 시작 재료(BuildMaterials.StartingKit)를 받는다.
-        public const int CurrentVersion = 11;
+        // 12: 금고 장부(ledger). 예전 저장엔 없어 빈 장부로 시작한다.
+        // 13: 의뢰 기록(questHistory). 예전 저장엔 없어 빈 기록으로 시작한다.
+        // 14: 의뢰 기록에 대원별 딜량·힐량·받은 피해(QuestHistorySave.dealt/healed/taken). 예전 기록은 통계 없음.
+        // 15: 의뢰 Id(게시판·파견 — 연합 손님 연결 유지)·파견 도전/부탁 글/지름길/매복 시간·입원 시간·업적·명예의 전당·전체 통계.
+        public const int CurrentVersion = 15;
 
         public int version = CurrentVersion;
         public string savedAt;
@@ -34,6 +38,17 @@ namespace GN3.Save
         public List<ExpeditionSave> expeditions = new List<ExpeditionSave>();
         public List<string> trainees = new List<string>(); // 훈련소에 맡긴 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> patients = new List<string>(); // 병원에 입원한 용병 id(예전 저장엔 없어 빈 목록)
+        public List<float> traineeHours = new List<float>(); // trainees와 같은 순서의 남은 훈련 시간(버전 15)
+        public List<float> patientHours = new List<float>(); // patients와 같은 순서의 입원한 시간 — 치료비 기준(버전 15)
+        // 길드 연대기(Achievements, 버전 15): 이룬 업적 id · 축하금을 준 등급 · 전체 기간 통계 · 명예의 전당
+        public List<string> achievements = new List<string>();
+        public int giftedRank = -1;
+        public int lifeQuests;
+        public int lifeWins;
+        public int lifeReward;
+        public long lifeGoldIn;
+        public long lifeGoldOut;
+        public List<MemorialSave> memorials = new List<MemorialSave>();
         public List<string> bathers = new List<string>();  // 온천에서 쉬는 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> gamblers = new List<string>(); // 도박장에 있는 용병 id(예전 저장엔 없어 빈 목록)
         public List<string> researchers = new List<string>(); // 마법 연구소에 있는 용병 id(예전 저장엔 없어 빈 목록)
@@ -79,6 +94,8 @@ namespace GN3.Save
         public List<BoardQuestSave> brokerQuests = new List<BoardQuestSave>();
         public int rivalTargetIndex = -1;                                  // 근처 길드가 노리는 게시판 의뢰(questBoard 몇 번째)
         public string rivalTargetGuild;
+        public List<LedgerEntrySave> ledger = new List<LedgerEntrySave>(); // 금고 장부 최근 14일(GoldLedger, 버전 12)
+        public List<QuestHistorySave> questHistory = new List<QuestHistorySave>(); // 끝낸 의뢰 최근 100건(QuestHistory, 버전 13)
     }
 
     [Serializable]
@@ -98,6 +115,50 @@ namespace GN3.Save
         public List<RivalJobSave> jobs = new List<RivalJobSave>();
         public List<int> newsDays = new List<int>();
         public List<string> newsTexts = new List<string>();
+    }
+
+    /// <summary>명예의 전당 한 줄(은퇴·전사·병사한 용병).</summary>
+    [Serializable]
+    public class MemorialSave
+    {
+        public string name;
+        public string className;
+        public string reason;
+        public int day;
+        public int age;
+        public int battles;
+        public int wins;
+        public int kills;
+        public int bestScore;
+        public int clears;
+    }
+
+    [Serializable]
+    public class QuestHistorySave
+    {
+        public int day;
+        public string title;
+        public int level;
+        public bool win;
+        public int reward;
+        public bool joint;
+        public bool challenge;
+        public string members; // 이름을 '|'로 이은 것
+        public string mvp;
+        public string fallen;  // 이름을 '|'로 이은 것
+        // 대원별 전투 통계(members 순서, 숫자를 '|'로 이은 것 — 버전 14). 예전 기록은 비어 있다
+        public string dealt;
+        public string healed;
+        public string taken;
+    }
+
+    [Serializable]
+    public class LedgerEntrySave
+    {
+        public int day;
+        public int hour;
+        public int amount; // +수입 / -지출
+        public string reason;
     }
 
     [Serializable]
@@ -254,6 +315,13 @@ namespace GN3.Save
         public List<WaveSave> waves = new List<WaveSave>(); // 라운드 구성(예전 저장엔 없어 enemy × enemyCount 한 라운드)
         public List<LootSave> materialReward = new List<LootSave>(); // 성공하면 받는 건설 재료(Quest.MaterialReward)
         public bool autoOnArrival; // 도착하면 자동 전투(Expedition.AutoOnArrival, 예전 저장엔 없어 false)
+        // 버전 15: 의뢰 Id(연합 손님 Loan.QuestId가 가리킴) · 도전 · 부탁한 사람·글 · 지름길(매복 2배) · 매복 판정 뒤 지난 시간
+        public string questId;
+        public bool challenge;
+        public string requester;
+        public string requestText;
+        public bool riskyRoute;
+        public float hoursSinceAmbush;
     }
 
     /// <summary>게시판에 붙어 있는(아직 수락 안 한) 퀘스트.</summary>
@@ -275,6 +343,7 @@ namespace GN3.Save
         public List<WaveSave> waves = new List<WaveSave>();
         public List<LootSave> materialReward = new List<LootSave>(); // 성공하면 받는 건설 재료(Quest.MaterialReward)
         public int expireDay = -1; // 의뢰 중개인 의뢰: 이 날까지 받을 수 있다(QuestBroker). 게시판 의뢰는 -1
+        public string questId; // 버전 15: 의뢰 Id(연합 손님 Loan.QuestId가 가리킴). 예전 저장엔 없어 새로 만든다
     }
 
     [Serializable]

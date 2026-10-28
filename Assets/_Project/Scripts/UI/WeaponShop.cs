@@ -174,7 +174,7 @@ namespace GN3.UI
                 ToastLog.Show($"창고가 가득 찼습니다 ({GuildStorage.Count} / {GuildStorage.Capacity}칸)");
                 return;
             }
-            if (!Wallet.TrySpend(weapon.Price))
+            if (!Wallet.TrySpend(weapon.Price, "상점 구매"))
             {
                 ToastLog.Show($"골드가 부족합니다 (필요 {weapon.Price}G, 보유 {Wallet.Gold}G)", false);
                 return;
@@ -185,7 +185,7 @@ namespace GN3.UI
 
         private void Equip(WeaponItem weapon, Mercenary merc)
         {
-            if (!Wallet.TrySpend(weapon.Price))
+            if (!Wallet.TrySpend(weapon.Price, "상점 구매"))
             {
                 ToastLog.Show($"골드가 부족합니다 (필요 {weapon.Price}G, 보유 {Wallet.Gold}G)", false);
                 return;

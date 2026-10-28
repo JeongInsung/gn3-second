@@ -73,7 +73,7 @@ namespace GN3.UI
                 ToastLog.Show($"창고가 가득 찼습니다 ({GuildStorage.Count} / {GuildStorage.Capacity}칸)");
                 return;
             }
-            if (!Wallet.TrySpend(price))
+            if (!Wallet.TrySpend(price, "상점 구매"))
             {
                 ToastLog.Show($"골드가 부족합니다 (필요 {price}G, 보유 {Wallet.Gold}G)", false);
                 return;
@@ -91,7 +91,7 @@ namespace GN3.UI
                 ToastLog.Show("치료할 용병이 없습니다 (마을에 다친 용병 없음)");
                 return;
             }
-            if (!Wallet.TrySpend(price))
+            if (!Wallet.TrySpend(price, "상점 구매"))
             {
                 ToastLog.Show($"골드가 부족합니다 (필요 {price}G, 보유 {Wallet.Gold}G)", false);
                 return;
@@ -129,7 +129,7 @@ namespace GN3.UI
                 ToastLog.Show($"{Josa.EunNeun(merc.Name)} 다친 곳이 없습니다.");
                 return;
             }
-            if (!Wallet.TrySpend(price))
+            if (!Wallet.TrySpend(price, "상점 구매"))
             {
                 ToastLog.Show($"골드가 부족합니다 (필요 {price}G, 보유 {Wallet.Gold}G)", false);
                 return;

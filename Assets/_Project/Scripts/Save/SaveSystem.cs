@@ -73,7 +73,7 @@ namespace GN3.Save
             try
             {
                 json = JsonUtility.ToJson(Capture(), true);
-                File.WriteAllText(FilePath, json);
+                WriteAtomic(FilePath, json);
             }
             catch (Exception e)
             {
@@ -96,6 +96,18 @@ namespace GN3.Save
             if (HasSave) File.Delete(FilePath);
         }
 
+        /// <summary>
+        /// 파일을 통째로 바꿔 쓴다: 옆의 .tmp에 다 쓴 뒤 한 번에 바꿔치기 — 쓰는 도중 게임이 꺼져도(자정 자동 저장 등)
+        /// 원래 파일이 반쯤 쓰인 채 깨지지 않는다.
+        /// </summary>
+        private static void WriteAtomic(string path, string content)
+        {
+            string temp = path + ".tmp";
+            File.WriteAllText(temp, content);
+            if (File.Exists(path)) File.Replace(temp, path, null);
+            else File.Move(temp, path);
+        }
+
         private static void WriteHistory(string json, bool auto)
         {
             WriteHistoryFile(json, auto ? AutoTag : ManualTag);
@@ -111,7 +123,7 @@ namespace GN3.Save
             string path = Path.Combine(HistoryFolder, $"{prefix}{stamp}_{tag}.json");
             for (int n = 2; File.Exists(path); n++)
                 path = Path.Combine(HistoryFolder, $"{prefix}{stamp}_{tag}_{n}.json");
-            File.WriteAllText(path, json);
+            WriteAtomic(path, json);
 
             var old = new DirectoryInfo(HistoryFolder).GetFiles($"{prefix}*_{tag}*.json")
                 .OrderByDescending(f => f.LastWriteTimeUtc).Skip(HistoryKeep);
@@ -199,7 +211,7 @@ namespace GN3.Save
             {
                 title = q.Title, region = (int)q.Region, location = q.LocationName, enemy = q.EnemyName, enemyCount = q.EnemyCount,
                 difficulty = q.Difficulty, durationDays = q.DurationDays, requester = q.Requester, requestText = q.RequestText,
-                challenge = q.IsChallenge, allyGuildId = q.AllyGuildId, allyCount = q.AllyCount,
+                challenge = q.IsChallenge, allyGuildId = q.AllyGuildId, allyCount = q.AllyCount, questId = q.Id,
             };
             foreach (var w in q.Waves)
                 b.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
@@ -211,7 +223,7 @@ namespace GN3.Save
         {
             var q = new Quest(b.title, (Region)b.region, b.location, b.enemy, b.enemyCount, b.difficulty, b.durationDays,
                 b.waves != null && b.waves.Count > 0 ? b.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList() : null,
-                b.requester, b.requestText) { IsChallenge = b.challenge, AllyGuildId = b.allyGuildId, AllyCount = b.allyCount };
+                b.requester, b.requestText, b.questId) { IsChallenge = b.challenge, AllyGuildId = b.allyGuildId, AllyCount = b.allyCount };
             RestoreMaterials(q, b.materialReward);
             return q;
         }
@@ -226,6 +238,13 @@ namespace GN3.Save
                 day = GameClock.CurrentDay,
                 hour = GameClock.CurrentHour,
                 reputation = Guild.Reputation,
+                ledger = GoldLedger.Entries.Select(e => new LedgerEntrySave { day = e.Day, hour = e.Hour, amount = e.Amount, reason = e.Reason }).ToList(),
+                questHistory = QuestHistory.Entries.Select(e => new QuestHistorySave
+                {
+                    day = e.Day, title = e.Title, level = e.Level, win = e.Win, reward = e.Reward, joint = e.Joint, challenge = e.Challenge,
+                    members = string.Join("|", e.Members), mvp = e.Mvp ?? "", fallen = string.Join("|", e.Fallen),
+                    dealt = string.Join("|", e.Dealt), healed = string.Join("|", e.Healed), taken = string.Join("|", e.Taken),
+                }).ToList(),
             };
 
             foreach (var merc in PlayerParty.Instance.Members)
@@ -331,6 +350,12 @@ namespace GN3.Save
                     outboundHours = expedition.OutboundHours,
                     returnHoursLeft = expedition.ReturnHoursLeft,
                     autoOnArrival = expedition.AutoOnArrival,
+                    questId = q.Id,
+                    challenge = q.IsChallenge,
+                    requester = q.Requester,
+                    requestText = q.RequestText,
+                    riskyRoute = expedition.RiskyRoute,
+                    hoursSinceAmbush = expedition.HoursSinceAmbushRoll,
                 };
                 foreach (var m in expedition.Members.Where(m => m.IsAlive))
                 {
@@ -347,7 +372,17 @@ namespace GN3.Save
                 data.expeditions.Add(e);
             }
             data.trainees = TrainingHall.SaveIds();
+            data.traineeHours = TrainingHall.SaveHours();
             data.patients = Hospital.SaveIds();
+            data.patientHours = Hospital.SaveHours();
+            data.achievements = Achievements.SaveDone();
+            data.giftedRank = Achievements.SaveGiftedRank();
+            data.lifeQuests = Achievements.LifeQuests;
+            data.lifeWins = Achievements.LifeWins;
+            data.lifeReward = Achievements.LifeReward;
+            data.lifeGoldIn = Achievements.LifeGoldIn;
+            data.lifeGoldOut = Achievements.LifeGoldOut;
+            data.memorials = Achievements.SaveMemorials();
             data.bathers = RestVenues.HotSpring.SaveIds();
             data.gamblers = RestVenues.GamblingDen.SaveIds();
             data.researchers = RestVenues.MagicLab.SaveIds();
@@ -466,9 +501,22 @@ namespace GN3.Save
                 var merc = l.inbound ? PlayerParty.Instance.Members.FirstOrDefault(m => m.Id == l.mercId)
                     : l.merc != null && !string.IsNullOrEmpty(l.merc.className) ? FromSave(l.merc, classes, data.version) : null;
                 if (merc == null) continue;
-                loans.Add(new Loan { Merc = merc, GuildId = l.guildId, Inbound = l.inbound, EndDay = l.endDay, DailyFee = l.dailyFee, Joint = l.joint, QuestId = l.questId, RosterEnd = l.rosterEnd });
+                string questId = l.questId;
+                // 버전 14 이하는 의뢰 Id를 저장하지 않아 불러올 때마다 새 Id였다 → 같은 근처 길드와 함께하는 의뢰로 다시 잇는다
+                if (data.version < 15 && l.joint && !string.IsNullOrEmpty(l.guildId))
+                    questId = AllQuests().FirstOrDefault(q => q.AllyGuildId == l.guildId)?.Id ?? questId;
+                loans.Add(new Loan { Merc = merc, GuildId = l.guildId, Inbound = l.inbound, EndDay = l.endDay, DailyFee = l.dailyFee, Joint = l.joint, QuestId = questId, RosterEnd = l.rosterEnd });
             }
             Loans.Restore(loans);
+        }
+
+        /// <summary>지금 있는 의뢰 전부: 게시판 · 의뢰 중개인 · 진행 중인 파견.</summary>
+        private static IEnumerable<Quest> AllQuests()
+        {
+            if (QuestBoardListings.Current != null)
+                foreach (var q in QuestBoardListings.Current) yield return q;
+            foreach (var q in QuestBroker.Quests) yield return q;
+            foreach (var e in ExpeditionLog.Instance.Active) yield return e.Quest;
         }
 
         // ---------- 불러오기 ----------
@@ -496,6 +544,38 @@ namespace GN3.Save
         {
             var data = Read(path);
             if (data == null) return false;
+
+            // 복원 중 예외(손상·직접 고친 저장, 이름이 바뀐 에셋 등)가 나면 반쯤 비워진 채 남지 않게, 비우기 전 지금 상태를 기억해 되돌린다.
+            SaveData snapshot = null;
+            string gameIdBefore = _gameId;
+            try { snapshot = JsonUtility.FromJson<SaveData>(JsonUtility.ToJson(Capture())); }
+            catch (Exception e) { Debug.LogWarning($"[SaveSystem] 불러오기 전 상태를 기억하지 못함(되돌리기 없음): {e}"); }
+
+            try
+            {
+                Apply(data);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[SaveSystem] 불러오기 실패 — 이전 상태로 되돌린다: {e}");
+                if (snapshot != null)
+                {
+                    try
+                    {
+                        Apply(snapshot);
+                        _gameId = gameIdBefore;
+                    }
+                    catch (Exception rollback) { Debug.LogError($"[SaveSystem] 이전 상태로 되돌리지도 못함: {rollback}"); }
+                }
+                GN3.UI.ToastLog.Show("불러오기 실패 — 저장 파일이 손상되었을 수 있습니다", false);
+                return false;
+            }
+        }
+
+        /// <summary>읽은 저장으로 지금 게임 상태를 바꾼다(실패하면 예외 — Load가 되돌린다).</summary>
+        private static void Apply(SaveData data)
+        {
             _gameId = string.IsNullOrEmpty(data.gameId) ? NewGameId() : data.gameId; // 게임 구분 전 저장은 새 게임 표시로 이어 간다
 
             var classes = Resources.LoadAll<MercenaryClassSO>("MercenaryClasses");
@@ -509,15 +589,41 @@ namespace GN3.Save
             // 지금 상태를 비우고 채운다. 파견을 먼저 넣어야 마을이 파견 중인 용병을 걸어 다니게 만들지 않는다.
             ExpeditionLog.Instance.Clear();
             PlayerParty.Instance.Clear();
+            // 저장하지 않는 것들은 모두 옛 게임 것이라 비운다: 우편함(파견 도착·마을 사건 선택은 옛 파견·용병을 가리킨다),
+            // 직접 전투 대기, 하루 보고서 줄, 한가한 날·피로 소수점, 장식 활동, 마을 사건 간격.
+            // 도착해 있던 파견은 복원 끝에 편지가 새로 생긴다(AnnounceRestoredArrivals).
+            GN3.UI.Mailbox.ClearAll();
+            GN3.Battle.BattleSceneContext.Pending = null;
+            DailyLog.ResetTransient();
+            MercenaryCondition.ResetTransient();
+            DecorActivities.ResetTransient();
+            ChoiceEvents.ResetTransient();
 
             Wallet.Restore(data.gold);
-            Guild.Restore(data.reputation);
-            GameClock.Restore(data.day, data.hour);
+            GoldLedger.Restore((data.ledger ?? new List<LedgerEntrySave>()).Select(e => new GoldLedger.Entry { Day = e.day, Hour = e.hour, Amount = e.amount, Reason = e.reason }));
+            List<string> Names(string joined) => string.IsNullOrEmpty(joined) ? new List<string>() : joined.Split('|').ToList();
+            List<int> Numbers(string joined) => Names(joined).Select(s => int.TryParse(s, out int n) ? n : 0).ToList();
+            QuestHistory.Restore((data.questHistory ?? new List<QuestHistorySave>()).Select(e => new QuestHistory.Entry
+            {
+                Day = e.day, Title = e.title, Level = e.level, Win = e.win, Reward = e.reward, Joint = e.joint, Challenge = e.challenge,
+                Members = Names(e.members), Mvp = string.IsNullOrEmpty(e.mvp) ? null : e.mvp, Fallen = Names(e.fallen),
+                Dealt = Numbers(e.dealt), Healed = Numbers(e.healed), Taken = Numbers(e.taken), // 버전 13 이하는 비어 있다
+            }));
+            // 복원하며 오르는 등급·값(길드 홀 복원 등)으로 업적·축하금이 나가지 않게 판정을 멈춰 둔다
+            Achievements.Suspended = true;
+            try
+            {
+                Guild.Restore(data.reputation);
+                GameClock.Restore(data.day, data.hour);
 
-            RestoreRest(data, mercs, classes);
+                RestoreRest(data, mercs, classes);
+                Achievements.Restore(data.achievements, data.giftedRank, data.lifeQuests, data.lifeWins, data.lifeReward,
+                    data.lifeGoldIn, data.lifeGoldOut, data.memorials, legacy: data.version < 15);
+            }
+            finally { Achievements.Suspended = false; }
+            ExpeditionLog.Instance.AnnounceRestoredArrivals(); // 용병·시설이 다 돌아온 뒤에 도착 알림
 
             OnLoaded?.Invoke();
-            return true;
         }
 
         /// <summary>용병 하나를 되살린다(파티·시장 공용). 직업 에셋을 못 찾으면 null.</summary>
@@ -599,8 +705,9 @@ namespace GN3.Save
                 var waves = e.waves != null && e.waves.Count > 0
                     ? e.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList()
                     : null; // 예전 저장: enemy × enemyCount 한 라운드
-                var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays, waves)
-                    { AllyGuildId = e.allyGuildId, AllyCount = e.allyCount };
+                var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays, waves,
+                        e.requester, e.requestText, e.questId) // 버전 14 이하는 Id·부탁 글이 없어 새 Id
+                    { AllyGuildId = e.allyGuildId, AllyCount = e.allyCount, IsChallenge = e.challenge };
                 RestoreMaterials(quest, e.materialReward);
                 // 버전 1 저장은 일 단위뿐이라 × 24시간으로 읽는다.
                 bool hours = data.version >= 2;
@@ -611,13 +718,15 @@ namespace GN3.Save
                 expedition.RestoreState(hours ? e.outboundHours : e.outboundDays * Quest.HoursPerDay, e.returning,
                     hours ? e.returnHoursLeft : e.returnDaysLeft * Quest.HoursPerDay);
                 expedition.AutoOnArrival = e.autoOnArrival;
+                expedition.RiskyRoute = e.riskyRoute;
+                expedition.HoursSinceAmbushRoll = e.hoursSinceAmbush; // 저장/불러오기로 매복 판정이 미뤄지지 않게
                 ExpeditionLog.Instance.Restore(expedition);
             }
 
             foreach (var merc in mercs)
                 PlayerParty.Instance.RestoreAdd(merc);
-            TrainingHall.Restore(data.trainees);
-            Hospital.Restore(data.patients);
+            TrainingHall.Restore(data.trainees, data.traineeHours);
+            Hospital.Restore(data.patients, data.patientHours);
             RestVenues.HotSpring.Restore(data.bathers);
             RestVenues.GamblingDen.Restore(data.gamblers);
             RestVenues.MagicLab.Restore(data.researchers);

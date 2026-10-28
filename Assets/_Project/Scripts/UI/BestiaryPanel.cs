@@ -384,6 +384,7 @@ namespace GN3.UI
             _listScroll.horizontal = false;
             _listScroll.movementType = ScrollRect.MovementType.Clamped;
             SmoothWheelScroll.Attach(_listScroll);
+            ScrollListWrapper.AddOverlayScrollbar(_listScroll); // 공통 스크롤바(내용이 짧으면 숨음)
 
             int maxRows = regions.Max(r => Bestiary.EntriesIn(r).Length);
             for (int i = 0; i < maxRows; i++)
@@ -453,6 +454,7 @@ namespace GN3.UI
             _lootScroll.horizontal = false;
             _lootScroll.movementType = ScrollRect.MovementType.Clamped;
             SmoothWheelScroll.Attach(_lootScroll);
+            ScrollListWrapper.AddOverlayScrollbar(_lootScroll); // 공통 스크롤바(내용이 짧으면 숨음)
             _lootPanel.SetActive(false);
 
             _lootButton = new GameObject("LootButton", typeof(RectTransform), typeof(Image), typeof(Button));
@@ -468,20 +470,7 @@ namespace GN3.UI
             lootLabelRect.offsetMin = lootLabelRect.offsetMax = Vector2.zero;
 
             // 닫기
-            var close = new GameObject("CloseButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            close.transform.SetParent(_panel.transform, false);
-            var closeRect = close.GetComponent<RectTransform>();
-            closeRect.anchorMin = closeRect.anchorMax = closeRect.pivot = new Vector2(1f, 1f);
-            closeRect.anchoredPosition = new Vector2(-8f, -8f);
-            closeRect.sizeDelta = new Vector2(28f, 28f);
-            close.GetComponent<Image>().color = new Color(0.55f, 0.25f, 0.25f, 1f);
-            close.GetComponent<Button>().onClick.AddListener(Hide);
-            var x = CreateText("Text", 16, close.transform, "X", 0f, 0f, 0f, 0f);
-            x.alignment = TextAnchor.MiddleCenter;
-            var xRect = x.rectTransform;
-            xRect.anchorMin = Vector2.zero;
-            xRect.anchorMax = Vector2.one;
-            xRect.offsetMin = xRect.offsetMax = Vector2.zero;
+            UITheme.CreateCloseX(_panel.transform, Hide); // 공통 닫기 X(32px, 오른쪽 위)
 
             _panel.SetActive(false);
             EscapeCloser.Register(_panel, Hide);

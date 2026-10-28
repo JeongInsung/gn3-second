@@ -29,6 +29,9 @@ namespace GN3.Quests
             _pending.Clear();
         }
 
+        /// <summary>불러오기: 저장하지 않는 기록이라 옛 게임 줄이 다음 보고서에 섞이지 않게 비운다.</summary>
+        public static void ResetTransient() => ResetForPlaySession();
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Subscribe()
         {

@@ -14,7 +14,10 @@ namespace GN3.Combat
         public override void OnAttack(AttackContext context)
         {
             if (context.Rng.NextDouble() < ProcChance)
+            {
                 context.Damage = InstakillDamage;
+                PassiveEvents.Push(new BattleEvent(0, context.Attacker, context.Defender, 0, false, proc: "즉사!")); // 직접 전투: 대상 머리 위 붉은 글자
+            }
         }
     }
 }

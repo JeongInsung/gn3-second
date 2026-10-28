@@ -31,7 +31,8 @@ namespace GN3.UI
             if (button == null) return;
             button.interactable = reason == null;
             if (reason == null) return;
-            var tip = button.GetComponent<TooltipTrigger>() ?? button.gameObject.AddComponent<TooltipTrigger>();
+            var tip = button.GetComponent<TooltipTrigger>();
+            if (tip == null) tip = button.gameObject.AddComponent<TooltipTrigger>(); // ??는 Unity의 가짜 null을 못 걸러서 if로
             tip.Text = reason;
         }
 
@@ -72,8 +73,7 @@ namespace GN3.UI
             var row = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
             row.transform.SetParent(panel.ItemListContent, false);
             row.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.06f); // UIThemeApplier가 어두운 칸으로 바꾼다
-            var layoutElement = row.GetComponent<LayoutElement>();
-            layoutElement.minHeight = layoutElement.preferredHeight = RowHeight;
+            FitRowHeight.Attach(row, RowHeight, 16f); // 높이 RowHeight, 줄 안 글(두 줄 이름·설명 등)이 길면 줄이 늘어난다
             var h = row.GetComponent<HorizontalLayoutGroup>();
             h.padding = new RectOffset(10, 10, 8, 8);
             h.spacing = 10f;
@@ -121,6 +121,7 @@ namespace GN3.UI
             var name = CreateText(column.transform, title, 17, TextAnchor.MiddleLeft, UITheme.BodyText);
             name.fontStyle = FontStyle.Bold;
             CreateText(column.transform, subtitle, 13, TextAnchor.MiddleLeft, UITheme.MutedText);
+            // 줄(CreateRow)의 FitRowHeight가 이 묶음을 스스로 찾아 두 글 높이에 맞춰 늘린다(설명이 길어 접혀도 안 넘친다)
         }
 
         /// <summary>대상 고르기 화면 맨 위: "← 돌아가기" + 제목.</summary>

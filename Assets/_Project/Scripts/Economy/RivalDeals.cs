@@ -51,7 +51,7 @@ namespace GN3.Economy
         {
             if (PoachBlock(g, merc) != null) return;
             int fee = TransferFee(g, merc);
-            if (!Wallet.TrySpend(fee)) return;
+            if (!Wallet.TrySpend(fee, "길드 거래")) return;
             bool signed = false;
             ContractNegotiationPanel.OpenHire(merc, () =>
             {
@@ -64,7 +64,7 @@ namespace GN3.Economy
             }, () =>
             {
                 if (signed) return;
-                Wallet.Add(fee);
+                Wallet.Add(fee, "길드 거래");
                 ToastLog.Show($"영입이 성사되지 않아 이적료 {fee}G를 돌려받았습니다.", false);
             });
         }
@@ -97,7 +97,7 @@ namespace GN3.Economy
             if (SellBlock(g, merc) != null || offer <= 0) return false;
             Release(merc);
             g.Gold -= offer;
-            Wallet.Add(offer);
+            Wallet.Add(offer, "용병 판매");
             RivalGuilds.Join(g, merc);
             RivalGuilds.AddRelation(g, SellRelation, $"우리 길드에서 {Josa.EulReul(merc.Name)} {offer}G에 샀다");
             ToastLog.Show($"{Josa.EulReul(merc.Name)} {g.Name}에 {offer}G를 받고 보냈습니다.", false);
@@ -130,8 +130,8 @@ namespace GN3.Economy
         {
             if (TradeBlock(g, ours, theirs) != null) return false;
             int diff = TradeDifference(g, ours, theirs);
-            if (diff > 0 && !Wallet.TrySpend(diff)) return false;
-            if (diff < 0) Wallet.Add(-diff);
+            if (diff > 0 && !Wallet.TrySpend(diff, "길드 거래")) return false;
+            if (diff < 0) Wallet.Add(-diff, "길드 거래");
             g.Gold += diff;
 
             int days = Mathf.Max(ContractTuning.ShortContractDays, Contracts.RemainingDays(ours));

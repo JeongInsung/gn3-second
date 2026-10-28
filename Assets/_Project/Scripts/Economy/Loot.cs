@@ -488,8 +488,14 @@ namespace GN3.Economy
             OnChanged?.Invoke();
             return true;
         }
-        /// <summary>전리품을 모두 팔면 받는 골드(건설 재료는 뺀다).</summary>
-        public static int TotalValue => _counts.Where(kv => !kv.Key.Material).Sum(kv => kv.Key.Price * kv.Value);
+        /// <summary>[모두 팔기]가 파는 것인가: 건설 재료·제작 재료(마정석·제작법 재료)는 남긴다.</summary>
+        public static bool SellsInBulk(LootItem item) => !item.Material && !Crafting.IsIngredient(item);
+
+        /// <summary>전리품을 모두 팔면 받는 골드(건설 재료·제작 재료는 뺀다).</summary>
+        public static int TotalValue => _counts.Where(kv => SellsInBulk(kv.Key)).Sum(kv => kv.Key.Price * kv.Value);
+
+        /// <summary>[모두 팔기]에서 남기는 제작 재료 종류 수(건설 재료 제외).</summary>
+        public static int KeptIngredientKinds => _counts.Keys.Count(i => !i.Material && Crafting.IsIngredient(i));
 
         /// <summary>용병 가방을 비워 창고에 넣는다(가방 창·창고의 가방 비우기). 넣은 개수.</summary>
         public static int StashFrom(Mercenaries.Mercenary merc)
@@ -515,7 +521,7 @@ namespace GN3.Economy
                 _seen.Add(item.Name);
                 if (item == LootCatalog.CoinPouch)
                 {
-                    Wallet.Add(item.Price * count); // 동전 주머니는 줍는 대로 금화로(가방에 쌓이지 않는다)
+                    Wallet.Add(item.Price * count, "동전 주머니"); // 동전 주머니는 줍는 대로 금화로(가방에 쌓이지 않는다)
                     continue;
                 }
                 _counts[item] = Count(item) + count;
@@ -532,7 +538,7 @@ namespace GN3.Economy
             if (Count(item) == n) _counts.Remove(item);
             else _counts[item] -= n;
             int gold = item.Price * n;
-            Wallet.Add(gold);
+            Wallet.Add(gold, "전리품 판매");
             OnChanged?.Invoke();
             return gold;
         }
@@ -541,8 +547,8 @@ namespace GN3.Economy
         {
             int gold = TotalValue;
             if (gold <= 0) return 0;
-            foreach (var item in _counts.Keys.Where(i => !i.Material).ToList()) _counts.Remove(item); // 건설 재료는 남긴다
-            Wallet.Add(gold);
+            foreach (var item in _counts.Keys.Where(SellsInBulk).ToList()) _counts.Remove(item); // 건설 재료·제작 재료(마정석 등)는 남긴다
+            Wallet.Add(gold, "전리품 판매");
             OnChanged?.Invoke();
             return gold;
         }

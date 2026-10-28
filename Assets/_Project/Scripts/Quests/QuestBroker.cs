@@ -99,14 +99,18 @@ namespace GN3.Quests
             }
             else
             {
-                var quest = board.Refresh().Skip(1).First(); // 도전은 게시판에 있으니 일반 하나
-                foreach (var item in LootCatalog.Materials.OrderBy(_ => _rng.Next()).Take(BonusMaterialKinds))
+                var refreshed = board.Refresh().ToList();
+                var quest = refreshed.Count > 1 ? refreshed[1] : refreshed.FirstOrDefault(); // 도전은 게시판에 있으니 일반 하나(하나뿐이면 그것)
+                if (quest != null)
                 {
-                    int i = quest.MaterialReward.FindIndex(m => m.item == item); // 원래 보상에 같은 재료가 있으면 개수만 늘린다
-                    if (i >= 0) quest.MaterialReward[i] = (item, quest.MaterialReward[i].count + BonusMaterialCount);
-                    else quest.MaterialReward.Add((item, BonusMaterialCount));
+                    foreach (var item in LootCatalog.Materials.OrderBy(_ => _rng.Next()).Take(BonusMaterialKinds))
+                    {
+                        int i = quest.MaterialReward.FindIndex(m => m.item == item); // 원래 보상에 같은 재료가 있으면 개수만 늘린다
+                        if (i >= 0) quest.MaterialReward[i] = (item, quest.MaterialReward[i].count + BonusMaterialCount);
+                        else quest.MaterialReward.Add((item, BonusMaterialCount));
+                    }
+                    brought.Add(quest);
                 }
-                brought.Add(quest);
             }
             foreach (var quest in brought)
             {

@@ -1,3 +1,4 @@
+using System.Linq;
 using GN3.World;
 using UnityEngine;
 using UnityEngine.UI;
@@ -12,7 +13,7 @@ namespace GN3.UI
     /// </summary>
     public class ImportantAlertPanel : MonoBehaviour
     {
-        private const float Width = 580f;
+        private const float Width = 720f; // 긴 의뢰 제목이 한 줄에 들게(예전 580 — 글씨를 줄여 맞췄다)
         private const float Height = 400f;
 
         private GameObject _root;
@@ -56,6 +57,8 @@ namespace GN3.UI
                 Mailbox.Acknowledge(_current);
                 Close();
             }
+            // 불러오기로 우편함에서 사라진 편지(옛 게임 파견의 도착·사건)면 그냥 닫는다
+            if (_current != null && !Mailbox.All.Contains(_current)) Close();
             // 띄운 사건을 우편함에서 골랐으면 결과를 보여 준다
             if (_current != null && _current.Choices != null && _current.ChoiceResolved && _choiceRow.activeSelf) ShowResult();
             if (_current != null) return;
@@ -213,11 +216,8 @@ namespace GN3.UI
             _title = CreateText(panel.transform, "", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             _title.fontStyle = FontStyle.Bold;
             _title.supportRichText = true;
-            _title.resizeTextForBestFit = true; // 긴 퀘스트 제목은 두 줄로 넘치지 않고 작아진다
-            _title.verticalOverflow = VerticalWrapMode.Truncate; // 크기 맞춤은 칸을 넘치지 못하게 해야 동작한다
-            _title.horizontalOverflow = HorizontalWrapMode.Wrap;
-            _title.resizeTextMinSize = UITheme.HeadingSize - 2;
-            _title.resizeTextMaxSize = UITheme.TitleSize;
+            _title.horizontalOverflow = HorizontalWrapMode.Overflow; // 글씨 크기는 그대로(창을 넓혀 한 줄에 든다)
+            _title.verticalOverflow = VerticalWrapMode.Overflow;
             Place(_title.rectTransform, new Vector2(22f, -48f), new Vector2(Width - 44f, 36f));
 
             // 본문(길면 스크롤)
@@ -239,6 +239,7 @@ namespace GN3.UI
             _scroll.content = bodyRect;
             _scroll.horizontal = false;
             SmoothWheelScroll.Attach(_scroll);
+            ScrollListWrapper.AddOverlayScrollbar(_scroll); // 공통 스크롤바(내용이 짧으면 숨음)
 
             _arrivalRow = CreateButtonRow(panel.transform);
             CreateButton(_arrivalRow.transform, "자동 진행", Auto, new Color(0.25f, 0.55f, 0.35f, 1f));

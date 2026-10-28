@@ -29,6 +29,9 @@ namespace GN3.Quests
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetForPlaySession() => _lastVillageDay = -999;
 
+        /// <summary>불러오기: 마지막 마을 사건 날짜는 저장하지 않으므로 처음부터 센다.</summary>
+        public static void ResetTransient() => ResetForPlaySession();
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Subscribe()
         {
@@ -71,6 +74,7 @@ namespace GN3.Quests
                 e.AwaitingEvent = false;
                 string result = ExpeditionLog.Instance.Active.Contains(e) ? act() : "파견대가 이미 없다.";
                 ExpeditionLog.Instance.NotifyChanged();
+                ExpeditionLog.Instance.ResumeAfterEvent(e); // 사건 중에 목적지·마을에 닿아 있었으면 이제 도착·귀환
                 return result;
             },
         };
@@ -126,7 +130,7 @@ namespace GN3.Quests
                         if (Rng.NextDouble() < 0.6)
                         {
                             int gold = Rng.Next(50, 151) * Math.Max(1, e.Quest.Difficulty);
-                            Wallet.Add(gold);
+                            Wallet.Add(gold, "사건");
                             return $"상자 안에 금화가 들어 있었다! (+{gold}G)";
                         }
                         var victim = AnyOf(members);
@@ -191,7 +195,7 @@ namespace GN3.Quests
                         e.Delay(Quest.HoursPerDay / 2f);
                         if (herb != null && GuildStorage.TryAdd(herb)) return $"{Josa.EulReul(herb.Name)} 캐서 길드 창고로 보냈다.";
                         int gold = Math.Max(10, (herb?.Price ?? 20) / 2);
-                        Wallet.Add(gold);
+                        Wallet.Add(gold, "사건");
                         return $"창고가 가득 차 약초를 팔았다(+{gold}G).";
                     }),
                     Go(e, "지나친다", "그대로 간다.", () => "약초는 다음 기회에."),
@@ -243,7 +247,7 @@ namespace GN3.Quests
                     Pick($"{b.Name} 편", $"{b.Name} 사기 +8, {a.Name} 사기 −8, 둘 사이 친밀도 하락.", () => Side(b, a)),
                     Pick("중재한다 (50G)", "50G로 술자리를 마련해 화해시킨다. 둘 사이 친밀도 상승, 둘 다 사기 +3.", () =>
                     {
-                        Wallet.TrySpend(50);
+                        Wallet.TrySpend(50, "사건");
                         Affinity.Add(a, b, 10);
                         a.AddMorale(3);
                         b.AddMorale(3);
@@ -274,7 +278,7 @@ namespace GN3.Quests
                 {
                     Pick($"산다 ({price}G)", $"{Josa.EulReul(stone.Name)} 전리품 가방에 넣는다.", () =>
                     {
-                        Wallet.TrySpend(price);
+                        Wallet.TrySpend(price, "사건");
                         LootBag.Add(new List<(LootItem, int)> { (stone, 1) });
                         return $"{Josa.EulReul(stone.Name)} 샀다. 각성이나 시설 증축에 쓸 수 있다.";
                     }, () => Wallet.Gold >= price),
@@ -288,7 +292,7 @@ namespace GN3.Quests
             {
                 Pick("기부한다 (100G)", "명성 +10.", () =>
                 {
-                    Wallet.TrySpend(100);
+                    Wallet.TrySpend(100, "사건");
                     Guild.Add(10);
                     return "길드 깃발이 축제 한가운데 걸렸다. 명성이 올랐다(+10).";
                 }, () => Wallet.Gold >= 100),
@@ -332,7 +336,7 @@ namespace GN3.Quests
                 {
                     Pick("허락한다 (30G)", "휴가비 30G. 사기 +20, 피로 −30.", () =>
                     {
-                        Wallet.TrySpend(30);
+                        Wallet.TrySpend(30, "사건");
                         merc.AddMorale(20);
                         merc.AddFatigue(-30);
                         return $"{Josa.IGa(merc.Name)} 환하게 웃으며 고개를 숙였다. 한결 가벼운 얼굴로 돌아왔다.";
@@ -351,10 +355,10 @@ namespace GN3.Quests
             {
                 Pick("투자한다 (200G)", "50%로 400G를 돌려받고, 50%로 날린다.", () =>
                 {
-                    Wallet.TrySpend(200);
+                    Wallet.TrySpend(200, "사건");
                     if (Rng.NextDouble() < 0.5)
                     {
-                        Wallet.Add(400);
+                        Wallet.Add(400, "사건");
                         return "놀랍게도 약속은 지켜졌다! 400G가 돌아왔다(+200G).";
                     }
                     return "남자는 다시 나타나지 않았다… 200G를 잃었다.";

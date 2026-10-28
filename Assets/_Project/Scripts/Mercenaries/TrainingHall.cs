@@ -114,19 +114,23 @@ namespace GN3.Mercenaries
             return Mathf.Max(0f, (1f - merc.GrowthProgress) / (GrowthPerHour * merc.GrowthRate));
         }
 
-        /// <summary>저장 파일에서 불러올 때(파티 복원 뒤). 남은 시간은 저장하지 않으므로 사람마다 1~3시간을 새로 정한다.</summary>
-        public static void Restore(IEnumerable<string> ids)
+        /// <summary>저장 파일에서 불러올 때(파티 복원 뒤). 남은 시간은 hours(ids와 같은 순서, 버전 15)에서, 없으면 사람마다 1~3시간을 새로 정한다.</summary>
+        public static void Restore(IEnumerable<string> ids, IReadOnlyList<float> hours = null)
         {
             _traineeIds.Clear();
             _pendingFatigue.Clear();
             _remainingHours.Clear();
             _sessionGains.Clear();
+            int index = -1;
             if (ids != null)
                 foreach (var id in ids)
                 {
+                    index++;
                     if (_traineeIds.Count >= Capacity || _traineeIds.Contains(id) || Find(id) == null) continue;
                     _traineeIds.Add(id);
-                    _remainingHours[id] = UnityEngine.Random.Range(MinSessionHours, MaxSessionHours);
+                    _remainingHours[id] = hours != null && index < hours.Count && hours[index] > 0f
+                        ? hours[index]
+                        : UnityEngine.Random.Range(MinSessionHours, MaxSessionHours);
                     _sessionGains[id] = new List<string>();
                 }
             OnChanged?.Invoke();
@@ -138,6 +142,10 @@ namespace GN3.Mercenaries
             Cleanup();
             return new List<string>(_traineeIds);
         }
+
+        /// <summary>저장용: SaveIds와 같은 순서의 남은 훈련 시간(불러오기로 다시 굴리지 않게).</summary>
+        public static List<float> SaveHours() =>
+            _traineeIds.Select(id => _remainingHours.TryGetValue(id, out float h) ? h : 0f).ToList();
 
         private static void Train(float hours)
         {

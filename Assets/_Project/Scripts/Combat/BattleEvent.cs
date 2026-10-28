@@ -12,10 +12,13 @@ namespace GN3.Combat
         public readonly bool IsPoison;
         /// <summary>방패로 막아 피해가 줄었다(ShieldBlockPassive).</summary>
         public readonly bool Blocked;
+        /// <summary>패시브 발동 이름("부활!", "즉사!", "도발!") — 직접 전투가 대상 머리 위에 띄운다(PassiveEvents). 없으면 null.</summary>
+        public readonly string Proc;
 
         public BattleEvent(int round, Combatant attacker, Combatant target, int damage, bool targetDefeated, bool evaded = false, bool isPoison = false,
-            bool blocked = false)
+            bool blocked = false, string proc = null)
         {
+            Proc = proc;
             IsPoison = isPoison;
             Blocked = blocked;
             Round = round;

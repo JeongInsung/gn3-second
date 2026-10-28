@@ -130,6 +130,55 @@ namespace GN3.Battle
             return go;
         }
 
+        /// <summary>치유 스킬: 대상 발밑에서 위로 솟았다 흐려지는 빛기둥(필드 좌표, 전투 배속을 따른다).</summary>
+        public static IEnumerator LightColumn(RectTransform layer, Vector2 feet, Color color)
+        {
+            var go = new GameObject("LightColumn", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(layer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.pivot = new Vector2(0.5f, 0f);
+            rect.anchoredPosition = feet;
+            var image = go.GetComponent<Image>();
+            image.raycastTarget = false;
+            const float duration = 0.6f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                if (go == null) yield break;
+                float k = t / duration;
+                float grow = 1f - (1f - Mathf.Min(1f, k * 2.5f)) * (1f - Mathf.Min(1f, k * 2.5f)); // 빠르게 솟고
+                rect.sizeDelta = new Vector2(Mathf.Lerp(46f, 26f, k), 220f * grow);
+                image.color = new Color(color.r, color.g, color.b, 0.55f * (1f - k)); // 천천히 흐려진다
+                yield return null;
+            }
+            if (go != null) Object.Destroy(go);
+        }
+
+        /// <summary>관통 사격 등: 쏜 자리에서 대상까지 곧게 그어졌다 가늘어지며 사라지는 빛줄기.</summary>
+        public static IEnumerator Streak(RectTransform layer, Vector2 from, Vector2 to, Color color, float width = 8f)
+        {
+            var go = new GameObject("Streak", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(layer, false);
+            var rect = (RectTransform)go.transform;
+            rect.anchorMin = rect.anchorMax = Vector2.zero;
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.anchoredPosition = from;
+            Vector2 d = to - from;
+            rect.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
+            var image = go.GetComponent<Image>();
+            image.raycastTarget = false;
+            const float duration = 0.35f;
+            for (float t = 0f; t < duration; t += Time.deltaTime)
+            {
+                if (go == null) yield break;
+                float k = t / duration;
+                rect.sizeDelta = new Vector2(d.magnitude * Mathf.Min(1f, k * 4f), width * (1f - k)); // 순식간에 뻗고 가늘어진다
+                image.color = new Color(color.r, color.g, color.b, 1f - k);
+                yield return null;
+            }
+            if (go != null) Object.Destroy(go);
+        }
+
         /// <summary>맞은 자리에서 커지며 사라지는 고리.</summary>
         public static IEnumerator HitSpark(RectTransform layer, Vector2 position, Color color)
         {
@@ -231,7 +280,7 @@ namespace GN3.Battle
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = new Vector2(width, 0f);
             var fill = zone.GetComponent<RawImage>();
-            fill.texture = HorizontalFade(0.16f, 0.04f);
+            fill.texture = ArenaDeployFade(width, GN3.Combat.FieldBattleSession.FieldHeight, 0.16f, 0.04f); // 타원 공터 안만(숲 밑은 칠하지 않는다)
             fill.color = DeployColor;
             fill.raycastTarget = false;
 
@@ -698,13 +747,27 @@ namespace GN3.Battle
             }
         }
 
-        private static Texture2D HorizontalFade(float left, float right)
+        /// <summary>
+        /// 배치 구역 바탕: 왼쪽(left)에서 오른쪽(right)으로 옅어지고, 둥근 공터(FieldBattleSession.ArenaRadius) 밖은 비운다.
+        /// 판 좌표 DeployTexel px당 한 칸 — 가장자리는 몇 칸에 걸쳐 부드럽게 사라진다(Bilinear).
+        /// </summary>
+        private static Texture2D ArenaDeployFade(float width, float height, float left, float right)
         {
-            const int w = 64;
-            var pixels = new Color[w];
-            for (int x = 0; x < w; x++) pixels[x] = new Color(1f, 1f, 1f, Mathf.Lerp(left, right, x / (w - 1f)));
-            return MakeTexture(w, 1, pixels, TextureWrapMode.Clamp, "BattleDeployFade");
+            int w = Mathf.Max(2, Mathf.CeilToInt(width / DeployTexel)), h = Mathf.Max(2, Mathf.CeilToInt(height / DeployTexel));
+            var pixels = new Color[w * h];
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float fx = (x + 0.5f) * width / w, fy = (y + 0.5f) * height / h;
+                float inside = Mathf.Clamp01((1f - GN3.Combat.FieldBattleSession.ArenaRadius(fx, fy, DeployEdgeInset)) * DeployEdgeSharpness);
+                pixels[y * w + x] = new Color(1f, 1f, 1f, Mathf.Lerp(left, right, fx / width) * inside);
+            }
+            return MakeTexture(w, h, pixels, TextureWrapMode.Clamp, "BattleDeployFade");
         }
+
+        private const float DeployTexel = 8f;          // 배치 구역 텍스처: 판 좌표 8px당 한 칸
+        private const float DeployEdgeInset = 30f;     // 공터 가장자리에서 이만큼 안쪽까지만 칠한다(유닛이 설 수 있는 곳 ≈ 40)
+        private const float DeployEdgeSharpness = 25f; // 가장자리 흐려짐 폭(상대 거리 1/25)
 
         private static Texture2D MakeTexture(int w, int h, Color[] pixels, TextureWrapMode wrap, string name)
         {

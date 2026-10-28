@@ -88,6 +88,7 @@ namespace GN3.UI
             var panel = new GameObject("Panel", typeof(RectTransform), typeof(Image), typeof(Button));
             panel.transform.SetParent(transform, false);
             ((RectTransform)panel.transform).sizeDelta = new Vector2(Width, height);
+            DraggablePanel.Attach((RectTransform)panel.transform); // 잡고 끌어 옮길 수 있다(뒤 어두운 막은 고정)
             var panelImage = panel.GetComponent<Image>();
             panelImage.sprite = UITheme.Panel;
             panelImage.type = Image.Type.Sliced;

@@ -92,14 +92,25 @@ namespace GN3.Quests
         }
 
         /// <summary>저장 파일에서 불러온 파견을 그대로 넣는다(빠른 진군 계산·출발 알림 없음).
-        /// 이미 도착해 선택을 기다리던 파견이면 도착 알림창을 다시 띄운다.</summary>
+        /// 도착 알림은 용병·시설까지 다 돌아온 뒤 AnnounceRestoredArrivals가 띄운다.</summary>
         public void Restore(Expedition expedition)
         {
             _active.Add(expedition);
             OnChanged?.Invoke();
-            // 불러오는 중엔 용병·시설이 아직 다 돌아오지 않아 자동 전투를 하지 않고 편지로 묻는다(IsRestoring)
+        }
+
+        /// <summary>
+        /// 불러오기 끝(용병·시설 복원 뒤): 이미 도착해 선택을 기다리던 파견마다 도착 알림을 다시 띄운다.
+        /// 불러온 직후라 자동 전투를 하지 않고 편지로 묻는다(IsRestoring).
+        /// </summary>
+        public void AnnounceRestoredArrivals()
+        {
             IsRestoring = true;
-            try { if (expedition.IsReady) OnArrived?.Invoke(expedition); }
+            try
+            {
+                foreach (var expedition in _active.ToList())
+                    if (expedition.IsReady) OnArrived?.Invoke(expedition);
+            }
             finally { IsRestoring = false; }
         }
 
@@ -206,6 +217,12 @@ namespace GN3.Quests
                     changed = true;
                     continue;
                 }
+                // 이번 이동 중에 사건이 생겼으면 도착·귀환 처리는 고른 뒤로 미룬다(ResumeAfterEvent) — 사건을 기다리는 채로 도착해 싸우지 않게
+                if (expedition.AwaitingEvent)
+                {
+                    changed = true;
+                    continue;
+                }
 
                 float after = expedition.IsReturning ? expedition.ReturnHoursLeft : expedition.Quest.RemainingHours;
                 if (Math.Ceiling(after) != Math.Ceiling(before)) progressed = true;
@@ -220,6 +237,26 @@ namespace GN3.Quests
             // 순회가 끝난 뒤 알린다(자동 진행이 바로 Complete해도 목록이 안전하다).
             foreach (var expedition in arrived)
                 if (_active.Contains(expedition)) OnArrived?.Invoke(expedition);
+        }
+
+        /// <summary>
+        /// 이동 사건을 고른 뒤(ChoiceEvents): 사건이 난 그 시간에 이미 목적지·마을에 닿았으면 미뤄 둔 도착·귀환을 지금 처리한다
+        /// (도착한 파견은 시간 흐름에서 빠지므로 여기서 알리지 않으면 영영 도착 알림이 없다).
+        /// </summary>
+        public void ResumeAfterEvent(Expedition expedition)
+        {
+            if (expedition == null || expedition.AwaitingEvent || !_active.Contains(expedition)) return;
+            if (expedition.IsReturning)
+            {
+                if (expedition.ReturnHoursLeft > 0f) return;
+                FinishReturn(expedition);
+                OnChanged?.Invoke();
+            }
+            else if (expedition.Quest.IsReady)
+            {
+                OnChanged?.Invoke();
+                OnArrived?.Invoke(expedition);
+            }
         }
 
         /// <summary>습격을 굴린다. 습격이 실제로 일어났으면(피했어도 길잡이 문구가 나가면) true.</summary>
@@ -263,6 +300,7 @@ namespace GN3.Quests
                 if (!merc.IsAlive)
                 {
                     sb.Append($" {merc.Name} 사망.");
+                    GN3.Economy.Achievements.Memorialize(merc, $"이동 중 습격으로 전사 — {expedition.Quest.Title}"); // 명예의 전당
                     PlayerParty.Instance.Remove(merc);
                 }
                 else if (combatant.CurrentHealth < combatant.Stats.MaxHealth)

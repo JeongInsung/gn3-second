@@ -57,6 +57,15 @@ namespace GN3.Mercenaries
         /// <summary>훈련소 성장 배율: 허수아비 하나마다 +10%(MaxHallBonusDummies개까지).</summary>
         public static float TrainingHallBonus => 1f + HallBonusPerDummy * Mathf.Min(MaxHallBonusDummies, _spots.Count(s => s.Kind == Kind.Training));
 
+        /// <summary>불러오기: 저장하지 않는 장식 활동(앉아 있는 사람·피로 소수점)을 비운다 — 옛 게임 용병이 자리를 차지하지 않게.</summary>
+        public static void ResetTransient()
+        {
+            if (_sessions.Count == 0 && _pendingFatigue.Count == 0) return;
+            _sessions.Clear();
+            _pendingFatigue.Clear();
+            OnChanged?.Invoke();
+        }
+
         /// <summary>마을 장식 자리를 새로 정한다(마을을 고칠 때마다). 사라진 자리에 있던 사람은 끝낸다.</summary>
         public static void SetSpots(IEnumerable<Spot> spots)
         {

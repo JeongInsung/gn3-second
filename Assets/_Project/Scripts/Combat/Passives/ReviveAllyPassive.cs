@@ -36,6 +36,7 @@ namespace GN3.Combat
             target.Heal(Math.Clamp(CombatFormulas.Scale(self.Stats.Holy * ReviveHolyRatio), 1, target.Stats.MaxHealth));
             Combatant.RecordHeal(self, before, target); // 평점용(살려 낸 체력)
             _used = true;
+            PassiveEvents.Push(new BattleEvent(round, self, target, -(target.CurrentHealth - before), false, proc: "부활!")); // 직접 전투: 금빛 "부활!" + 초록 +N
         }
     }
 }
