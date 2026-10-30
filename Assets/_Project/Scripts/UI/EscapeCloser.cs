@@ -55,17 +55,21 @@ namespace GN3.UI
             DontDestroyOnLoad(go);
         }
 
-        /// <summary>ESC로 닫을 창을 등록한다. close는 창의 닫기 버튼과 같은 동작이면 된다.</summary>
-        public static void Register(GameObject panel, System.Action close, WindowRole role = WindowRole.Main)
+        /// <summary>ESC로 닫을 창을 등록한다. close는 창의 닫기 버튼과 같은 동작이면 된다.
+        /// justOpened: 열 때마다 판을 새로 만들어 그 자리에서 등록하는 창(장부·기록·일정·연대기·가이드북)은 true —
+        /// 이미 열린 채로 등록돼도 "방금 열림"으로 보고 다른 창을 닫는다(아니면 원래 열려 있던 창으로 여겨 아무것도 닫지 않았다).</summary>
+        public static void Register(GameObject panel, System.Action close, WindowRole role = WindowRole.Main, bool justOpened = false)
         {
-            Register(panel, () => { close(); return true; }, role);
+            Register(panel, () => { close(); return true; }, role, justOpened);
         }
 
         /// <summary>ESC를 받을지 창이 정한다. false면 닫지 않고 ESC만 먹는다.</summary>
-        public static void Register(GameObject panel, System.Func<bool> tryClose, WindowRole role = WindowRole.Main)
+        public static void Register(GameObject panel, System.Func<bool> tryClose, WindowRole role = WindowRole.Main, bool justOpened = false)
         {
             if (panel == null || tryClose == null) return;
-            _entries.Add(new Entry { Panel = panel, TryClose = tryClose, Role = role });
+            // 등록할 때 닫혀 있던 창은 다음에 켜지는 순간을 "새로 열림"으로 본다(Seen) — 처음 열 때 만들어 등록하고 바로 켜는 창(우편함)이
+            // 같은 프레임에 켜져도 다른 창을 닫는다. 열린 채 등록되는 창은 justOpened일 때만 새로 연 것으로 본다(씬에 원래 켜져 있던 창 제외).
+            _entries.Add(new Entry { Panel = panel, TryClose = tryClose, Role = role, Seen = justOpened || !panel.activeInHierarchy, WasOpen = false });
         }
 
         /// <summary>panel을 다음에 열 때 한 번만 연계 창으로 본다(예: 캐릭터 정보창의 "관계" 버튼으로 연 관계 창).</summary>

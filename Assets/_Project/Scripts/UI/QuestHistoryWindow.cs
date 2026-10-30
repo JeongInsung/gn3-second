@@ -66,7 +66,7 @@ namespace GN3.UI
             if (_panel != null) Destroy(_panel);
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);
-            EscapeCloser.Register(_panel, Close);
+            EscapeCloser.Register(_panel, Close, justOpened: true); // 열 때마다 새로 만든다 — 열리면 다른 창을 닫게
             var rect = (RectTransform)_panel.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(Width, Height);
@@ -90,7 +90,7 @@ namespace GN3.UI
             topLayout.childForceExpandWidth = true;
             topLayout.childForceExpandHeight = false;
 
-            var title = ShopListUI.CreateText(top.transform, $"<b>의뢰 기록</b>  <size=14><color=#a3937c>끝낸 의뢰 최근 {QuestHistory.MaxEntries}건</color></size>", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
+            var title = ShopListUI.CreateText(top.transform, "<b>의뢰 기록</b>", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             title.supportRichText = true;
 
             var all = QuestHistory.Entries;
@@ -146,7 +146,7 @@ namespace GN3.UI
         private void Tab(Transform parent, string label, Filter filter)
         {
             var button = ShopListUI.CreateButton(parent, label, () => SetFilter(filter), 80f);
-            button.interactable = _filter != filter; // 고른 탭은 눌린 채
+            if (_filter == filter) UITheme.MarkSelected(button); // 고른 탭: 흰 테두리 + 금빛 글씨(다른 창과 같게)
         }
 
         /// <summary>한 건: 바탕 칸 안에 두 줄(날짜·태그·레벨·제목·승패·보상 / 대원·MVP·전사).</summary>

@@ -8,7 +8,7 @@ namespace GN3.UI
 {
     /// <summary>
     /// 마을 단축키: M 용병시장 · T 파티 구성 · Q 퀘스트 · L 우편함 · B 건설 · G 금고 장부 · H 의뢰 기록 · C 일정 · Y 업적 ·
-    /// U 길드 · K 건강 · R 관계 · N 근처 길드 · J 도감. 열려 있으면 닫고, 아니면 연다.
+    /// U 길드 · K 건강 · R 관계 · N 근처 길드 · J 도감 · F1 가이드북. 열려 있으면 닫고, 아니면 연다.
     /// 배속(F)·일시정지(P)·진행(Space)은 TimeAdvanceController가 받는다. 중요 알림창(GamePause)·진행 연출 중·글자 입력 중에는 무시한다.
     /// MainMenuBootstrapper가 메뉴 줄을 만들 때 붙인다.
     /// </summary>
@@ -54,6 +54,7 @@ namespace GN3.UI
             if (keyboard.rKey.wasPressedThisFrame && RelationsPanel.Instance != null) RelationsPanel.Instance.Toggle();
             if (keyboard.nKey.wasPressedThisFrame && RivalGuildsPanel.Instance != null) RivalGuildsPanel.Instance.Toggle();
             if (keyboard.jKey.wasPressedThisFrame && BestiaryPanel.Instance != null) BestiaryPanel.Instance.Toggle();
+            if (keyboard.f1Key.wasPressedThisFrame) GuidebookPanel.Toggle();
         }
 
         private static void Toggle(GameObject panel)

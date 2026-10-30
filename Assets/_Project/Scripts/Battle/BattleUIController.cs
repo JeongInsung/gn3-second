@@ -38,6 +38,8 @@ namespace GN3.Battle
             public bool PoisonShown;        // 독을 건 공격이 화면에서 닿았는가(그 전엔 중독 표시를 미룬다)
             public Color[] BaseColors;
             public GameObject Bars;         // 머리 위 체력·공격 대기 막대(쓰러지면 숨김). 보스는 화면 위 큰 막대(BossHud 안)
+            public Text Name;               // 머리 위 이름(보스는 없음). 다른 이름과 겹치면 흐려진다(DeclutterNames)
+            public bool NameHidden;
             public CanvasGroup BossHud;     // 보스만: 화면 위쪽 가운데 칭호·이름·큰 체력 막대
             public GameObject StunStars;    // 아군만: 기절 중 머리 위에서 도는 별(+ 남은 기절 시간 막대)
             public bool WasStunned;         // 지난 프레임에 기절이었는가(걸리는 순간을 알아챈다)
@@ -304,6 +306,8 @@ namespace GN3.Battle
             _session.OnWaveStarted += OnWaveStarted;
             _session.OnSlamTelegraph += cast => StartCoroutine(SlamTelegraph(cast));
             _session.OnRoarTelegraph += cast => StartCoroutine(RoarTelegraph(cast));
+            _session.SummonFactory = ExpeditionBattle.SummonFactory(quest, rng); // 앤트킹 격노 때 부르는 그루터기 엔트(자동 전투와 같다)
+            _session.OnBossEnrage += OnBossEnrage;
             _session.OnSkillUsed += (unit, skill, target) =>
             {
                 if (_views.TryGetValue(unit, out var v))
@@ -338,7 +342,7 @@ namespace GN3.Battle
 
             _deploying = true;
             BuildDeployZone();
-            AppendLog("배치 — 대원을 끌어 자리를 정한 뒤 '전투 시작'(Space)");
+            AppendLog("배치 — 준비되면 '전투 시작'(Space)");
             if (quest.WaveCount > 1)
                 AppendLog($"라운드 {quest.WaveCount}개: {QuestDifficulty.WavesText(quest)} · 체력은 라운드 사이에 이어집니다");
             foreach (var v in _views.Values) UpdateUnitView(v);
@@ -352,8 +356,8 @@ namespace GN3.Battle
         {
             var quest = _expedition.Quest;
             var next = quest.Waves[wave + 1];
-            AppendLog($"<color=#ffd36b>{wave + 1}라운드 돌파! 다음: {(next.IsBoss ? "보스 " : "")}{next.EnemyName} ×{next.Count}</color>");
-            StartCoroutine(Banner($"{wave + 1}라운드 돌파!", $"정리 시간 {WaveLootSeconds:0}초 — 다음 {(next.IsBoss ? "보스 " : "")}{next.EnemyName} ×{next.Count}",
+            AppendLog($"<color=#ffd36b>{wave + 1}라운드 돌파! 다음: {(next.IsBoss ? "보스 " : "")}{next.Label}</color>");
+            StartCoroutine(Banner($"{wave + 1}라운드 돌파!", $"정리 시간 {WaveLootSeconds:0}초 — 다음 {(next.IsBoss ? "보스 " : "")}{next.Label}",
                 new Color(1f, 0.85f, 0.4f)));
             BeginWaveLootBreak(wave);
         }
@@ -463,12 +467,43 @@ namespace GN3.Battle
             bool last = wave == _session.WaveCount - 1;
             string bossTitle = w.IsBoss ? GN3.World.RegionInfo.BossTitle(w.EnemyName) : null; // "은월의 숲의 주인"
             string bossName = bossTitle != null ? $"{bossTitle}, {w.EnemyName}" : w.EnemyName;
-            AppendLog($"<color=#ffd36b>{wave + 1}라운드 시작 — {(w.IsBoss ? $"보스 {bossName}" : w.EnemyName)} ×{w.Count}</color>");
+            AppendLog($"<color=#ffd36b>{wave + 1}라운드 시작 — {(w.IsBoss ? $"보스 {bossName} ×{w.Count}" : w.Label)}</color>");
             if (w.IsBoss && StartBossCutIn()) return; // 그림이 있는 보스는 컷인이 배너를 대신하고, 끝나면 포효
             StartCoroutine(Banner(w.IsBoss ? "보스 등장!" : last ? $"마지막 {wave + 1}라운드" : $"{wave + 1}라운드",
-                w.IsBoss ? $"{wave + 1}라운드 — {bossName}" : $"{w.EnemyName} ×{w.Count}",
+                w.IsBoss ? $"{wave + 1}라운드 — {bossName}" : w.Label,
                 w.IsBoss ? new Color(1f, 0.45f, 0.4f) : Color.white));
             if (w.IsBoss) PlayBossIntros();
+        }
+
+        /// <summary>앤트킹 격노: 불러낸 졸개를 그리고, 컷인 그림이 있으면 "격노" 컷인(없으면 붉은 배너)과 묵직한 흔들림.</summary>
+        private void OnBossEnrage(FieldUnit boss, List<FieldUnit> added)
+        {
+            foreach (var u in added)
+            {
+                var v = CreateUnitView(u, null, 1);
+                _views[u] = v;
+                _drawOrder.Add(v);
+                UpdateUnitView(v);
+            }
+            SortByDepth();
+            string name = boss.Combatant.Name;
+            AppendLog($"<color=#ff7a6b>{name} 격노! 포효가 잦아지고 뿌리가 더 넓게 솟는다" +
+                      (added.Count > 0 ? $" — {ExpeditionBattle.EnrageSummonName} {added.Count}마리를 불러냈다" : "") + "</color>");
+            var portrait = _views.TryGetValue(boss, out var bv) && bv.Monster != null ? BattleMonsterSprite.PortraitFor(bv.Monster.Kind) : null;
+            if (portrait != null) StartCoroutine(PlayEnrageCutIn(portrait, name));
+            else
+            {
+                StartCoroutine(Banner("격노!", $"{name} — 졸개를 불러냈다", new Color(1f, 0.35f, 0.3f)));
+                if (_shakeTargets != null) StartCoroutine(BattleFx.Shake(_shakeTargets, ShakeStrength, ShakeSeconds, rumble: true));
+            }
+        }
+
+        private IEnumerator PlayEnrageCutIn(Sprite portrait, string name)
+        {
+            _cutIn = true;
+            yield return BossCutIn.Play(_canvas.transform, portrait, "격노", name,
+                () => { if (_shakeTargets != null) StartCoroutine(BattleFx.Shake(_shakeTargets, ShakeStrength, ShakeSeconds, rumble: true)); });
+            _cutIn = false;
         }
 
         /// <summary>
@@ -582,11 +617,12 @@ namespace GN3.Battle
             if (_deployZone != null) StartCoroutine(BattleFx.FadeOutAndDestroy(_deployZone, 0.4f));
             _deployZone = null;
             _resetButton.gameObject.SetActive(false);
+            _autoButton.gameObject.SetActive(true); // [기본 배치] 자리에 분대장 자동
 
             var leader = _session.Leader;
             StartCoroutine(AfterCutIn(Banner("전투 시작!", leader != null ? $"분대장 {leader.Combatant.Name} 지휘" : "", new Color(1f, 0.85f, 0.4f))));
             AppendLog(leader != null
-                ? $"전투 시작! 분대장 {leader.Combatant.Name} 지휘 — 땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬"
+                ? $"전투 시작! 분대장 {leader.Combatant.Name} 지휘"
                 : "전투 시작!");
             RefreshPanel();
         }
@@ -597,6 +633,36 @@ namespace GN3.Battle
             bool canDrag = _deploying || (_session.HasStarted && !_session.IsOver && !_resultShown);
             foreach (var v in _views.Values)
                 v.Animator?.SetOutline(canDrag && v.Unit.IsAlive && (v.Unit == _hoverUnit || v.Unit == _dragUnit));
+        }
+
+        // 머리 위 이름이 겹치면(모여 싸울 때) 앞선 하나만 남기고 나머지는 흐리게 — 체력 막대는 그대로.
+        // 우선: 마우스를 올린·끄는 유닛 > 분대장 > 아군 > 적, 같으면 화면 앞(필드 y가 작은 쪽).
+        private const float NameOverlapX = 120f, NameOverlapY = 34f; // 필드 좌표(이름 칸 폭 약 120·높이 약 24)
+        private const float NameHiddenAlpha = 0.12f;
+
+        private void DeclutterNames()
+        {
+            var shown = new List<UnitView>();
+            foreach (var v in _views.Values.Where(v => v.Name != null && v.Unit.IsAlive).OrderByDescending(NamePriority))
+            {
+                Vector2 p = v.Root.anchoredPosition;
+                bool hide = shown.Any(o =>
+                {
+                    Vector2 q = o.Root.anchoredPosition;
+                    return Mathf.Abs(p.x - q.x) < NameOverlapX && Mathf.Abs(p.y - q.y) < NameOverlapY;
+                });
+                if (!hide) shown.Add(v);
+                if (hide == v.NameHidden) continue;
+                v.NameHidden = hide;
+                v.Name.CrossFadeAlpha(hide ? NameHiddenAlpha : 1f, 0.15f, true);
+            }
+        }
+
+        private float NamePriority(UnitView v)
+        {
+            var u = v.Unit;
+            float p = u == _hoverUnit || u == _dragUnit ? 4f : u.IsLeader ? 3f : u.IsPlayerSide ? 2f : 1f;
+            return p * 10000f - v.Root.anchoredPosition.y; // 같은 등급이면 앞(아래)쪽
         }
 
         private void ResetFormation()
@@ -612,7 +678,7 @@ namespace GN3.Battle
             _leaderLabel.text = leader != null ? $"배치 — ★ 분대장 {leader.Combatant.Name}" : "배치";
             _skillButton.interactable = true;
             _skillButtonText.text = "전투 시작 (Space)";
-            _hintLabel.text = "대원을 끌어 밝은 구역 안에 놓으세요 · 대원 위에 놓으면 자리 바꿈\n근접은 앞, 원거리·힐러는 뒤가 안전합니다";
+            _hintLabel.text = "대원을 끌어 밝은 구역 안에 놓으세요"; // 자리 바꿈·배치 요령은 가이드북(F1)
         }
 
         private bool TryFieldPoint(PointerEventData e, out Vector2 local) =>
@@ -821,6 +887,7 @@ namespace GN3.Battle
             UpdateWaveLootBreak();
             if (_resultShown)
             {
+                RefreshBattleButtons(); // 결과 창이 뜨면 [자동]·[전투 포기]를 숨긴다
                 foreach (var v in _views.Values) UpdateUnitView(v); // 마지막에 쓰러진 유닛도 끝까지 넘어가게(그림만)
                 // 결과 화면: Enter·Space로 [마을로 돌아가기]
                 var key = Keyboard.current;
@@ -834,6 +901,7 @@ namespace GN3.Battle
             if (bagKey != null && bagKey.bKey.wasPressedThisFrame && !_cutIn) ToggleBagWindow();
             if (_salvaging)
             {
+                RefreshBattleButtons(); // 전리품 수습 중에도 숨긴다(전투는 끝났다)
                 UpdateSalvage();
                 return;
             }
@@ -843,6 +911,7 @@ namespace GN3.Battle
                 var kb = Keyboard.current;
                 if (kb != null && (kb.spaceKey.wasPressedThisFrame || kb.enterKey.wasPressedThisFrame)) BeginBattle();
                 foreach (var v in _views.Values) UpdateUnitView(v);
+                DeclutterNames();
                 UpdateDeployOutlines();
                 SortByDepth();
                 if (_deploying) RefreshDeployPanel();
@@ -862,6 +931,7 @@ namespace GN3.Battle
             if (events.Count > 0) ApplyEventsVisual(events);
 
             foreach (var v in _views.Values) UpdateUnitView(v);
+            DeclutterNames();
             SortByDepth();
             if (_dragUnit != null) UpdateOrderDrag(_orderDragPoint);
             UpdateDeployOutlines();
@@ -886,6 +956,7 @@ namespace GN3.Battle
             var kb = Keyboard.current;
             if (kb == null) return;
             if (kb.qKey.wasPressedThisFrame) PressSkill();
+            if (kb.aKey.wasPressedThisFrame) ToggleLeaderAuto();
             if (kb.escapeKey.wasPressedThisFrame && _escConsumedFrame != Time.frameCount) { _picking = false; _focusPicking = false; }
             // 분대 명령 1~4: 멈추지 않아도 바로(일시정지 화면 버튼과 같은 명령·쿨타임)
             if (!_resultShown && !_salvaging)
@@ -1017,8 +1088,49 @@ namespace GN3.Battle
 
         // ---------- 화면 갱신 ----------
 
+        private Button _autoButton, _forfeitButton;
+        private Text _autoButtonText, _forfeitText;
+        private bool _forfeitArmed;
+
+        private void ToggleLeaderAuto()
+        {
+            if (!_session.HasStarted || _session.IsOver) return;
+            _session.LeaderAuto = !_session.LeaderAuto;
+            _picking = _focusPicking = false;
+            AppendLog(_session.LeaderAuto ? "<color=#9fd0ff>분대장 자동 — 알아서 싸운다</color>" : "<color=#9fd0ff>분대장 직접 조종</color>");
+        }
+
+        /// <summary>[전투 포기]: 처음 누르면 확인 글자, 한 번 더 누르면 지금 상태로 실패 처리(살아 있는 대원은 물러나고 뒤진 전리품은 챙긴다).</summary>
+        private void PressForfeit()
+        {
+            if (!_session.HasStarted || _session.IsOver) return;
+            if (!_forfeitArmed)
+            {
+                _forfeitArmed = true;
+                return;
+            }
+            _forfeitArmed = false;
+            AppendLog("<color=#e07a6a>전투를 포기하고 물러난다</color>");
+            SetPaused(false); // 멈춘 채로는 결과창 대기 시간이 흐르지 않는다
+            _session.Forfeit();
+        }
+
+        /// <summary>자동·포기 버튼 글자와 보임(매 프레임).</summary>
+        private void RefreshBattleButtons()
+        {
+            if (_autoButton == null) return;
+            bool running = _session.HasStarted && !_session.IsOver && !_resultShown;
+            _autoButton.gameObject.SetActive(running);
+            _autoButtonText.text = _session.LeaderAuto ? "자동: 켬 (A)" : "자동: 끔 (A)";
+            bool showForfeit = running && _paused;
+            if (!showForfeit) _forfeitArmed = false;
+            _forfeitButton.gameObject.SetActive(showForfeit);
+            _forfeitText.text = _forfeitArmed ? "정말 포기?" : "전투 포기";
+        }
+
         private void RefreshPanel()
         {
+            RefreshBattleButtons();
             var leader = _session.Leader;
             int secs = Mathf.FloorToInt(_session.Elapsed);
             _timerLabel.text = _session.WaveCount > 1
@@ -1072,8 +1184,7 @@ namespace GN3.Battle
                 ? (skill != null && skill.TargetType == SkillTargetType.Ally
                     ? "치료할 아군을 클릭 (Q: 자신 · Esc: 취소)"
                     : "스킬을 쓸 적을 클릭 (Esc: 취소)")
-                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지" + (_session.HasTwoSquads ? " · Tab: 분대 전환" : "")
-                    + "\n대원을 끌어 땅에 놓으면 그 자리로 · 적 위에 놓으면 그 적 공격";
+                : "F1: 가이드북"; // 기본 조작 설명은 가이드북에 — 화면에는 지금 고르는 중일 때 필요한 안내만
         }
 
         private void UpdateUnitView(UnitView v)
@@ -1233,14 +1344,14 @@ namespace GN3.Battle
                     AppendLog($"<color=#ffd36b>{evt.Attacker.Name} — {evt.Proc.TrimEnd('!')}</color>");
                     if (evt.Damage == 0) continue;
                 }
-                AppendLog(FormatEvent(evt));
+                AppendEventLog(evt);
                 if (evt.IsPoison) // 독 한 번: 공격 동작·투사체 없이 맞은 쪽에 초록 숫자와 독 거품만
                 {
                     var poisoned = _session.UnitOf(evt.Target);
                     if (poisoned != null && _views.TryGetValue(poisoned, out var poisonedView) && poisonedView.Root != null)
                     {
                         Vector2 feet = poisonedView.Root.anchoredPosition;
-                        StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(UnityEngine.Random.Range(-12f, 12f), 130f),
+                        StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(0f, 130f) + FloatOffset(poisoned),
                             $"-{evt.Damage}", PoisonColor, false));
                         StartCoroutine(BattleFx.PoisonPuff(_fxLayer, feet + new Vector2(0f, 70f)));
                     }
@@ -1448,7 +1559,7 @@ namespace GN3.Battle
             int maxHealth = Math.Max(1, target.Unit.Combatant.Stats.MaxHealth);
             bool big = hit && damage >= maxHealth * BigHitRatio;
             Vector2 feet = target.Root.anchoredPosition;
-            StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(UnityEngine.Random.Range(-12f, 12f), 150f),
+            StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(0f, 150f) + FloatOffset(target.Unit),
                 big ? label + "!" : label, big ? BigHitColor : color, big));
             if (!hit) return;
 
@@ -1744,6 +1855,13 @@ namespace GN3.Battle
         {
             var kb = Keyboard.current;
             if (kb == null || _resultShown) return;
+            if (kb.f1Key.wasPressedThisFrame) GN3.UI.GuidebookPanel.Toggle(GN3.UI.GuidebookPanel.Chapter.Battle); // 조작 설명은 가이드북에
+            if (GN3.UI.GuidebookPanel.IsOpen && kb.escapeKey.wasPressedThisFrame) // 가이드북이 떠 있으면 ESC는 그것부터 닫는다
+            {
+                GN3.UI.GuidebookPanel.Close();
+                _escConsumedFrame = Time.frameCount;
+                return;
+            }
             if (_openDetail != null && kb.escapeKey.wasPressedThisFrame) // 대원 상세 카드가 먼저 닫힌다
             {
                 CloseDetail();
@@ -2791,7 +2909,7 @@ namespace GN3.Battle
             var feet = v.Root.anchoredPosition;
             if (!v.PoisonTinted)
             {
-                StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(0f, 175f), "중독!", PoisonColor, true));
+                StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(0f, 175f) + FloatOffset(v.Unit), "중독!", PoisonColor, true));
                 StartCoroutine(BattleFx.PoisonPuff(_fxLayer, feet + new Vector2(0f, 70f)));
                 v.PoisonBubbleTimer = 0f;
             }
@@ -2824,7 +2942,7 @@ namespace GN3.Battle
             if (stunned && !v.WasStunned)
             {
                 var feet = v.Root.anchoredPosition;
-                StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(0f, 200f), "기절!", StunColor, true));
+                StartCoroutine(BattleFx.DamageNumber(_fxLayer, feet + new Vector2(0f, 200f) + FloatOffset(v.Unit), "기절!", StunColor, true));
                 StartCoroutine(BattleFx.Shockwave(_fxLayer, feet + new Vector2(0f, 8f), 70f, StunColor));
                 StartCoroutine(HitFlash(v, StunColor));
             }
@@ -2863,6 +2981,23 @@ namespace GN3.Battle
                 if (v.Tintables[i] != null) v.Tintables[i].color = v.BaseColors[i];
         }
 
+        // 머리 위 글자 쌓기: 한 유닛에 짧은 사이 여러 글자(피해·스킬 이름·막기·회피·중독·기절)가 뜨면 한 칸씩 위로, 좌우로 엇갈려 겹치지 않게.
+        private const float FloatStackWindow = 0.6f; // 이 안에 다시 뜨면 다음 칸
+        private const int FloatStackSlots = 4;
+        private const float FloatStackStep = 34f, FloatStackSway = 20f; // 판 좌표(굵은 22 글자 높이 약 30보다 조금 크게)
+        private readonly Dictionary<FieldUnit, (float time, int slot)> _floatStack = new Dictionary<FieldUnit, (float, int)>();
+
+        private Vector2 FloatOffset(FieldUnit unit)
+        {
+            if (unit == null) return Vector2.zero;
+            int slot = 0;
+            if (_floatStack.TryGetValue(unit, out var last) && Time.time - last.time < FloatStackWindow)
+                slot = (last.slot + 1) % FloatStackSlots;
+            _floatStack[unit] = (Time.time, slot);
+            float sway = slot == 0 ? 0f : (slot % 2 == 1 ? -FloatStackSway : FloatStackSway);
+            return new Vector2(sway, slot * FloatStackStep);
+        }
+
         private IEnumerator FloatText(UnitView v, string text, Color color, float height)
         {
             var go = new GameObject("Float", typeof(RectTransform), typeof(Text), typeof(CanvasGroup));
@@ -2870,7 +3005,7 @@ namespace GN3.Battle
             var rect = (RectTransform)go.transform;
             rect.anchorMin = rect.anchorMax = Vector2.zero;
             rect.sizeDelta = new Vector2(200f, 30f);
-            Vector2 origin = v.Root.anchoredPosition + new Vector2(UnityEngine.Random.Range(-12f, 12f), height);
+            Vector2 origin = v.Root.anchoredPosition + new Vector2(0f, height) + FloatOffset(v.Unit);
 
             var label = go.GetComponent<Text>();
             label.font = _font;
@@ -2909,6 +3044,49 @@ namespace GN3.Battle
                 _logLines.RemoveFirst();
             _logText.text = string.Join("\n", _logLines);
         }
+
+        /// <summary>같은 공격자 → 대상의 평범한 타격(회피 포함)을 한 줄로 합친다: "지우 → 앤트킹 : 14 (7회 · 회피 2)".
+        /// 합친 줄은 맨 아래로 옮겨 새로 갱신된 것을 보여 준다. 처치·독·회복·패시브 발동은 따로 한 줄.</summary>
+        private void AppendEventLog(BattleEvent evt)
+        {
+            if (evt.IsPoison || evt.Damage < 0 || evt.TargetDefeated)
+            {
+                AppendLog(FormatEvent(evt));
+                return;
+            }
+            string key = evt.Attacker.Name + "\u2192" + evt.Target.Name;
+            if (!_logMerges.TryGetValue(key, out var merge) || merge.Node == null || merge.Node.List == null)
+            {
+                merge = new LogMerge { Attacker = evt.Attacker.Name, Target = evt.Target.Name };
+                _logMerges[key] = merge;
+            }
+            else _logLines.Remove(merge.Node);
+            merge.Hits++;
+            merge.Total += evt.Evaded ? 0 : evt.Damage;
+            if (evt.Evaded) merge.Evades++;
+            string line = merge.Hits == 1 ? FormatEvent(evt) : merge.Format();
+            if (merge.Node == null || merge.Node.List != null) merge.Node = new LinkedListNode<string>(line);
+            else merge.Node.Value = line;
+            _logLines.AddLast(merge.Node);
+            while (_logLines.Count > MaxLogLines)
+                _logLines.RemoveFirst();
+            _logText.text = string.Join("\n", _logLines);
+        }
+
+        private class LogMerge
+        {
+            public string Attacker, Target;
+            public int Hits, Total, Evades;
+            public LinkedListNode<string> Node;
+
+            public string Format()
+            {
+                string evades = Evades > 0 ? $" · 회피 {Evades}" : "";
+                return $"{Attacker} → {Target} : {Total} <color=#a3937c>({Hits}회{evades})</color>";
+            }
+        }
+
+        private readonly Dictionary<string, LogMerge> _logMerges = new Dictionary<string, LogMerge>();
 
         // ---------- 화면 생성 ----------
 
@@ -3000,6 +3178,9 @@ namespace GN3.Battle
             }
 
             BuildPauseOverlay();
+            // 위쪽 글자·버튼(타이머·배속·가방·통계)은 필드보다 먼저 만들어 판의 안개·비 층에 덮여 흐렸다 → 필드 위로
+            foreach (var hud in new Component[] { _timerLabel, _speedButton, _bagButton, _meterButton })
+                if (hud != null) hud.transform.SetAsLastSibling();
             BuildActionPanel(root);
         }
 
@@ -3209,6 +3390,7 @@ namespace GN3.Battle
             // 머리 위: 이름 · 체력 · 공격 대기. 보스는 머리 위 대신 화면 위쪽 가운데 큰 막대(칭호·이름 · 체력 · 공격 대기).
             bool boss = !unit.IsPlayerSide && tier >= 2;
             CanvasGroup bossHud = boss ? CreateBossHud(unit.Combatant.Name) : null;
+            Text nameText = null;
             if (!boss)
             {
                 string label = unit.IsLeader ? $"★{unit.Combatant.Name}" : unit.Combatant.Name;
@@ -3219,6 +3401,7 @@ namespace GN3.Battle
                 name.raycastTarget = false;
                 name.gameObject.AddComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
                 PlaceAbove(name.rectTransform, 154f + headLift, 200f, 24f);
+                nameText = name;
             }
 
             // 막대 판(우리 UI와 같은 청동 베벨, 분대장은 금빛): 위 칸 = 체력(깎인 자국 → 체력, 위 광택·아래 그림자),
@@ -3326,6 +3509,7 @@ namespace GN3.Battle
                 Tintables = tintables,
                 BaseColors = tintables.Select(i => i.color).ToArray(),
                 Bars = bars,
+                Name = nameText,
                 BossHud = bossHud,
                 StunStars = unit.IsPlayerSide ? BattleFx.CreateStunStars(root, 176f + headLift) : null, // 이름 바로 위
                 HpFill = (RectTransform)hpFill.transform,
@@ -3462,11 +3646,24 @@ namespace GN3.Battle
             resetLabel.text = "기본 배치";
             _resetButton.onClick.AddListener(ResetFormation);
 
+            // 전투 중(배치가 끝나면 [기본 배치] 자리): 분대장 자동 토글(A)
+            _autoButton = CreateActionButton(panel.transform, new Vector2(340f, -60f), out _autoButtonText);
+            ((RectTransform)_autoButton.transform).sizeDelta = new Vector2(130f, 56f);
+            _autoButton.onClick.AddListener(ToggleLeaderAuto);
+            _autoButton.gameObject.AddComponent<TooltipTrigger>().Text = "분대장도 대원처럼 알아서 싸우고 스킬을 쓴다 (A) — 땅·적을 클릭해 직접 명령하면 꺼진다";
+            _autoButton.gameObject.SetActive(false);
+
+            // 일시정지 중에만: 전투 포기(두 번 눌러 확인)
+            _forfeitButton = CreateActionButton(panel.transform, new Vector2(340f, -128f), out _forfeitText);
+            ((RectTransform)_forfeitButton.transform).sizeDelta = new Vector2(130f, 44f);
+            _forfeitButton.onClick.AddListener(PressForfeit);
+            _forfeitButton.gameObject.SetActive(false);
+
             _hintLabel = CreateText(panel.transform, "", 15, TextAnchor.UpperLeft, UITheme.MutedText);
             var hintRect = _hintLabel.rectTransform;
             hintRect.anchorMin = hintRect.anchorMax = hintRect.pivot = new Vector2(0f, 1f);
             hintRect.anchoredPosition = new Vector2(28f, -128f);
-            hintRect.sizeDelta = new Vector2(420f, 80f);
+            hintRect.sizeDelta = new Vector2(300f, 80f);
 
             // 가운데: 대원 카드 줄(상태 + 장비칸) — 왼쪽 조종 영역과 오른쪽 기록 사이
             BuildPartyStrip(panel.transform);
@@ -3620,7 +3817,6 @@ namespace GN3.Battle
         private const float PartyEquipSlot = 30f;
         private const int CompactPortrait = 80;
         private const float CompactCardWidth = 96f, CompactCardHeight = 128f; // 칸 하나 = 간단 카드 하나
-        private const int PartySlotCount = 6; // 빈 칸 틀 수 = 원정 최대 인원(Lv5 앤트킹 두 분대 6명)
         private static readonly Color PartySlotColor = new Color(0.25f, 0.25f, 0.3f, 0.45f);
         private const float DetailCardWidth = 184f, DetailCardHeight = 256f, DetailPadding = 6f; // 능력치·활약 두 줄 포함
         private class PartyCard
@@ -3671,8 +3867,8 @@ namespace GN3.Battle
                 var unit = _session.Units.FirstOrDefault(u => u.Combatant == team[i]);
                 if (unit != null) members.Add((_fighters[i], unit));
             }
-            // 원정 최대 인원만큼 빈 칸 틀을 늘 깔고, 왼쪽 칸부터 대원 카드를 채운다(혼자면 첫 칸만)
-            int slots = Math.Max(PartySlotCount, members.Count);
+            // 대원 수만큼만 칸을 깐다(예전엔 최대 인원 6칸을 늘 깔아 빈 칸이 남았다)
+            int slots = members.Count;
             for (int s = 0; s < slots; s++)
             {
                 var slot = CreateImage(strip.transform, "PartySlot", PartySlotColor);
@@ -3683,7 +3879,6 @@ namespace GN3.Battle
                 var slotLayout = slot.AddComponent<LayoutElement>();
                 slotLayout.minWidth = slotLayout.preferredWidth = CompactCardWidth;
                 slotLayout.minHeight = slotLayout.preferredHeight = CompactCardHeight;
-                if (s >= members.Count) continue;
                 var (merc, unit) = members[s];
                 var card = CreatePartyCard(CreateDetailWindow(panel, merc), merc, unit);
                 CreateCompactCard(slot.transform, card);
@@ -4344,8 +4539,11 @@ namespace GN3.Battle
                 : $"체력 {m.HealthAfter} / {m.MaxHealth}";
 
             // 오른쪽: 성장(길면 두 줄로 — 줄 높이 안) 또는 전사. MVP는 왼쪽 배지로 보인다.
-            string result = m.Fallen ? "전사" : m.Gains.Count > 0 ? "▲ " + string.Join(", ", m.Gains) : "";
-            var resultText = CreateText(row.transform, result, 15, TextAnchor.MiddleRight, m.Fallen ? DefeatColor : GainColor);
+            // 이번에 오른 게 없으면 다음 성장까지 얼마나 찼는지(예전엔 빈 칸이라 성장이 멈춘 줄 알았다)
+            bool growthOnly = !m.Fallen && m.Gains.Count == 0 && m.Merc != null;
+            string result = m.Fallen ? "전사" : m.Gains.Count > 0 ? "▲ " + string.Join(", ", m.Gains)
+                : growthOnly ? $"다음 성장 {Mathf.FloorToInt(Mathf.Clamp01(m.Merc.GrowthProgress) * 100f)}%" : "";
+            var resultText = CreateText(row.transform, result, 15, TextAnchor.MiddleRight, m.Fallen ? DefeatColor : growthOnly ? UITheme.MutedText : GainColor);
             resultText.fontStyle = FontStyle.Bold;
             resultText.horizontalOverflow = HorizontalWrapMode.Wrap;
             resultText.verticalOverflow = VerticalWrapMode.Overflow;

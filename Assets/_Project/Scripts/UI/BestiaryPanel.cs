@@ -31,7 +31,7 @@ namespace GN3.UI
         private const float LootContentTop = 6f;                // 스크롤 칸 안 첫 줄 위 여백(등급 테두리가 잘리지 않게)
         private static readonly Color LootSlotColor = new Color(0.058f, 0.058f, 0.072f, 1f); // 아이템 판 칸(불투명: 뒤 등급 색이 테두리로만 보이게)
         private static readonly Color Silhouette = new Color(0f, 0f, 0f, 0.85f);
-        private static readonly Color RowColor = new Color(1f, 1f, 1f, 0.05f);
+        private static readonly Color RowColor = UITheme.RowFill;
         private static readonly Color SlotColor = new Color(0f, 0f, 0f, 0.28f);   // 그림·아이콘 바닥 칸
         private static readonly Color RuleColor = new Color(1f, 1f, 1f, 0.12f);   // 구분선
         private static readonly Color Gold = new Color(0.94f, 0.75f, 0.38f, 1f);  // 발견 막대 채움

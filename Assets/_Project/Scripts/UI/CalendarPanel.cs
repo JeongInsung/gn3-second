@@ -111,7 +111,7 @@ namespace GN3.UI
             if (_panel != null) Destroy(_panel);
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);
-            EscapeCloser.Register(_panel, Close);
+            EscapeCloser.Register(_panel, Close, justOpened: true); // 열 때마다 새로 만든다 — 열리면 다른 창을 닫게
             var rect = (RectTransform)_panel.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(Width, Height);
@@ -121,7 +121,7 @@ namespace GN3.UI
             background.type = Image.Type.Sliced;
 
             var title = ShopListUI.CreateText(_panel.transform,
-                $"<b>마을 일정</b>  <size=14><color=#a3937c>오늘 {GameCalendar.Format(GameClock.CurrentDay)}부터 {Days}일</color></size>",
+                "<b>마을 일정</b>",
                 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             title.supportRichText = true;
             var titleRect = title.rectTransform;

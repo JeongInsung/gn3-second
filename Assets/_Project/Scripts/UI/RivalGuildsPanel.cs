@@ -25,9 +25,8 @@ namespace GN3.UI
         private const float BarWidth = 260f;
         private const string Muted = UITheme.MutedHex;
         private const string TabOn = UITheme.SelectedTextHex;
-        private static readonly Color TabOnTint = Color.white;
-        private static readonly Color TabOffTint = new Color(0.62f, 0.6f, 0.58f, 1f);
-        private static readonly Color RowColor = new Color(1f, 1f, 1f, 0.05f);
+        private readonly List<GameObject> _tabFrames = new List<GameObject>(); // 거래 탭마다 고른 표시 테두리(_actions와 같은 순서)
+        private static readonly Color RowColor = UITheme.RowFill;
         private static readonly Color OurRow = new Color(0.4f, 0.6f, 0.9f, 0.16f); // 우리 길드 줄(맨 위 고정) — 선택 표시는 흰 테두리
         private const float OurGap = 6f;     // 우리 길드 줄과 근처 길드 목록 사이
         private const float FrameWidth = 2f; // 고른 길드 줄의 흰 테두리 두께
@@ -276,7 +275,7 @@ namespace GN3.UI
             var (button, text) = _actions[i];
             bool on = _mode == mode || (mode == ListMode.Roster && _mode == ListMode.Trade);
             text.text = on ? $"<color={TabOn}><b>{label}</b></color>" : label;
-            button.GetComponent<Image>().color = on ? TabOnTint : TabOffTint;
+            _tabFrames[i].SetActive(on); // 고른 탭: 흰 테두리 + 금빛 글씨(다른 창과 같게 — 버튼 색은 그대로)
             button.interactable = interactable;
             button.onClick.RemoveAllListeners();
             button.onClick.AddListener(() => SetMode(mode));
@@ -515,6 +514,9 @@ namespace GN3.UI
             {
                 var button = CreateButton("Tab" + i, DetailX + i * (TabWidth + TabGap), -TabTop, TabWidth, null, out var label, "");
                 _actions.Add((button, label));
+                var frame = UITheme.CreateSelectFrame(button.transform);
+                frame.SetActive(false);
+                _tabFrames.Add(frame);
             }
 
             // 목록 위 한 줄(맞교환 대상·빌려준 용병) + 목록(스크롤)

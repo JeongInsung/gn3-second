@@ -87,6 +87,13 @@ namespace GN3.World
             return pool[rng.Next(pool.Length)];
         }
 
+        /// <summary>혼합 라운드의 보조 적: 같은 지역·계층에서 주력(mainName)이 아닌 이름 하나. 고를 게 없으면 null.</summary>
+        public static string GetSupportName(Region region, int tier, string mainName, Random rng)
+        {
+            var pool = Array.FindAll(MonsterPool(region, tier), n => n != mainName);
+            return pool.Length == 0 ? null : pool[rng.Next(pool.Length)];
+        }
+
         /// <summary>몬스터 이름과, 그 지역·계층에 장소명이 준비돼 있으면 같은 인덱스의 장소명을 함께 뽑는다.
         /// 장소명이 아직 없는 지역(북/남/동, 2026-09-16 기준 서쪽만 초안)은 locationName이 null로 나온다.</summary>
         public static void GetEncounter(Region region, int tier, Random rng, out string monsterName, out string locationName)

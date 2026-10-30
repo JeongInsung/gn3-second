@@ -70,7 +70,7 @@ namespace GN3.UI
             if (_panel != null) Destroy(_panel);
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);
-            EscapeCloser.Register(_panel, Close);
+            EscapeCloser.Register(_panel, Close, justOpened: true); // 열 때마다 새로 만든다 — 열리면 다른 창을 닫게
             var rect = (RectTransform)_panel.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(Width, Height);
@@ -94,7 +94,7 @@ namespace GN3.UI
             topLayout.childForceExpandWidth = true;
             topLayout.childForceExpandHeight = false;
 
-            var title = ShopListUI.CreateText(top.transform, "<b>금고 장부</b>  <size=14><color=#a3937c>최근 14일 골드 들고 난 기록</color></size>", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
+            var title = ShopListUI.CreateText(top.transform, "<b>금고 장부</b>", 22, TextAnchor.MiddleLeft, UITheme.TitleText);
             title.supportRichText = true;
 
             var nav = Row(top.transform, 36f);
@@ -179,6 +179,8 @@ namespace GN3.UI
             bar.transform.SetParent(row.transform, false);
             var image = bar.GetComponent<Image>();
             image.color = income ? IncomeColor : ExpenseColor;
+            image.type = Image.Type.Filled; // 채움 막대: UIThemeApplier가 어두운 칸으로 덮지 않는다(그림이 없으면 그냥 색 칸)
+            image.fillAmount = 1f;
             image.raycastTarget = false;
             var barLayout = bar.GetComponent<LayoutElement>();
             barLayout.minWidth = barLayout.preferredWidth = Mathf.Max(3f, BarMaxWidth * amount / max);

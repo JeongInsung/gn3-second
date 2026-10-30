@@ -46,6 +46,8 @@ namespace GN3.Combat
         public float AttackHitDelay { get; set; }
         /// <summary>뿌리박은 엔트만: 다음 기절 포효까지 남은 시간.</summary>
         internal float RoarTimer { get; set; }
+        /// <summary>앤트킹 2페이즈(체력 절반 아래): 포효가 잦아지고 내려찍기 범위가 늘어난다. 한 번 켜지면 그대로.</summary>
+        public bool Enraged { get; internal set; }
 
         /// <summary>기본공격 대상(살아 있는 동안 계속 붙는다).</summary>
         public FieldUnit Target { get; internal set; }
@@ -152,8 +154,16 @@ namespace GN3.Combat
         private bool PlayersAlive => PlayerTeam.Any(c => c.IsAlive);
         private bool LastWave => CurrentWave >= WaveCount - 1;
 
-        public bool IsOver => !PlayersAlive || (LastWave && !EnemyTeam.Any(c => c.IsAlive)) || Elapsed >= MaxBattleSeconds * WaveCount;
-        public BattleOutcome Outcome => CombatResolver.DetermineOutcome(PlayerTeam, EnemyTeam);
+        public bool IsOver => Forfeited || !PlayersAlive || (LastWave && !EnemyTeam.Any(c => c.IsAlive)) || Elapsed >= MaxBattleSeconds * WaveCount;
+        public BattleOutcome Outcome => Forfeited ? BattleOutcome.TeamBVictory : CombatResolver.DetermineOutcome(PlayerTeam, EnemyTeam);
+
+        /// <summary>플레이어가 전투를 포기했다(살아 있는 대원은 그대로 물러나고 의뢰는 실패).</summary>
+        public bool Forfeited { get; private set; }
+
+        public void Forfeit()
+        {
+            if (HasStarted && !IsOver) Forfeited = true;
+        }
 
         /// <summary>스킬이 쓰인 순간(쓴 유닛 · 스킬 · 대상 — UI가 스킬 이름과 스킬별 효과를 띄운다).</summary>
         public event Action<FieldUnit, SkillBase, FieldUnit> OnSkillUsed;
@@ -210,31 +220,15 @@ namespace GN3.Combat
 
         /// <summary>
         /// waveIndex번째 라운드 적을 오른쪽에 세운다. 근접은 두 줄로 엇갈리고, 원거리(궁수)는 그 뒤 한 줄.
-        /// 적이 2명 이상이면 3명 중 1명꼴(3번째·6번째…)이 궁수다 — 2명 라운드는 근접만, 혼자 나오는 보스도 근접.
+        /// 궁수·목수·방패병은 이미 EnemySquadGenerator.Dress가 붙여 왔다(자동 전투와 같은 구성) — 여기서는 자리만 정한다.
         /// 새 유닛을 돌려준다.
         /// </summary>
         private List<FieldUnit> SpawnEnemies(int waveIndex)
         {
             CurrentWave = waveIndex;
             EnemyTeam = _waves[waveIndex];
-            // 짐승(늑대 등)은 활을 쏘지 않는다: 궁수 자리여도 근접 그대로.
-            // 독버섯은 늘 원거리(포자를 쏜다)로 뒷줄에 선다 — 이름에 "궁수"는 붙이지 않는다.
-            var archers = new bool[EnemyTeam.Count];
-            var ranged = new bool[EnemyTeam.Count];
-            for (int i = 0; i < EnemyTeam.Count; i++)
-            {
-                archers[i] = IsArcherSlot(i, EnemyTeam.Count) && !IsBeast(EnemyTeam[i].Name);
-                ranged[i] = archers[i] || IsSporeShooter(EnemyTeam[i].Name);
-            }
-            for (int i = 0; i < EnemyTeam.Count; i++)
-            {
-                if (archers[i])
-                    EnemyTeam[i] = Renamed(EnemyTeam[i], EnemyTeam[i].Name + " 궁수");
-                else if (IsCarpenterSlot(i, EnemyTeam.Count) && IsPlainGoblin(EnemyTeam[i].Name))
-                    EnemyTeam[i] = Renamed(EnemyTeam[i], EnemyTeam[i].Name + " 목수"); // 목재·쇠못을 짊어진 근접 일꾼(LootCatalog)
-                else if (IsShieldSlot(i, EnemyTeam.Count) && IsPlainGoblin(EnemyTeam[i].Name))
-                    EnemyTeam[i] = AsShieldBearer(EnemyTeam[i]);
-            }
+            // 궁수와 독버섯(포자를 쏜다)은 원거리로 뒷줄에 선다.
+            var ranged = EnemyTeam.Select(c => EnemySquadGenerator.IsArcher(c.Name) || IsSporeShooter(c.Name)).ToArray();
             AllEnemies.AddRange(EnemyTeam);
             var added = new List<FieldUnit>();
             for (int i = 0; i < EnemyTeam.Count; i++)
@@ -248,40 +242,6 @@ namespace GN3.Combat
         }
 
         private const float ArcherColumnInset = 140f; // 궁수 줄: 필드 오른쪽 끝에서 이만큼 안쪽(근접 두 줄보다 뒤)
-
-        private static bool IsArcherSlot(int index, int count) => count >= 2 && index % 3 == 2;
-
-        /// <summary>고블린 목수 자리: 4마리 이상 라운드의 4번째(궁수 자리와 겹치지 않는다).</summary>
-        private static bool IsCarpenterSlot(int index, int count) => count >= 4 && index == 3;
-
-        /// <summary>고블린 방패병 자리: 3마리 이상 라운드의 둘째 — 홀수 자리가 앞줄(x가 120 더 아군 쪽)이라 맨 앞에 선다
-        /// (궁수 i%3==2·목수 i==3과 겹치지 않는다).</summary>
-        private static bool IsShieldSlot(int index, int count) => count >= 3 && index == 1;
-
-        // 고블린 방패병: 단단한 대신 약하게 친다. 막기(ShieldBlockPassive)까지 더해 앞에서 버틴다.
-        private const float ShieldHealthMultiplier = 1.3f;
-        private const float ShieldAttackMultiplier = 0.8f;
-
-        /// <summary>그냥 고블린을 방패병으로: 이름 뒤에 "방패병", 체력↑·공격↓, 방패 막기 패시브.</summary>
-        private static Combatant AsShieldBearer(Combatant c)
-        {
-            var s = c.Stats;
-            var stats = new CombatStats(
-                attack: Math.Max(1, (int)Math.Round(s.Attack * ShieldAttackMultiplier)),
-                defense: s.Defense,
-                maxHealth: Math.Max(1, (int)Math.Round(s.MaxHealth * ShieldHealthMultiplier)),
-                moveSpeed: s.MoveSpeed, magic: s.Magic, holy: s.Holy);
-            var passives = new List<PassiveBase>(c.Passives) { new ShieldBlockPassive() };
-            return new Combatant(c.Name + " 방패병", stats, passives);
-        }
-
-        /// <summary>그냥 고블린(늑대기수·궁수·목수·방패병이 아닌).</summary>
-        private static bool IsPlainGoblin(string name) =>
-            name != null && name.Contains("고블린") && !name.Contains("늑대기수") && !name.Contains("궁수") && !name.Contains("목수")
-            && !name.Contains("방패병");
-
-        /// <summary>활을 쓰지 않는 짐승·괴물 적(이름에 늑대·울프·버섯·엔트·그루터기). 전투 그림도 그 종류로 나온다(BattleMonsterSprite.KindFor).</summary>
-        private static bool IsBeast(string name) => name != null && (name.Contains("늑대") || name.Contains("울프") || name.Contains("버섯") || GN3.World.RegionInfo.IsEnt(name) || GN3.World.RegionInfo.IsStump(name));
 
         /// <summary>멀리서 포자를 쏘는 적(독버섯).</summary>
         private static bool IsSporeShooter(string name) => name != null && name.Contains("버섯");
@@ -305,8 +265,6 @@ namespace GN3.Combat
 
         /// <summary>밀어내기에서 버티는 유닛: 공격 동작 중이거나 뿌리박은 적.</summary>
         private static bool Anchored(FieldUnit u) => u.IsBusy || (!u.IsPlayerSide && IsRooted(u.Combatant.Name));
-
-        private static Combatant Renamed(Combatant c, string name) => new Combatant(name, c.Stats, c.Passives);
 
         /// <summary>쓰러진 이번 라운드 적을 치우고 다음 라운드 적을 세운다. 아군은 서 있던 자리·체력 그대로.</summary>
         private void StartNextWave()
@@ -384,6 +342,23 @@ namespace GN3.Combat
 
         private bool LeaderCanAct => HasStarted && Leader != null && Leader.IsAlive && !IsOver;
 
+        private bool _leaderAuto;
+
+        /// <summary>분대장 자동: 켜면 분대장도 아군 AI처럼 스스로 싸우고 스킬을 쓴다. 땅·적 클릭이나 스킬로 직접 명령하면 꺼진다.</summary>
+        public bool LeaderAuto
+        {
+            get => _leaderAuto;
+            set
+            {
+                _leaderAuto = value;
+                if (value && Leader != null)
+                {
+                    Leader.MoveGoal = null; // 걸어가던 지점·찍어 둔 대상은 버리고 AI에 맡긴다
+                    _orderedTarget = null;
+                }
+            }
+        }
+
         // 플레이어가 직접 찍은 공격 대상(쫓아간다). 명령 없이 알아서 고른 대상은 사거리를 벗어나면 놓는다.
         private FieldUnit _orderedTarget;
 
@@ -406,6 +381,7 @@ namespace GN3.Combat
         public void OrderMove(Vector2 point)
         {
             if (!LeaderCanAct) return;
+            _leaderAuto = false; // 직접 명령하면 자동이 풀린다
             Leader.MoveGoal = ClampToField(point);
             Leader.Target = null;
             _orderedTarget = null;
@@ -416,6 +392,7 @@ namespace GN3.Combat
         public void OrderAttack(FieldUnit enemy)
         {
             if (!LeaderCanAct || enemy == null || enemy.IsPlayerSide || !enemy.IsAlive) return;
+            _leaderAuto = false;
             Leader.Target = enemy;
             _orderedTarget = enemy;
             Leader.MoveGoal = null;
@@ -545,6 +522,7 @@ namespace GN3.Combat
             if (!LeaderSkillReady || target == null || !target.IsAlive) return false;
             bool wantsAlly = Leader.Skill.TargetType == SkillTargetType.Ally;
             if (target.IsPlayerSide != wantsAlly) return false;
+            _leaderAuto = false;
             Leader.SkillTarget = target;
             Leader.MoveGoal = null;
             if (!wantsAlly) Leader.Target = _orderedTarget = target; // 스킬 뒤에도 그 적에게 붙어 기본공격을 이어 간다
@@ -611,12 +589,15 @@ namespace GN3.Combat
                 if (!u.IsAlive || IsOver) continue;
                 if (u.IsStunned) continue; // 기절: 아무것도 못 한다(명령은 남는다)
                 if (u.IsBusy) continue; // 공격 동작 중: 명령은 남겨 두고 동작이 끝난 뒤 이어서 한다
+                if (!u.IsPlayerSide && IsRooted(u.Combatant.Name) && !u.Enraged
+                    && u.Combatant.CurrentHealth * 2 < u.Combatant.Stats.MaxHealth)
+                    Enrage(u);
                 if (!u.IsPlayerSide && IsRooted(u.Combatant.Name) && u.RoarTimer <= 0f)
                 {
                     StartRoar(u); // 거목 엔트: 때가 되면 다른 행동 대신 기절 포효
                     continue;
                 }
-                if (u == Leader) ThinkLeader(u); // 조종하지 않는 다른 분대장은 아군 AI
+                if (u == Leader && !LeaderAuto) ThinkLeader(u); // 조종하지 않는 다른 분대장(또는 자동으로 맡긴 분대장)은 아군 AI
                 else if (u.IsPlayerSide) ThinkAlly(u);
                 else ThinkEnemy(u);
                 Act(u, dt, events);
@@ -712,7 +693,9 @@ namespace GN3.Combat
             u.SkillTarget = UnitOf(SkillAI.ChooseTarget(u.Skill, allies, inRange, u.Target?.Combatant));
         }
 
-        /// <summary>적 AI: 도발 중인 아군이 있으면 그쪽, 아니면 가장 가까운 아군.</summary>
+        /// <summary>적 AI: 도발 중인 아군이 있으면 그쪽. 아니면 역할대로 —
+        /// 늑대기수는 후열(원거리·치유사)로 돌아 들어가고, 궁수는 사거리 안에서 체력 비율이 가장 낮은 대원을 노리고,
+        /// 방패병은 자기 편 궁수에게 가장 가까이 다가온 대원을 막는다. 나머지는 가장 가까운 대원.</summary>
         private void ThinkEnemy(FieldUnit u)
         {
             var taunting = Enemies(u).Where(e => e.Combatant.IsTaunting).ToList();
@@ -722,7 +705,52 @@ namespace GN3.Combat
                     u.Target = Nearest(u, taunting);
                 return;
             }
+
+            string name = u.Combatant.Name;
+            if (IsRider(name)) { ThinkRider(u); return; }
+            if (EnemySquadGenerator.IsArcher(name)) { ThinkArcher(u); return; }
+            if (name.Contains("방패병") && ThinkShieldBearer(u)) return;
             RetargetNearest(u);
+        }
+
+        /// <summary>늑대기수: 살아 있는 후열(원거리·치유사) 중 가장 가까운 대원을 끝까지 쫓는다. 후열이 없으면 가장 가까운 대원.</summary>
+        private void ThinkRider(FieldUnit u)
+        {
+            if (u.Target != null && u.Target.IsAlive && IsBackline(u.Target)) return;
+            var back = Enemies(u).Where(IsBackline).ToList();
+            if (back.Count > 0) u.Target = Nearest(u, back);
+            else RetargetNearest(u);
+        }
+
+        private static bool IsBackline(FieldUnit t) => !t.IsMelee || t.Skill is HealSkill;
+
+        /// <summary>궁수: 사거리 안 대원 중 체력 비율이 가장 낮은 대원(비율이 같으면 가까운 쪽). 사거리 안에 아무도 없으면 가장 가까운 대원.</summary>
+        private void ThinkArcher(FieldUnit u)
+        {
+            var inReach = Enemies(u).Where(e => InReach(u, e)).ToList();
+            if (inReach.Count == 0) { RetargetNearest(u); return; }
+            u.Target = inReach.OrderBy(HealthRatio).ThenBy(e => Distance(u, e)).First();
+        }
+
+        private static float HealthRatio(FieldUnit t) =>
+            t.Combatant.Stats.MaxHealth > 0 ? (float)t.Combatant.CurrentHealth / t.Combatant.Stats.MaxHealth : 1f;
+
+        /// <summary>방패병: 자기 편 궁수에게 가장 가까이 다가온 대원을 막는다(그 대원과 궁수 사이로 걸어가 친다). 궁수가 없으면 false.</summary>
+        private bool ThinkShieldBearer(FieldUnit u)
+        {
+            var archers = Units.Where(a => a.IsAlive && !a.IsPlayerSide && EnemySquadGenerator.IsArcher(a.Combatant.Name)).ToList();
+            if (archers.Count == 0) return false;
+            FieldUnit threat = null;
+            float best = float.MaxValue;
+            foreach (var e in Enemies(u))
+                foreach (var a in archers)
+                {
+                    float d = Distance(e, a);
+                    if (d < best) { best = d; threat = e; }
+                }
+            if (threat == null) return false;
+            if (u.Target == null || !u.Target.IsAlive || !InReach(u, u.Target)) u.Target = threat;
+            return true;
         }
 
         /// <summary>대상이 없거나 죽었거나, 아직 사거리 밖인데 더 가까운 적이 있으면 가장 가까운 적으로 바꾼다.</summary>
@@ -842,6 +870,39 @@ namespace GN3.Combat
             Log.AddRange(produced);
         }
 
+        // ---------- 앤트킹 격노(2페이즈) ----------
+
+        /// <summary>격노할 때 불러내는 그루터기 엔트 수.</summary>
+        public const int EnrageSummonCount = 2;
+
+        /// <summary>격노 때 부를 졸개를 만든다(마릿수 → 직접 전투 강화 전 적). BattleUIController가 퀘스트 지역·난이도로 채운다. 없으면 소환 없음.</summary>
+        public Func<int, List<Combatant>> SummonFactory { get; set; }
+
+        /// <summary>보스가 격노했다(보스 유닛, 새로 불러낸 졸개 유닛 — UI가 컷인과 졸개 그림을 띄운다).</summary>
+        public event Action<FieldUnit, List<FieldUnit>> OnBossEnrage;
+
+        /// <summary>체력이 절반 아래로 처음 내려간 순간: 격노 표시를 켜고, 다음 포효를 격노 간격 안으로 당기고, 엔트 앞에 졸개를 세운다.</summary>
+        private void Enrage(FieldUnit boss)
+        {
+            boss.Enraged = true;
+            boss.RoarTimer = Math.Min(boss.RoarTimer, RoarEnragedInterval);
+            var added = new List<FieldUnit>();
+            var summons = SummonFactory?.Invoke(EnrageSummonCount);
+            if (summons != null)
+                for (int i = 0; i < summons.Count; i++)
+                {
+                    var c = Strengthen(summons[i]);
+                    EnemyTeam.Add(c);
+                    AllEnemies.Add(c);
+                    float y = boss.Position.Y + (i % 2 == 0 ? -1f : 1f) * (140f + 60f * (i / 2));
+                    var pos = new Vector2(boss.Position.X - boss.BodyRadius - 90f, Math.Clamp(y, 70f, FieldHeight - 70f));
+                    var unit = CreateUnit(c, false, false, true, null, pos);
+                    foreach (var passive in c.Passives) passive.OnBattleStart(c, EnemyTeam, PlayerTeam);
+                    added.Add(unit);
+                }
+            OnBossEnrage?.Invoke(boss, added);
+        }
+
         // ---------- 거목 엔트 뿌리 내려찍기(예고 → 분출) ----------
 
         /// <summary>예고 시간(전투 초): 붉은 범위가 차오르는 동안 분대장은 빠져나갈 수 있다.
@@ -853,6 +914,7 @@ namespace GN3.Combat
         public const float SlamZoneRadius = 110f;
         /// <summary>한 번에 솟는 범위 수 — 아군을 노리지 않고 엔트 앞(아군 쪽) 판 위 무작위 자리에 흩어 놓는다(2026-10-19 사용자 요청).</summary>
         public const int SlamZoneCount = 6;
+        public const int SlamZoneCountEnraged = 9;
         private const float SlamZoneSpacing = 1.5f; // 범위 중심끼리 반지름의 이 배보다 가깝지 않게(고루 흩어지게)
         private const int SlamZoneTries = 30;
         private const float SlamRecoverSeconds = 0.5f; // 분출 뒤 내려찍기 동작이 끝날 때까지(그동안 다음 공격 없음)
@@ -880,7 +942,7 @@ namespace GN3.Combat
             const float r = SlamZoneRadius;
             float minX = EdgeMargin + r, maxX = Math.Max(minX, caster.Position.X - caster.BodyRadius - r);
             float minY = r, maxY = FieldHeight - r;
-            var zones = new Vector2[SlamZoneCount];
+            var zones = new Vector2[caster.Enraged ? SlamZoneCountEnraged : SlamZoneCount];
             for (int i = 0; i < zones.Length; i++)
             {
                 Vector2 p = default;
@@ -941,6 +1003,8 @@ namespace GN3.Combat
 
         /// <summary>전투 시작 뒤 첫 포효까지, 그 뒤 포효 간격(전투 초).</summary>
         public const float RoarFirstDelay = 8f, RoarInterval = 15f;
+        /// <summary>격노한 뒤 포효 간격(전투 초).</summary>
+        public const float RoarEnragedInterval = 9f;
         /// <summary>예고(엔트 앞쪽 큰 붉은 반원) 시간. 이 안에 범위 밖(앞쪽 끝 너머나 엔트 뒤)으로 나가면 기절하지 않는다.
         /// 2026-10-19 범위를 크게 하며 2.0 → 2.6(내려찍기와 같게 — 용병 이동 약 140~180/초로 앞쪽 끝까지 약 410을 빠져나갈 수 있게),
         /// 같은 날 2.6 → 3.6(사용자 요청: 포효 준비 시간을 더 길게).</summary>
@@ -963,7 +1027,7 @@ namespace GN3.Combat
         {
             var cast = new RoarCast(u, u.Position, u.Facing, RoarRadius, RoarTelegraphSeconds); // 바라보는 쪽(대상 쪽) 반원으로 고정
             _roars.Add(cast);
-            u.RoarTimer = RoarInterval;
+            u.RoarTimer = u.Enraged ? RoarEnragedInterval : RoarInterval;
             u.BusyTimer = RoarTelegraphSeconds + RoarRecoverSeconds; // 예고 중엔 다른 공격 없음
             OnRoarTelegraph?.Invoke(cast);
         }

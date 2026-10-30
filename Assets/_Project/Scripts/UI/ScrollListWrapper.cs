@@ -56,7 +56,7 @@ namespace GN3.UI
             scrollRect.content = content;
             scrollRect.viewport = viewportRect;
             scrollRect.verticalScrollbar = scrollbar;
-            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+            scrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide; // 내용이 짧으면 빈 막대를 보이지 않는다
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
             scrollRect.movementType = ScrollRect.MovementType.Clamped;

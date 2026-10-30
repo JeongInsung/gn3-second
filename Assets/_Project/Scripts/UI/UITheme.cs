@@ -18,6 +18,8 @@ namespace GN3.UI
         public static readonly Color ButtonBottom = PanelFill;
         public static readonly Color BodyText = Hex(0xe6d8bd);
         public static readonly Color MutedText = Hex(0xa3937c);
+        /// <summary>자기 흰 그림을 쓰는 목록 줄 바탕(테마 Inset을 못 쓰는 곳). 옅은 흰색(0.05)은 리니어 색 공간에서 회색 판으로 떠 보여 어둡게 깐다.</summary>
+        public static readonly Color RowFill = new Color(0f, 0f, 0f, 0.35f);
         private static readonly Color Outline = new Color(0.03f, 0.02f, 0.02f, 1f);
 
         // ---------- 글씨 ----------
@@ -89,6 +91,17 @@ namespace GN3.UI
         public const string MutedHex = "#a3937c";
 
         private static Sprite _frameSprite;
+
+        /// <summary>고른 탭·정렬 버튼 표시: 흰 테두리 + 글씨 SelectedTextHex 굵게. 누름은 그대로 둔다(눌러도 같은 탭).</summary>
+        public static void MarkSelected(UnityEngine.UI.Button button)
+        {
+            if (button == null) return;
+            CreateSelectFrame(button.transform);
+            var text = button.GetComponentInChildren<UnityEngine.UI.Text>();
+            if (text == null) return;
+            text.supportRichText = true;
+            text.text = $"<color={SelectedTextHex}><b>{text.text}</b></color>";
+        }
 
         /// <summary>
         /// 부모를 가득 채우는 테두리(위·아래·왼·오른쪽 막대 넷)를 만들어 돌려준다. 기본은 흰색 2px — 고른 줄·탭 표시.

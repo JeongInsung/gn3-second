@@ -214,7 +214,7 @@ namespace GN3.Save
                 challenge = q.IsChallenge, allyGuildId = q.AllyGuildId, allyCount = q.AllyCount, questId = q.Id,
             };
             foreach (var w in q.Waves)
-                b.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
+                b.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier, support = w.SupportName, supportCount = w.SupportCount });
             b.materialReward = SaveMaterials(q);
             return b;
         }
@@ -222,7 +222,7 @@ namespace GN3.Save
         private static Quest FromBoardSave(BoardQuestSave b)
         {
             var q = new Quest(b.title, (Region)b.region, b.location, b.enemy, b.enemyCount, b.difficulty, b.durationDays,
-                b.waves != null && b.waves.Count > 0 ? b.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList() : null,
+                b.waves != null && b.waves.Count > 0 ? b.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier, w.support, w.supportCount)).ToList() : null,
                 b.requester, b.requestText, b.questId) { IsChallenge = b.challenge, AllyGuildId = b.allyGuildId, AllyCount = b.allyCount };
             RestoreMaterials(q, b.materialReward);
             return q;
@@ -368,7 +368,7 @@ namespace GN3.Save
                 e.allyGuildId = q.AllyGuildId;
                 e.allyCount = q.AllyCount;
                 foreach (var w in q.Waves)
-                    e.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier });
+                    e.waves.Add(new WaveSave { enemy = w.EnemyName, count = w.Count, tier = w.Tier, support = w.SupportName, supportCount = w.SupportCount });
                 data.expeditions.Add(e);
             }
             data.trainees = TrainingHall.SaveIds();
@@ -399,6 +399,7 @@ namespace GN3.Save
             data.lootSeen = LootBag.SaveSeen();
             data.bestiaryKills = Bestiary.SaveEntries();
             data.bestiaryBest = Bestiary.SaveBest();
+            GN3.UI.PartyUI.SaveLastTeam(data);
             data.facilities = GuildFacilities.SaveEntries();
             data.buildings = VillageLayout.SaveEntries();
             data.felledTrees = ForestLayout.SaveEntries();
@@ -703,7 +704,7 @@ namespace GN3.Save
                 }
                 if (members.Count == 0) continue;
                 var waves = e.waves != null && e.waves.Count > 0
-                    ? e.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier)).ToList()
+                    ? e.waves.Select(w => new QuestWave(w.enemy, w.count, w.tier, w.support, w.supportCount)).ToList()
                     : null; // 예전 저장: enemy × enemyCount 한 라운드
                 var quest = new Quest(e.title, (Region)e.region, e.location, e.enemy, e.enemyCount, e.difficulty, e.durationDays, waves,
                         e.requester, e.requestText, e.questId) // 버전 14 이하는 Id·부탁 글이 없어 새 Id
@@ -752,6 +753,7 @@ namespace GN3.Save
             LootBag.RestoreSeen(data.lootSeen);
             if (data.version < 11) LootBag.Add(BuildMaterials.StartingKit); // 재료가 생기기 전 저장: 길드 천막 한 채 분
             Bestiary.Restore(data.bestiaryKills, data.bestiaryBest);
+            GN3.UI.PartyUI.RestoreLastTeam(data);
             GuildFacilities.Restore(data.facilities);
             ForestLayout.Restore(data.felledTrees, data.fellsUsed, data.fellsDay); // 씬을 다시 맞추기(VillageLayout → Apply) 전에
             TravelingMerchant.Restore(data.merchantHereDay, data.merchantNextDay, data.merchantStock);

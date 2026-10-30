@@ -45,22 +45,27 @@ namespace GN3.UI
             _goalText = CreateGoalText(panel);
         }
 
-        private Text _goalText; // 제목 줄 가운데 "은월의 숲 Lv3/5 · 다음 목표 …"
+        private Text _goalText; // 제목 줄 왼쪽 "은월의 숲 Lv3/5 · 다음 목표 …"
+        private const float GoalTitleClearance = 110f; // 가운데 제목("퀘스트") 반 폭 + 여백
 
-        /// <summary>지금 목표 한 줄(ForestProgress.GoalText): "새 의뢰까지" 글자 왼쪽, 제목 줄 높이.</summary>
+        /// <summary>지금 목표 한 줄(ForestProgress.GoalText): 제목 줄 왼쪽(시장 "파티 정원"과 같은 자리). 가운데 제목과 겹치지 않게
+        /// 패널 왼쪽 절반 안에서 길면 글자를 줄인다.</summary>
         private Text CreateGoalText(RectTransform panel)
         {
             var go = new GameObject("GoalText", typeof(RectTransform), typeof(Text));
             go.transform.SetParent(panel, false);
             var rect = (RectTransform)go.transform;
             var next = _nextText.rectTransform;
-            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(1f, 1f);
-            rect.sizeDelta = new Vector2(560f, 40f);
-            rect.anchoredPosition = next.anchoredPosition - new Vector2(next.sizeDelta.x + 16f, 0f);
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
+            rect.sizeDelta = new Vector2(panel.rect.width / 2f - GoalTitleClearance, 40f);
+            rect.anchoredPosition = new Vector2(24f, next.anchoredPosition.y);
             var text = go.GetComponent<Text>();
             text.font = _font;
             text.fontSize = 16;
-            text.alignment = TextAnchor.MiddleRight;
+            text.resizeTextForBestFit = true;
+            text.resizeTextMinSize = 11;
+            text.resizeTextMaxSize = 16;
+            text.alignment = TextAnchor.MiddleLeft;
             text.color = UITheme.MutedText;
             text.supportRichText = true;
             text.raycastTarget = false;
@@ -185,16 +190,16 @@ namespace GN3.UI
             {
                 int mode = i;
                 var button = ShopListUI.CreateButton(row.transform, SortNames[i], () => { _sort = mode; Redraw(); }, 96f);
-                if (i == _sort) UITheme.CreateSelectFrame(button.transform);
+                if (i == _sort) UITheme.MarkSelected(button);
             }
             var filter = CreateText(row.transform, "   거르기", 16, TextAnchor.MiddleLeft);
             filter.color = UITheme.MutedText;
             filter.gameObject.AddComponent<LayoutElement>().minWidth = 70;
             var joint = ShopListUI.CreateButton(row.transform, "연합", () => { _onlyJoint = !_onlyJoint; Redraw(); }, 70f);
-            if (_onlyJoint) UITheme.CreateSelectFrame(joint.transform);
+            if (_onlyJoint) UITheme.MarkSelected(joint);
             joint.gameObject.AddComponent<TooltipTrigger>().Text = "근처 길드와 함께하는 연합 의뢰만 보기";
             var challenge = ShopListUI.CreateButton(row.transform, "도전", () => { _onlyChallenge = !_onlyChallenge; Redraw(); }, 70f);
-            if (_onlyChallenge) UITheme.CreateSelectFrame(challenge.transform);
+            if (_onlyChallenge) UITheme.MarkSelected(challenge);
             challenge.gameObject.AddComponent<TooltipTrigger>().Text = "깨면 다음 숲 레벨이 열리는 도전 의뢰만 보기";
             UIThemeApplier.ApplyNow(row.transform); // 상점 버튼과 같은 테마
             return row;

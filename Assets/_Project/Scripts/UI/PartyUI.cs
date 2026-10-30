@@ -191,6 +191,7 @@ namespace GN3.UI
 
         private void RefreshList()
         {
+            _riskArmed = false; // 편성이 바뀌면 위험 출발 확인을 다시 받는다
             foreach (var row in _rows)
                 Destroy(row);
             _rows.Clear();
@@ -297,19 +298,16 @@ namespace GN3.UI
             h.childAlignment = TextAnchor.MiddleLeft;
             h.childForceExpandWidth = h.childForceExpandHeight = false;
             h.childControlWidth = h.childControlHeight = true;
-            var label = CreateText(row.transform, "정렬", 14, TextAnchor.MiddleLeft);
-            label.color = new Color(1f, 1f, 1f, 0.6f);
-            label.gameObject.AddComponent<LayoutElement>().minWidth = 36;
+            var label = CreateText(row.transform, "정렬", 16, TextAnchor.MiddleLeft); // 시장·게시판 정렬 줄과 같은 모양
+            label.color = UITheme.MutedText;
+            label.gameObject.AddComponent<LayoutElement>().minWidth = 44;
             for (int i = 0; i < SortNames.Length; i++)
             {
                 int mode = i;
-                var button = CreateActionButton(row.transform, SortNames[i],
-                    i == _sort ? new Color(0.62f, 0.5f, 0.2f, 1f) : new Color(0.3f, 0.3f, 0.35f, 1f),
-                    () => { _sort = mode; RefreshList(); });
-                var buttonLayout = button.GetComponent<LayoutElement>();
-                buttonLayout.minWidth = 60;
-                buttonLayout.minHeight = 28;
+                var button = ShopListUI.CreateButton(row.transform, SortNames[i], () => { _sort = mode; RefreshList(); }, 72f);
+                if (i == _sort) UITheme.MarkSelected(button);
             }
+            UIThemeApplier.ApplyNow(row.transform);
             return row;
         }
 
@@ -335,6 +333,10 @@ namespace GN3.UI
                 () => { _autoOnArrival = !_autoOnArrival; RefreshList(); });
             auto.GetComponent<LayoutElement>().minWidth = 140;
             auto.gameObject.AddComponent<TooltipTrigger>().Text = "켜면 이 파견대는 목적지에 도착하자마자 자동으로 싸우고 결과 편지만 온다(직접 전투 보너스 없음)";
+            var autoTeam = CreateActionButton(row.transform, "자동 편성", new Color(0.3f, 0.4f, 0.5f, 1f), ApplyAutoTeam,
+                interactable: PlayerParty.Instance.Members.Any(m => !_selectedForDispatch.Contains(m.Id) && CanPick(m)));
+            autoTeam.GetComponent<LayoutElement>().minWidth = 100;
+            autoTeam.gameObject.AddComponent<TooltipTrigger>().Text = "지금 갈 수 있는 용병을 전투력 높은 순으로 빈자리만큼 고른다(분대장은 분대마다 가장 강한 사람)";
             if (_lastTeam.Count == 0) return row;
             var names = PlayerParty.Instance.Members.Where(m => _lastTeam.ContainsKey(m.Id)).Select(m => m.Name).ToList();
             var button = CreateActionButton(row.transform, "지난 편성", new Color(0.3f, 0.4f, 0.5f, 1f), ApplyLastTeam,
@@ -412,6 +414,22 @@ namespace GN3.UI
             ShopListUI.SetBlocked(restButton, anyWounded ? null : "다친 대원이 없어 쉴 필요가 없습니다.");
             restButton.onClick.AddListener(() => ExpeditionLog.Instance.Rest(expedition));
 
+            // 가는 중이면 [불러들이기](두 번 눌러 확인): 의뢰 실패·명성 절반 벌점, 지나온 길의 절반만큼 걸려 돌아온다
+            if (ExpeditionLog.Instance.CanRecall(expedition))
+            {
+                bool armed = _recallArmed == expedition;
+                var recall = CreateActionButton(row.transform, armed ? "정말 철수?" : "불러들이기", new Color(0.45f, 0.3f, 0.3f, 1f), () =>
+                {
+                    if (_recallArmed != expedition) { _recallArmed = expedition; RefreshList(); return; }
+                    _recallArmed = null;
+                    ExpeditionLog.Instance.Recall(expedition);
+                    RefreshList();
+                });
+                recall.GetComponent<LayoutElement>().minWidth = 100;
+                recall.gameObject.AddComponent<TooltipTrigger>().Text =
+                    $"목적지에 가기 전에 파견대를 돌려보낸다 — 의뢰 실패(명성 -{System.Math.Max(1, Guild.FailPenalty / 2)}), 싸우지 않으니 다치지 않는다";
+            }
+
             bool canFight = expedition.IsReady && _battlingExpedition == null;
 
             var buttonGO = new GameObject("BattleButton", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
@@ -488,10 +506,10 @@ namespace GN3.UI
             var classLayout = classText.gameObject.AddComponent<LayoutElement>();
             classLayout.minWidth = classLayout.preferredWidth = 130; // "마법사  39세"와 전투력 칸이 붙지 않게
 
-            // 위치(항상): 마을 / 훈련소 / 병원 / 쉼터 이름 / 파견: 퀘스트 / 귀환 중 — 마을 캐릭터 이동은 알림 대신 여기서 본다
+            // 위치(항상): 마을 / 훈련소 / 병원 / 쉼터 이름 / 파견 중 / 귀환 중 — 마을 캐릭터 이동은 알림 대신 여기서 본다
             // (onExpedition은 훈련·입원·쉼터까지 '마을에 없음'으로 묶은 값이라 실제 파견은 따로 본다)
             string where = ExpeditionLog.Instance.IsOnExpedition(merc)
-                ? (ExpeditionLog.Instance.IsReturning(merc) ? "귀환 중" : $"파견: {ExpeditionLog.Instance.FindQuest(merc)?.Title}")
+                ? (ExpeditionLog.Instance.IsReturning(merc) ? "귀환 중" : "파견 중") // 어느 의뢰인지는 위 '진행 중인 파견' 칸에 있다(줄마다 긴 제목을 되풀이하지 않는다)
                 : training ? "훈련소" : hospitalized ? "병원" : bathing ? venue.Name : "마을";
             string status = where; // 둘째 줄(좁은 칸에서 "전투력 233 ·"처럼 어중간하게 끊기지 않게)
             if (merc.CurrentHealth < stats.MaxHealth) status += $"  · 체력 {merc.CurrentHealth}/{stats.MaxHealth}";
@@ -607,10 +625,30 @@ namespace GN3.UI
         private bool CanPick(Mercenary merc) => Loans.InVillage(merc) && SelectBlock(merc, false) == null;
 
         private static bool _autoOnArrival; // 편성 화면 "도착 시 자동" 토글(이번 실행 동안 기억, 파견마다 저장됨)
+        private bool _riskArmed; // '어려움' 이상 판정에서 출발을 한 번 눌렀다(한 번 더 누르면 출발)
+        private Expedition _recallArmed; // [불러들이기]를 한 번 누른 파견(한 번 더 누르면 철수)
 
-        // 지난 편성(이번 실행 동안만 기억): 마지막으로 보낸 용병 id → 분대, 분대장
+        // 지난 편성: 마지막으로 보낸 용병 id → 분대, 분대장(저장에도 남는다 — SaveLastTeam/RestoreLastTeam)
         private static readonly Dictionary<string, int> _lastTeam = new Dictionary<string, int>();
         private static readonly string[] _lastLeaders = new string[2];
+
+        public static void SaveLastTeam(GN3.Save.SaveData data)
+        {
+            data.lastTeam = _lastTeam.Select(kv => new GN3.Save.LootSave { name = kv.Key, count = kv.Value }).ToList();
+            data.lastLeader0 = _lastLeaders[0];
+            data.lastLeader1 = _lastLeaders[1];
+        }
+
+        /// <summary>불러오기: 저장된 지난 편성으로 바꾼다(옛 저장이면 비운다 — 다른 게임의 팀이 남지 않게).</summary>
+        public static void RestoreLastTeam(GN3.Save.SaveData data)
+        {
+            _lastTeam.Clear();
+            if (data.lastTeam != null)
+                foreach (var e in data.lastTeam)
+                    if (!string.IsNullOrEmpty(e.name)) _lastTeam[e.name] = e.count;
+            _lastLeaders[0] = string.IsNullOrEmpty(data.lastLeader0) ? null : data.lastLeader0;
+            _lastLeaders[1] = string.IsNullOrEmpty(data.lastLeader1) ? null : data.lastLeader1;
+        }
 
         /// <summary>[지난 편성]: 지난번 보낸 사람 중 지금 고를 수 있는 사람을 인원 한도까지 고르고 분대·분대장을 되살린다.</summary>
         private void ApplyLastTeam()
@@ -631,6 +669,31 @@ namespace GN3.UI
                 if (leader != null && _selectedForDispatch.Contains(leader) && _squadOf.TryGetValue(leader, out int sq) && sq == s) _leaderIds[s] = leader;
                 else if (_leaderIds[s] == null || !_selectedForDispatch.Contains(_leaderIds[s])) PassLeader(s);
             }
+            RefreshList();
+        }
+
+        /// <summary>[자동 편성]: 지금 고를 수 있는 사람을 전투력 순으로 빈자리만큼 고른다. 두 분대면 번갈아 나누고, 분대장은 분대마다 가장 강한 사람.</summary>
+        private void ApplyAutoTeam()
+        {
+            if (_pendingQuest == null) return;
+            int cap = _pendingQuest.RequiredDispatchSize > 0 ? _pendingQuest.RequiredDispatchSize : _pendingQuest.MaxDispatchSize;
+            var picks = PlayerParty.Instance.Members
+                .Where(m => !_selectedForDispatch.Contains(m.Id) && CanPick(m)) // 인원이 차기 전에 후보를 먼저 뽑는다(CanPick은 다 차면 막는다)
+                .OrderByDescending(m => m.CombatPower)
+                .Take(System.Math.Max(0, cap - _selectedForDispatch.Count))
+                .ToList();
+            foreach (var merc in picks)
+            {
+                int squad = SquadCount > 1 && SquadMembers(1) < SquadMembers(0) ? 1 : 0;
+                if (SquadCount > 1 && SquadMembers(squad) >= _pendingQuest.SquadSize) squad = 1 - squad;
+                if (SquadCount > 1 && SquadMembers(squad) >= _pendingQuest.SquadSize) break;
+                _selectedForDispatch.Add(merc.Id);
+                _squadOf[merc.Id] = squad;
+            }
+            for (int s = 0; s < SquadCount; s++)
+                _leaderIds[s] = PlayerParty.Instance.Members
+                    .Where(m => _selectedForDispatch.Contains(m.Id) && _squadOf.TryGetValue(m.Id, out int sq) && sq == s && !IsLockedGuest(m))
+                    .OrderByDescending(m => m.CombatPower).FirstOrDefault()?.Id ?? _leaderIds[s];
             RefreshList();
         }
 
@@ -687,6 +750,7 @@ namespace GN3.UI
 
             if (_dispatchButtonGO == null)
                 _dispatchButtonGO = CreateDispatchButton(_panelTransform);
+            if (_riskArmed && !GameClock.IsNight) return; // "정말 출발?" 글자를 그대로 둔다
 
             // 밤(22시~5시)에는 출전할 수 없다. 편성(용병 고르기)은 그대로 된다.
             bool night = GameClock.IsNight;
@@ -752,6 +816,18 @@ namespace GN3.UI
             }
 
             var members = PlayerParty.Instance.Members.Where(m => _selectedForDispatch.Contains(m.Id)).ToList();
+            // 판정이 '어려움' 이상이면 한 번 더 눌러야 출발(첫 번째는 버튼 글자만 바꾼다)
+            var rating = QuestDifficulty.Rate(QuestDifficulty.TeamPower(members), _pendingQuest);
+            if (rating >= QuestDifficulty.Rating.Hard && !_riskArmed)
+            {
+                _riskArmed = true;
+                if (_dispatchButtonText != null)
+                {
+                    _dispatchButtonText.text = $"정말 출발?\n({QuestDifficulty.Label(rating)})";
+                    _dispatchButtonText.fontSize = 13;
+                }
+                return;
+            }
             var exhausted = members.Where(m => m.IsExhausted).Select(m => m.Name).ToList();
             if (exhausted.Count > 0)
             {
@@ -867,6 +943,7 @@ namespace GN3.UI
         /// <summary>전투 기록 한 줄. 회복(스킬 치유)은 피해를 음수로 담아 오므로 "+N 회복"으로.</summary>
         private static string FormatLogLine(BattleEvent evt)
         {
+            if (evt.Proc != null && evt.Damage == 0) return $"[R{evt.Round}] {evt.Attacker.Name} — {evt.Proc.TrimEnd('!')}"; // 포효·격노 등
             if (evt.Damage < 0) return $"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : +{-evt.Damage} 회복";
             string suffix = evt.Evaded ? " (회피)" : evt.TargetDefeated ? " (처치)" : "";
             return $"[R{evt.Round}] {evt.Attacker.Name} -> {evt.Target.Name} : {evt.Damage}{suffix}";

@@ -52,6 +52,9 @@ namespace GN3.UI
             public bool ChoiceResolved;
             /// <summary>고르기 전에 사라졌을 때(파견대가 전멸 등) 할 일 — 기다리던 원정 풀기.</summary>
             public System.Action OnAbandoned;
+            /// <summary>편지에서 바로 할 일 버튼(예: 계약 만료 알림의 [재계약]). 없으면 null. 우편함·중요 알림창에 버튼으로 뜬다.</summary>
+            public string LinkLabel;
+            public System.Action Link;
 
             public bool IsPendingEvent => Choices != null && !ChoiceResolved;
 
