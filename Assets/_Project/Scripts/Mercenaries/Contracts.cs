@@ -112,12 +112,19 @@ namespace GN3.Mercenaries
                 }
                 if (left == ContractTuning.NoticeDays || left == ContractTuning.UrgentNoticeDays)
                 {
-                    bool urgent = left == ContractTuning.UrgentNoticeDays;
                     string title = $"{merc.Name} 계약 만료 {left}일 전";
                     string body = $"{Josa.EunNeun(merc.Name)} {GameCalendar.Format(Ensure(merc).EndDay)}에 계약이 끝납니다.\n" +
-                                  "파티 창이나 용병 정보에서 [재계약]을 눌러 협상하세요. 재계약하지 않으면 길드를 떠납니다.";
+                                  "[재계약]을 눌러 협상하세요. 재계약하지 않으면 길드를 떠납니다.";
                     DailyLog.Add(title);
-                    Mailbox.Post(MailKind.Alert, title, body, important: urgent);
+                    // 첫 알림(7일 전)도 중요로: 일반 편지로는 놓치기 쉬웠다. 편지에서 바로 재계약 협상을 연다.
+                    var mail = Mailbox.Post(MailKind.Alert, title, body, important: true);
+                    var target = merc;
+                    mail.LinkLabel = "재계약";
+                    mail.Link = () =>
+                    {
+                        if (target.IsAlive && PlayerParty.Instance.Members.Contains(target)) GN3.UI.ContractNegotiationPanel.OpenRenewal(target);
+                        else ToastLog.Show($"{Josa.EunNeun(target.Name)} 이미 길드에 없습니다.", false);
+                    };
                 }
             }
             OnChanged?.Invoke(); // 남은 날이 줄었다(파티 창의 "계약 n일 남음"·재계약 버튼)

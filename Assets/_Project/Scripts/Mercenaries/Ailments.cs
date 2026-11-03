@@ -183,9 +183,19 @@ namespace GN3.Mercenaries
                         merc.SetHealth(Mathf.Max(1, merc.CurrentHealth - Mathf.CeilToInt(merc.CurrentStats.MaxHealth * def.healthLossPerDay)));
                     if (!admitted) ailment.DaysUntreated++;
                     if (def.deathAfterDays > 0 && ailment.DaysUntreated >= def.deathAfterDays) fatal ??= def;
+                    else if (!admitted && def.deathAfterDays > 1 && ailment.DaysUntreated == def.deathAfterDays - 1)
+                        WarnCritical(merc, def); // 내일 자정에 죽는다 — 하루 전에 알린다
                 }
                 if (fatal != null) Die(merc, fatal);
             }
+        }
+
+        private static void WarnCritical(Mercenary merc, AilmentSO cause)
+        {
+            string line = $"{merc.Name}의 {Josa.IGa(cause.displayName)} 위독합니다 — 내일까지 병원에 보내지 않으면 죽습니다.";
+            ToastLog.Show(line, false);
+            DailyLog.Add(line);
+            Mailbox.Post(MailKind.Alert, $"{merc.Name} 위독", line, important: true);
         }
 
         private static void Die(Mercenary merc, AilmentSO cause)

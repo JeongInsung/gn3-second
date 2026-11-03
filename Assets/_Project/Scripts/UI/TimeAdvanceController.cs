@@ -226,6 +226,42 @@ namespace GN3.UI
             StartCoroutine(SkipRoutine(days));
         }
 
+        /// <summary>가는 중인 파견대 중 가장 먼저 도착할 때까지 건너뛴다(도착 편지가 오면 그 시각에서 멈춘다). 가는 파견이 없으면 알리고 끝.</summary>
+        public void RequestSkipUntilArrival()
+        {
+            if (_isAdvancing || GamePause.IsPaused) return;
+            float? hours = ExpeditionLog.Instance.HoursUntilNextArrival;
+            if (hours == null || hours <= 0f)
+            {
+                ToastLog.Show("가는 중인 파견대가 없습니다", false);
+                return;
+            }
+            StartCoroutine(SkipUntilArrivalRoutine(hours.Value));
+        }
+
+        private IEnumerator SkipUntilArrivalRoutine(float hours)
+        {
+            _isAdvancing = IsAdvancing = true;
+            IsSkippingDays = true;
+            SetLocked(true);
+            int startDay = GameClock.CurrentDay;
+            float hour = GameClock.CurrentHour;
+
+            EnsureOverlay();
+            if (_bannerFade != null) StopCoroutine(_bannerFade);
+            _bannerFade = null;
+            _skipPeriod = "이동하는"; // "이동하는 동안 알림 N건"
+            _bannerTitle.text = "도착까지…";
+            float end = hour + hours;
+            _bannerSub.text = $"{GameCalendar.Format(startDay)} {DayNightCycle.FormatTime(hour)}  →  " +
+                              $"{GameCalendar.Format(startDay + Mathf.FloorToInt(end / 24f))} {DayNightCycle.FormatTime(end % 24f)}";
+            _banner.alpha = 1f;
+
+            float days = Mathf.Max(1f, hours / 24f);
+            float duration = Mathf.Min(SkipMaxSeconds, SkipTransitionSeconds + (days - 1f) * SkipSecondsPerExtraDay);
+            yield return FlowRoutine(hours + 0.01f, duration); // 도착 시각을 살짝 넘겨 도착 처리가 확실히 일어나게(도착 편지에서 멈춘다)
+        }
+
         private IEnumerator SkipRoutine(int days)
         {
             _isAdvancing = IsAdvancing = true;

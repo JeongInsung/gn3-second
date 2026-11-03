@@ -9,17 +9,17 @@ using UnityEngine.UI;
 namespace GN3.UI
 {
     /// <summary>
-    /// 마을의 길드 건물(또는 왼쪽 위 길드 글자)을 클릭하면 뜨는 창: 길드 티어(몇 / 10단계)·명성 막대 아래에 짧은 줄 여섯 개
-    /// (인원·주급·지금 혜택·다음 단계·전체 단계·마을 매력) — 자세한 내용은 줄에 마우스를 올리면 툴팁으로 나온다. 아래에 "창고" 버튼(GuildStorageUI).
+    /// 마을의 길드 건물(또는 왼쪽 위 길드 글자)을 클릭하면 뜨는 창: 길드 티어(몇 / 10단계)·명성 막대 아래에 짧은 줄 다섯 개
+    /// (인원·주급·지금 혜택·다음 단계·마을 매력) — 자세한 내용은 줄에 마우스를 올리면 툴팁으로 나온다. 아래에 "창고" 버튼(GuildStorageUI).
     /// 명성·파티·파견이 바뀌면 열린 채로 다시 그린다. 끌어 옮길 수 있고 X·ESC로 닫는다.
     /// </summary>
     public class GuildPanel : MonoBehaviour
     {
         private const float Width = 860f;  // 긴 "다음 단계·혜택" 줄이 한 줄에 들게(예전 680)
-        private const float Height = 470f;
+        private const float Height = 430f;
         private const float BodyTop = 144f;   // 판 위에서 첫 줄까지
         private const float RowHeight = 40f;
-        private const int RowCount = 6;       // 인원 · 주급 · 지금 혜택 · 다음 단계 · 전체 단계 · 마을 매력
+        private const int RowCount = 5;       // 인원 · 주급 · 지금 혜택 · 다음 단계 · 마을 매력 (전체 단계 표는 티어 줄 툴팁)
         private const string Gold = UITheme.SelectedTextHex;
         private const string Dim = UITheme.MutedHex; // 2026-10-26 #7a7064 → 다른 창과 같은 흐린 색
         private const string Red = "#e05a4a";
@@ -29,6 +29,7 @@ namespace GN3.UI
         private GameObject _panel;
         private Text _title;
         private Text _tier;
+        private TooltipTrigger _tierTip;
         private Image _repFill;
         private Text _repText;
         private TooltipTrigger _repTip;
@@ -126,7 +127,7 @@ namespace GN3.UI
             _title.text = $"모험가 길드 — <color={Gold}>{Guild.CurrentName}</color>";
 
             string pips = new string('●', rank + 1) + new string('○', ranks.Length - rank - 1);
-            _tier.text = $"길드 티어 <color={Gold}><b>{rank + 1}</b></color> / {ranks.Length}단계   <color={Gold}>{pips}</color>";
+            _tier.text = $"<color={Gold}>{pips}</color>   {rank + 1} / {ranks.Length}단계";
 
             // 명성 막대: 현재 단계 시작 ~ 다음 단계 조건 사이 진행도
             if (Guild.IsMaxRank)
@@ -139,7 +140,7 @@ namespace GN3.UI
                 var next = ranks[rank + 1];
                 int from = current.Required;
                 _repFill.fillAmount = Mathf.Clamp01((float)(Guild.Reputation - from) / (next.Required - from));
-                _repText.text = $"명성 {Guild.Reputation} / {next.Required}  (다음 단계까지 {next.Required - Guild.Reputation})";
+                _repText.text = $"명성 {Guild.Reputation} / {next.Required}"; // 남은 양은 아래 '다음 단계' 줄에
             }
 
             _repTip.Text = $"<b>명성</b>\n임무 성공 시 +10×(퀘스트 등급+1)\n실패 시 −{Guild.FailPenalty}";
@@ -176,7 +177,7 @@ namespace GN3.UI
                     $"<b>{nextName}</b>{Josa.IGa(nextName).Substring(nextName.Length)} 되면\n{UnlockLines(next)}");
             }
 
-            // 5. 전체 단계
+            // 전체 단계 표: 티어 줄(동그라미)에 마우스를 올리면
             var table = new StringBuilder("<b>전체 단계</b>");
             for (int i = 0; i < ranks.Length; i++)
             {
@@ -186,10 +187,10 @@ namespace GN3.UI
                 else if (i > rank) line = $"<color={Dim}>{line}</color>";
                 table.Append('\n').Append(line);
             }
-            SetRow(4, $"<b>전체 단계</b>   {ranks.Length}단계 중 {rank + 1}단계", table.ToString());
+            _tierTip.Text = table.ToString();
 
-            // 6. 마을 매력(장식품 — VillageCharm)
-            SetRow(5, $"<b>마을 매력</b>   {GN3.World.VillageCharm.Score} ({GN3.World.VillageCharm.TierName})", GN3.World.VillageCharm.Tooltip());
+            // 5. 마을 매력(장식품 — VillageCharm)
+            SetRow(4, $"<b>마을 매력</b>   {GN3.World.VillageCharm.Score} ({GN3.World.VillageCharm.TierName})", GN3.World.VillageCharm.Tooltip());
 
             _storageButton.SetActive(_openStorage != null);
             _facilityButton.SetActive(_openStorage != null && GuildFacilities.Enabled);
@@ -229,6 +230,7 @@ namespace GN3.UI
             _title = CreateText("Title", 22, FontStyle.Bold, new Vector2(20f, -16f), new Vector2(Width - 70f, 32f));
             _title.color = UITheme.TitleText;
             _tier = CreateText("Tier", 18, FontStyle.Normal, new Vector2(20f, -56f), new Vector2(Width - 40f, 26f));
+            _tierTip = WithTooltip(_tier);
 
             // 명성 막대
             var barBack = new GameObject("RepBar", typeof(RectTransform), typeof(Image));

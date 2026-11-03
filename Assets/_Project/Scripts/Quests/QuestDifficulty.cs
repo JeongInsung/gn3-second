@@ -81,8 +81,8 @@ namespace GN3.Quests
 
         /// <summary>라운드 구성 한 줄: "1R 산적 ×2 → 2R 늑대 ×3 → 3R 보스 고목왕 ×1"(한 라운드면 "산적 ×3").</summary>
         public static string WavesText(Quest quest) => quest.WaveCount == 1
-            ? $"{quest.Waves[0].EnemyName} ×{quest.Waves[0].Count}"
-            : string.Join(" → ", quest.Waves.Select((w, i) => $"{i + 1}R {(w.IsBoss ? "보스 " : "")}{w.EnemyName} ×{w.Count}"));
+            ? quest.Waves[0].Label
+            : string.Join(" → ", quest.Waves.Select((w, i) => $"{i + 1}R {(w.IsBoss ? "보스 " : "")}{w.Label}"));
 
         public static Rating Rate(int partyPower, Quest quest)
         {

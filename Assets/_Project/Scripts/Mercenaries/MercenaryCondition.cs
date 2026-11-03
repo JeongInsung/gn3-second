@@ -110,6 +110,7 @@ namespace GN3.Mercenaries
 
             int day = GameClock.CurrentDay;
             if (day > 1 && (day - 1) % PayIntervalDays == 0) PayWages(members);
+            else if (day % PayIntervalDays == 0) WarnShortWages(); // 내일이 주급날
 
             Contracts.DailyCheck(); // 계약 만료 알림·만료(마을에 있으면 바로, 파견 중이면 돌아온 뒤 떠난다)
             Desert();
@@ -172,6 +173,18 @@ namespace GN3.Mercenaries
             foreach (var merc in unpaidMercs) ConsiderLeaving(merc, "주급을 받지 못해");
         }
 
+        /// <summary>주급날 하루 전: 금화가 모자라면 미리 알린다(중요 — 내일 자정 전에 팔거나 벌 수 있게).</summary>
+        private static void WarnShortWages()
+        {
+            int wage = TotalWeeklyWage();
+            if (wage <= 0 || Wallet.Gold >= wage) return;
+            string line = $"내일 주급 {wage}G — 보유 {Wallet.Gold}G ({wage - Wallet.Gold}G 부족)";
+            ToastLog.Show(line, false);
+            DailyLog.Add(line);
+            Mailbox.Post(MailKind.Alert, "내일 주급이 모자랍니다",
+                $"{line}\n\n못 받은 용병은 사기가 {UnpaidMorale} 떨어지고 길드를 떠날 수 있습니다.\n전리품을 팔거나 의뢰 보상으로 채우세요.", important: true);
+        }
+
         /// <summary>
         /// 자정: 마을에 있는 사기 0 용병, 그리고 파견 중에 떠나기로 결심했다가 돌아온 용병은 길드를 떠난다
         /// (파견 중이면 돌아온 뒤 다음 자정에).
@@ -201,7 +214,11 @@ namespace GN3.Mercenaries
                 return;
             }
             LeavingIds[merc.Id] = reason;
-            DailyLog.Add($"{Josa.IGa(merc.Name)} {reason} 돌아가면 길드를 떠나겠다고 한다.");
+            // 예전엔 하루 보고서에만 남아 돌아와 떠날 때까지 몰랐다 → 중요 알림
+            string line = $"{Josa.IGa(merc.Name)} {reason} 돌아가면 길드를 떠나겠다고 한다.";
+            DailyLog.Add(line);
+            ToastLog.Show(line, false);
+            Mailbox.Post(MailKind.Alert, $"{merc.Name} 이탈 예정", line, important: true);
         }
 
         /// <summary>

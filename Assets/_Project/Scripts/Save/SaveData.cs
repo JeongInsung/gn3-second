@@ -70,6 +70,8 @@ namespace GN3.Save
         public List<LootSave> loot = new List<LootSave>(); // 전리품 가방(예전 저장엔 없어 빈 가방)
         public List<LootSave> bestiaryKills = new List<LootSave>(); // 도감 처치 수(이름 = 도감 칸, 예전 저장엔 없어 전부 미발견)
         public List<LootSave> bestiaryBest = new List<LootSave>(); // 도감 칸마다 쓰러뜨린 가장 높은 개체 등급(count = 등급 번호)
+        public List<LootSave> lastTeam = new List<LootSave>(); // 파티 창 [지난 편성]: name = 용병 id, count = 분대(0·1). 옛 저장은 비어 있다
+        public string lastLeader0, lastLeader1;
         public List<ContractSave> contracts = new List<ContractSave>(); // 용병 계약(예전 저장엔 없어 기본 계약을 준다)
         // 근처 길드(버전 8). 예전 저장엔 없어 불러올 때 새로 만든다.
         public List<RivalGuildSave> rivals = new List<RivalGuildSave>();
@@ -352,5 +354,8 @@ namespace GN3.Save
         public string enemy;
         public int count;
         public int tier;
+        /// <summary>혼합 라운드의 보조 적(QuestWave.SupportName). 옛 저장·혼합 아님이면 빈 값.</summary>
+        public string support;
+        public int supportCount;
     }
 }

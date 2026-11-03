@@ -341,8 +341,8 @@ namespace GN3.UI
             rect.anchoredPosition = new Vector2(MenuBarMargin + menuBarWidth + MenuBarMargin, -MenuBarMargin);
 
             var layout = barGO.GetComponent<HorizontalLayoutGroup>();
-            layout.spacing = 24f; // 칸 폭은 글씨에 딱 맞추고(최소 폭 없음) 칸 사이만 띄운다. 글씨가 길어지면 판도 같이 늘어난다
-            layout.padding = new RectOffset(14, 14, 0, 0); // 위아래 0 → 판 높이 40 = 메뉴 버튼 높이
+            layout.spacing = 16f; // 칸 폭은 글씨에 딱 맞추고(최소 폭 없음) 칸 사이만 띄운다. 글씨가 길어지면 판도 같이 늘어난다(오른쪽 [1배속]과는 HudGapKeeper가 띄운다)
+            layout.padding = new RectOffset(12, 12, 0, 0); // 위아래 0 → 판 높이 40 = 메뉴 버튼 높이
             layout.childAlignment = TextAnchor.UpperLeft; // 메뉴 버튼(높이 40, 위 맞춤)과 같은 줄에 오도록 위로 붙인다
             layout.childForceExpandWidth = false;
             layout.childForceExpandHeight = false;
@@ -378,7 +378,9 @@ namespace GN3.UI
             // 불러오기: 저장 기록 목록에서 골라 불러온다(LoadGamePanel)
             CreateSmallButton(canvasTransform, "LoadButton", "불러오기", 1, LoadGamePanel.Open);
             // 가만히 둬도 흐르는 시간의 속도(1배속 ↔ 2배속)
-            controller.SetSpeedButton(CreateSmallButton(canvasTransform, "SpeedButton", "1배속", 2, controller.ToggleSpeed));
+            var speedButton = CreateSmallButton(canvasTransform, "SpeedButton", "1배속", 2, controller.ToggleSpeed);
+            controller.SetSpeedButton(speedButton);
+            barGO.AddComponent<HudGapKeeper>().Right = (RectTransform)speedButton.transform; // 날짜 줄이 길어져도 [1배속]에 붙지 않게
 
             // 지나간 알림(왼쪽 아래 토스트) 다시 보기: 화면 오른쪽 아래 우편함 아이콘, 안 읽은 알림이 있으면 "!"
             MailboxButton.Create(canvasTransform);
@@ -595,6 +597,7 @@ namespace GN3.UI
             CreateMenuButton(second.transform, "의뢰 기록", "UIIcons/menu_quest", QuestHistoryWindow.Open, "H"); // 끝낸 의뢰 목록·성공률
             CreateMenuButton(second.transform, "일정", "UIIcons/menu_quest", CalendarPanel.Open, "C"); // 상인 방문·주급·계약 만료·생일
             CreateMenuButton(second.transform, "업적", "UIIcons/menu_guilds", AchievementsPanel.Open, "Y"); // 업적·명예의 전당·전체 통계
+            CreateMenuButton(second.transform, "가이드", "UIIcons/menu_quest", () => GuidebookPanel.Open(), "F1"); // 창마다 붙어 있던 조작·보조 설명을 모은 책
         }
 
         private static void OpenPanel(GameObject panel) => PanelActivator.Open(panel);

@@ -66,7 +66,12 @@ namespace GN3.UI
         {
             if (image.sprite != null && !DefaultSpriteNames.Contains(image.sprite.name)) return true; // 자기 그림이 있다
             if (image.type == Image.Type.Filled) return true;                                       // 채움 막대
-            if (image.GetComponent<Mask>() != null || image.GetComponent<RectMask2D>() != null) return true; // 마스크·초상 칸
+            if (image.GetComponent<Mask>() != null || image.GetComponent<RectMask2D>() != null) // 마스크·초상 칸
+            {
+                // 목록 칸(스크롤 뷰)의 옅은 흰 바탕(알파 0.05 등)은 리니어 색 공간에서 섞이면 밝은 회색 판으로 떠 보였다 → 어두운 칸 그림으로
+                if (image.sprite == null && IsFaintWhite(image.color)) SetSprite(image, UITheme.Inset, Color.white);
+                return true;
+            }
             if (image.gameObject.name.Contains("Portrait")) return true; // 그림이 나중에 들어오는 초상 자리(건물 상인 등)
 
             var rect = image.rectTransform.rect.size;
@@ -122,6 +127,8 @@ namespace GN3.UI
             tint.a = RowAlpha;
             return tint;
         }
+
+        private static bool IsFaintWhite(Color c) => c.a < 0.25f && c.r > 0.8f && c.g > 0.8f && c.b > 0.8f;
 
         /// <summary>화면 전체를 덮는 반투명 어두운 막(건물 패널 뒤 배경 등).</summary>
         private static bool IsScreenOverlay(Image image)

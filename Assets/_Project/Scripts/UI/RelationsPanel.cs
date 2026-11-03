@@ -184,7 +184,7 @@ namespace GN3.UI
                 Refresh();
             });
 
-            var label = CreateText("Text", 14, go.transform, selected ? $"<color={UITheme.SelectedTextHex}><b>{merc.Name}</b></color>" : merc.Name);
+            var label = CreateText("Text", UITheme.BodySize, go.transform, selected ? $"<color={UITheme.SelectedTextHex}><b>{merc.Name}</b></color>" : merc.Name);
             Stretch(label.rectTransform);
             label.alignment = TextAnchor.MiddleCenter;
             label.horizontalOverflow = HorizontalWrapMode.Overflow;

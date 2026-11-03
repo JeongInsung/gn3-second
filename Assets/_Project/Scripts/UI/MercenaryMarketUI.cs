@@ -150,7 +150,7 @@ namespace GN3.UI
             {
                 int mode = i;
                 var button = ShopListUI.CreateButton(row.transform, SortNames[i], () => { _sort = mode; RefreshMarket(); }, 80f);
-                if (i == _sort) UITheme.CreateSelectFrame(button.transform); // 지금 정렬
+                if (i == _sort) UITheme.MarkSelected(button); // 지금 정렬
             }
             UIThemeApplier.ApplyNow(row.transform); // 상점 버튼과 같은 테마
             return row;
@@ -190,12 +190,12 @@ namespace GN3.UI
             nameText.fontStyle = FontStyle.Bold;
             nameText.horizontalOverflow = HorizontalWrapMode.Wrap; // 옆 칸을 덮지 않고 줄을 바꾼다
             var nameLayout = nameText.gameObject.AddComponent<LayoutElement>();
-            nameLayout.minWidth = nameLayout.preferredWidth = 300;
+            nameLayout.minWidth = nameLayout.preferredWidth = 250;
 
             var classText = CreateText(row.transform, $"{merc.Class.ClassName}  {merc.Age}세 · {GrowthTuning.RateLabel(merc.Age)}", 18, TextAnchor.MiddleLeft); // 재능은 숨은 값
             classText.horizontalOverflow = HorizontalWrapMode.Wrap;
             var classLayout = classText.gameObject.AddComponent<LayoutElement>();
-            classLayout.minWidth = classLayout.preferredWidth = 220;
+            classLayout.minWidth = classLayout.preferredWidth = 270; // "길잡이  43세 · 성장 아주 느림"이 한 줄에 들어가게(이름 칸에서 50 덜어 옴)
 
             // 전투력 + 주급 대략(에이전트 귀띔 범위 — 고용하기 전에 비교할 수 있게)
             var demand = ContractTerms.For(merc, renewal: false);

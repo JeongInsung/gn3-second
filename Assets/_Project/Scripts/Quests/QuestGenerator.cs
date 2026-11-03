@@ -58,6 +58,8 @@ namespace GN3.Quests
             _ => 1,
         };
 
+        private const double MixedWaveChance = 0.4;
+
         /// <summary>
         /// 라운드 구성. 마지막 라운드가 퀘스트의 대표 적이고, 앞 라운드는 그보다 낮거나 같은 계층의 다른 무리.
         /// Lv1·2 1라운드(초반 소규모: Lv1 1~2마리 · Lv2 2~3마리) · Lv3 2~3라운드 · Lv4 3라운드(약탈 → 지형 동물 → 지형 동물) · Lv5 3라운드(약탈 → 지형 동물 → 앤트킹 단독).
@@ -90,7 +92,11 @@ namespace GN3.Quests
                     : waveCount == 1 ? rng.Next(minCount, (level == 1 ? Math.Min(maxCount, 4) : maxCount) + 1)
                     : (last && level == 4) || level >= 5 ? rng.Next(3, 5) // Lv5는 6명(두 분대)이 가니 앞 라운드도 3~4마리
                     : rng.Next(2, Math.Max(2, Math.Min(maxCount, 3)) + 1);
-                waves.Add(new QuestWave(name, count, waveTier));
+                // 혼합 라운드: 보스가 아닌 3마리 이상 라운드의 MixedWaveChance는 같은 계층의 다른 무리가 1~2마리 섞인다(총 수는 그대로).
+                string support = waveTier < 2 && count >= 3 && rng.NextDouble() < MixedWaveChance
+                    ? RegionInfo.GetSupportName(region, waveTier, name, rng) : null;
+                int supportCount = support == null ? 0 : count >= 4 ? rng.Next(1, 3) : 1;
+                waves.Add(new QuestWave(name, count - supportCount, waveTier, support, supportCount));
             }
             return waves;
         }

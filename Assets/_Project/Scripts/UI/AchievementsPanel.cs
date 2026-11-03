@@ -64,7 +64,7 @@ namespace GN3.UI
             if (_panel != null) Destroy(_panel);
             _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
             _panel.transform.SetParent(transform, false);
-            EscapeCloser.Register(_panel, Close);
+            EscapeCloser.Register(_panel, Close, justOpened: true); // 열 때마다 새로 만든다 — 열리면 다른 창을 닫게
             var rect = (RectTransform)_panel.transform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
             rect.sizeDelta = new Vector2(Width, Height);
@@ -127,11 +127,11 @@ namespace GN3.UI
         private void TabButton(Transform parent, string label, Tab tab)
         {
             var button = ShopListUI.CreateButton(parent, label, () => SetTab(tab), 120f);
-            button.interactable = _tab != tab; // 고른 탭은 눌린 채
+            if (_tab == tab) UITheme.MarkSelected(button); // 고른 탭: 흰 테두리 + 금빛 글씨(다른 창과 같게)
         }
 
         /// <summary>한 칸: 바탕 + 두 줄(굵은 머리 / 흐린 설명).</summary>
-        private static void Card(Transform parent, string head, string sub, Color tint)
+        private static void Card(Transform parent, string head, string sub, Color tint, float? progress = null)
         {
             var row = new GameObject("Card", typeof(RectTransform), typeof(Image), typeof(VerticalLayoutGroup));
             row.transform.SetParent(parent, false);
@@ -147,6 +147,41 @@ namespace GN3.UI
             if (string.IsNullOrEmpty(sub)) return;
             var subText = ShopListUI.CreateText(row.transform, sub, 14, TextAnchor.MiddleLeft, UITheme.MutedText);
             subText.supportRichText = true;
+            if (progress.HasValue) ProgressBar(row.transform, progress.Value);
+        }
+
+        /// <summary>얇은 진행 막대(어두운 바탕 + 호박색 채움). 둘 다 채움형이라 UIThemeApplier가 칸 그림으로 덮지 않는다.</summary>
+        private static void ProgressBar(Transform parent, float ratio)
+        {
+            var track = new GameObject("Progress", typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+            track.transform.SetParent(parent, false);
+            track.GetComponent<LayoutElement>().minHeight = track.GetComponent<LayoutElement>().preferredHeight = 6f;
+            var back = track.GetComponent<Image>();
+            back.type = Image.Type.Filled;
+            back.color = new Color(0f, 0f, 0f, 0.5f);
+            back.raycastTarget = false;
+            var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fill.transform.SetParent(track.transform, false);
+            var rect = (RectTransform)fill.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            var image = fill.GetComponent<Image>();
+            image.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f));
+            image.type = Image.Type.Filled;
+            image.fillMethod = Image.FillMethod.Horizontal;
+            image.fillAmount = Mathf.Clamp01(ratio);
+            image.color = UITheme.TitleText;
+            image.raycastTarget = false;
+        }
+
+        /// <summary>"3/10" 같은 진행 글자 → 0~1. 못 읽으면 null(막대 없이).</summary>
+        private static float? ParseProgress(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return null;
+            var parts = text.Split('/');
+            if (parts.Length != 2 || !int.TryParse(parts[0].Trim(), out int have) || !int.TryParse(parts[1].Trim(), out int need) || need <= 0) return null;
+            return (float)have / need;
         }
 
         private static void FillAchievements(Transform content)
@@ -155,11 +190,13 @@ namespace GN3.UI
             foreach (var def in Achievements.All.OrderByDescending(Achievements.IsDone))
             {
                 bool done = Achievements.IsDone(def);
-                string progress = !done && def.Progress != null ? $"  <color=#a3937c>{def.Progress()}</color>" : "";
+                string progressText = !done && def.Progress != null ? def.Progress() : null;
+                string progress = progressText != null ? $"  <color=#a3937c>{progressText}</color>" : "";
                 Card(content,
                     (done ? "<color=#ffd36b>★</color> " : "<color=#5a544a>★</color> ") + $"<b>{def.Title}</b>{progress}", // 못 이룬 것은 어두운 별
                     $"{def.Description} · 보상 {def.Reward}G" + (done ? "  <color=#7fd36b>달성</color>" : ""),
-                    done ? new Color(0.45f, 0.36f, 0.12f, 0.35f) : new Color(1f, 1f, 1f, 0.05f));
+                    done ? new Color(0.45f, 0.36f, 0.12f, 0.35f) : new Color(1f, 1f, 1f, 0.05f),
+                    ParseProgress(progressText));
             }
         }
 
@@ -193,8 +230,6 @@ namespace GN3.UI
             Card(content, $"<b>길드</b>  {Guild.CurrentName} · 명성 {Guild.Reputation}",
                 $"은월의 숲 Lv{ForestProgress.UnlockedLevel}" + (ForestProgress.BossDefeated ? " · 앤트킹 토벌" : "") +
                 $" · 도감 {Bestiary.DiscoveredCount}/{Bestiary.All.Length} · 떠난 용병 {Achievements.Memorials.Count}명", new Color(1f, 1f, 1f, 0.05f));
-            ShopListUI.CreateText(content, "의뢰 기록 창(H)은 최근 100건, 장부(G)는 최근 14일만 보여 주지만 여기 통계는 처음부터 센다.", 13, TextAnchor.MiddleLeft, UITheme.MutedText)
-                .horizontalOverflow = HorizontalWrapMode.Wrap;
         }
 
         private void OnDestroy()

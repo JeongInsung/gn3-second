@@ -22,7 +22,8 @@ namespace GN3.Quests
             /// <summary>다 잡은 라운드 수(승리면 WaveCount).</summary>
             public int WavesCleared;
             public int WaveCount = 1;
-            /// <summary>직접 전투: 고블린 궁수가 이름("고블린 궁수")으로 구분돼 온다. 자동 전투는 false라 전리품·도감이 셋 중 하나를 궁수로 친다.</summary>
+            /// <summary>궁수·목수·방패병이 이름("고블린 궁수")으로 구분돼 온다(SpawnWave → Dress, 직접·자동 퀘스트 전투 모두).
+            /// false면 전리품·도감이 셋 중 하나를 궁수로 친다(이동 중 습격 등 이름 구분이 없는 전투).</summary>
             public bool NamedArchers;
             /// <summary>직접 전투: 시체를 뒤져 챙긴 전리품(BattleUIController). 있으면 처치 목록으로 굴리지 않고 이것만 받는다(지든 이기든).
             /// 자동 전투는 null(처치한 적마다 굴림).</summary>
@@ -48,12 +49,26 @@ namespace GN3.Quests
         private static List<(LootItem item, int count)> GroupLoot(IEnumerable<(LootItem item, int count)> loot) =>
             loot.GroupBy(l => l.item).Select(g => (g.Key, g.Sum(l => l.count))).ToList();
 
-        /// <summary>퀘스트 waveIndex번째 라운드의 적(이름은 라운드 적, 능력치는 퀘스트 난이도, 보스는 따로 세게).</summary>
+        /// <summary>퀘스트 waveIndex번째 라운드의 적(이름은 라운드 적, 능력치는 퀘스트 난이도, 보스는 따로 세게).
+        /// 혼합 라운드면 보조 적을 뒤에 더하고, 궁수·목수·방패병 역할을 붙인다(EnemySquadGenerator.Dress — 직접·자동 전투 공통).</summary>
         public static List<Combatant> SpawnWave(Quest quest, int waveIndex, System.Random rng)
         {
             var wave = quest.Waves[waveIndex];
-            return EnemySquadGenerator.Generate(quest.Region, wave.Count, quest.Difficulty, rng, wave.Tier, wave.EnemyName);
+            var enemies = EnemySquadGenerator.Generate(quest.Region, wave.Count, quest.Difficulty, rng, wave.Tier, wave.EnemyName);
+            if (wave.HasSupport)
+                enemies.AddRange(EnemySquadGenerator.Generate(quest.Region, wave.SupportCount, quest.Difficulty, rng, wave.Tier, wave.SupportName));
+            return EnemySquadGenerator.Dress(enemies);
         }
+
+        /// <summary>앤트킹 격노 때 부르는 졸개(그루터기 엔트) — 직접 전투(BattleUIController)와 같다.
+        /// 능력치는 퀘스트 난이도보다 EnrageSummonLevelDrop 낮게(퀘스트 난이도 그대로면 Lv5 승률이 너무 떨어졌다).</summary>
+        public static System.Func<int, List<Combatant>> SummonFactory(Quest quest, System.Random rng) =>
+            count => EnemySquadGenerator.Dress(EnemySquadGenerator.Generate(quest.Region, count,
+                System.Math.Max(1, quest.Difficulty - EnrageSummonLevelDrop), rng, 1, EnrageSummonName));
+
+        public const int EnrageSummonLevelDrop = 3;
+
+        public const string EnrageSummonName = "그루터기 엔트";
 
         /// <summary>라운드를 차례로 자동 전투한다. 체력은 라운드 사이에 그대로 이어지고, 한 라운드라도 지면(또는 비기면) 거기서 실패.</summary>
         public static Battle Simulate(Expedition expedition)
@@ -70,8 +85,8 @@ namespace GN3.Quests
             for (int w = 0; w < quest.WaveCount; w++)
             {
                 var enemies = SpawnWave(quest, w, Rng);
-                allEnemies.AddRange(enemies);
-                var result = new AutoBattleSimulator().Simulate(combatants, enemies, skills: skills);
+                var result = new AutoBattleSimulator().Simulate(combatants, enemies, skills: skills, summonFactory: SummonFactory(quest, Rng));
+                allEnemies.AddRange(enemies); // 전투 뒤에 — 앤트킹이 격노해 불러낸 졸개도 들어가게
                 log.AddRange(result.Log);
                 rounds += result.Rounds;
                 outcome = result.Outcome;
@@ -80,7 +95,7 @@ namespace GN3.Quests
             }
 
             var total = new BattleResult { Outcome = outcome, Rounds = rounds, Log = log, TeamA = combatants, TeamB = allEnemies };
-            return new Battle { Result = total, Fighters = fighters, Combatants = combatants, WavesCleared = cleared, WaveCount = quest.WaveCount };
+            return new Battle { Result = total, Fighters = fighters, Combatants = combatants, WavesCleared = cleared, WaveCount = quest.WaveCount, NamedArchers = true };
         }
 
         /// <summary>

@@ -286,7 +286,11 @@ namespace GN3.UI
             var body = CreateText(box.transform, Mailbox.FullText(mail), 15, TextAnchor.UpperLeft, UITheme.BodyText);
             body.supportRichText = true;
 
-            if (!mail.IsPendingChoice) return;
+            if (!mail.IsPendingChoice)
+            {
+                if (mail.Link != null) CreateLinkButton(box.transform, mail);
+                return;
+            }
             if (mail.IsPendingEvent)
             {
                 CreateChoiceButtons(box.transform, mail);
@@ -302,6 +306,19 @@ namespace GN3.UI
             h.childForceExpandWidth = h.childForceExpandHeight = true;
             CreateButton(actions.transform, "자동 진행", Auto, null, null, new Color(0.25f, 0.55f, 0.35f, 1f));
             CreateButton(actions.transform, "직접 진행", Direct, null, null);
+        }
+
+        /// <summary>편지에서 바로 할 일 버튼 하나(Mailbox.Mail.Link — 예: [재계약]).</summary>
+        private void CreateLinkButton(Transform parent, Mailbox.Mail mail)
+        {
+            var actions = new GameObject("Link", typeof(RectTransform), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
+            actions.transform.SetParent(parent, false);
+            actions.GetComponent<LayoutElement>().preferredHeight = 34f;
+            var h = actions.GetComponent<HorizontalLayoutGroup>();
+            h.padding = new RectOffset(0, 400, 0, 0); // 버튼이 너무 넓어지지 않게
+            h.childControlWidth = h.childControlHeight = true;
+            h.childForceExpandWidth = h.childForceExpandHeight = true;
+            CreateButton(actions.transform, mail.LinkLabel, () => mail.Link?.Invoke(), null, null, new Color(0.25f, 0.55f, 0.35f, 1f));
         }
 
         /// <summary>사건 선택지(나중에 고르기). 고르면 결과가 본문에 붙고 목록을 다시 그린다(Mailbox.Changed).</summary>

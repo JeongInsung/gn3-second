@@ -125,7 +125,7 @@ namespace GN3.UI
             _menuRect.anchorMin = _menuRect.anchorMax = new Vector2(1f, 0f);
             _menuRect.pivot = Vector2.one; // 슬라이더 아래, 오른쪽 맞춤
             _menuRect.anchoredPosition = new Vector2(0f, -(Gap + SliderHeight + Gap));
-            _menuRect.sizeDelta = new Vector2(ButtonSize.x, MenuItemHeight * 3 + Gap * 2);
+            _menuRect.sizeDelta = new Vector2(ButtonSize.x, MenuItemHeight * 4 + Gap * 3);
             var layout = _menu.GetComponent<VerticalLayoutGroup>();
             layout.spacing = Gap;
             layout.childControlWidth = layout.childControlHeight = true;
@@ -134,7 +134,8 @@ namespace GN3.UI
             controller.SetSkipButtons(
                 CreateMenuItem("하루", () => controller.RequestSkipDays(1)),
                 CreateMenuItem("4일", () => controller.RequestSkipDays(4)),
-                CreateMenuItem("일주일", () => controller.RequestSkipDays(7)));
+                CreateMenuItem("일주일", () => controller.RequestSkipDays(7)),
+                CreateMenuItem("도착까지", controller.RequestSkipUntilArrival)); // 가장 먼저 도착할 파견대까지
             EscapeCloser.Register(_menu, Hide, WindowRole.Popup);
             _menu.SetActive(false);
         }

@@ -155,6 +155,30 @@ namespace GN3.Quests
             OnChanged?.Invoke();
         }
 
+        /// <summary>아직 목적지로 가는 중인 파견대를 불러들일 수 있는가(도착·귀환 중·사건 선택 대기면 안 된다).</summary>
+        public bool CanRecall(Expedition expedition) =>
+            expedition != null && _active.Contains(expedition) && !expedition.IsReturning && !expedition.IsReady && !expedition.AwaitingEvent;
+
+        /// <summary>
+        /// 가는 중인 파견대를 불러들인다: 의뢰는 실패(명성 벌점은 실패의 절반), 지나온 길의 절반만큼 걸려 마을로 돌아온다(BeginReturn과 같은 귀환 시간).
+        /// 싸우지 않았으니 체력·성장은 그대로. 의뢰 기록에 실패로 남고, 우편함에 편지를 넣는다.
+        /// </summary>
+        public bool Recall(Expedition expedition)
+        {
+            if (!CanRecall(expedition)) return false;
+            int penalty = Math.Max(1, GN3.Economy.Guild.FailPenalty / 2);
+            GN3.Economy.Guild.Add(-penalty);
+            QuestHistory.Record(expedition.Quest, false, 0, expedition.Members.Select(m => m.Name), null, new string[0]);
+            expedition.BeginReturn();
+            string line = $"{expedition.Quest.Title} — 파견대를 불러들였다 · 의뢰 실패 · 명성 -{penalty} · 귀환 {GameClock.FormatDuration(expedition.ReturnHoursFor)}";
+            OnTravelEvent?.Invoke(line);
+            DailyLog.Add(line);
+            GN3.UI.Mailbox.Post(GN3.UI.MailKind.QuestResult, $"{expedition.Quest.Title} — 철수",
+                $"파견대를 불러들였습니다. 의뢰는 실패로 처리됩니다(명성 -{penalty}).\n귀환: {string.Join(", ", expedition.Members.Where(m => m.IsAlive).Select(m => m.Name))} ({GameClock.FormatDuration(expedition.ReturnHoursFor)})");
+            OnChanged?.Invoke();
+            return true;
+        }
+
         /// <summary>파견대가 하루를 더 들여 휴식하며 체력을 회복한다.</summary>
         public void Rest(Expedition expedition)
         {

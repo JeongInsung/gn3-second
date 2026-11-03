@@ -83,6 +83,8 @@ namespace GN3.UI
             _title.text = mail.Title;
             _when.text = Mailbox.FormatWhen(mail);
             _body.text = mail.Body;
+            _linkButton.gameObject.SetActive(mail.Link != null);
+            if (mail.Link != null) _linkButton.GetComponentInChildren<Text>().text = mail.LinkLabel;
             bool arrival = mail.Kind == MailKind.Arrival;
             bool choosing = mail.IsPendingEvent;
             _arrivalRow.SetActive(arrival);
@@ -91,7 +93,7 @@ namespace GN3.UI
             if (choosing) BuildChoices(mail);
 
             _root.SetActive(true);
-            LayoutRebuilder.ForceRebuildLayoutImmediate(_body.rectTransform);
+            LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_body.transform.parent); // 여백 칸째로
             FitToBody();
             _scroll.verticalNormalizedPosition = 1f;
             UIThemeApplier.ApplyNow(_root.transform);
@@ -100,9 +102,12 @@ namespace GN3.UI
         /// <summary>본문 칸을 글 길이에 맞춘다(MinBodyHeight ~ 원래 높이, 넘치면 스크롤). 판도 같이 줄어 짧은 알림에 빈 회색 칸이 남지 않는다.</summary>
         private void FitToBody()
         {
-            float bodyHeight = Mathf.Clamp(_body.preferredHeight + 20f, MinBodyHeight, Height - ChromeHeight);
+            float bodyHeight = Mathf.Clamp(_body.preferredHeight + 28f, MinBodyHeight, Height - ChromeHeight); // 여백 칸 위아래 14씩
             _bodyView.sizeDelta = new Vector2(_bodyView.sizeDelta.x, bodyHeight);
             _panelRect.sizeDelta = new Vector2(_panelRect.sizeDelta.x, bodyHeight + ChromeHeight);
+            // 칸 크기를 바꾼 뒤 스크롤이 지난 편지 위치에 남아 첫 줄 윗부분이 잘려 보였다 → 맨 위로
+            Canvas.ForceUpdateCanvases();
+            _scroll.verticalNormalizedPosition = 1f;
         }
 
         private void Close()
@@ -118,6 +123,16 @@ namespace GN3.UI
         {
             Mailbox.Acknowledge(_current);
             Close();
+        }
+
+        private Button _linkButton;
+
+        /// <summary>편지의 할 일 버튼: 확인 처리하고 그 일을 연다(예: 재계약 협상 창).</summary>
+        private void FollowLink()
+        {
+            var link = _current?.Link;
+            Confirm();
+            link?.Invoke();
         }
 
         private void OpenMailbox()
@@ -156,7 +171,7 @@ namespace GN3.UI
             _body.text = _current.Body;
             _choiceRow.SetActive(false);
             _noticeRow.SetActive(true);
-            LayoutRebuilder.ForceRebuildLayoutImmediate(_body.rectTransform);
+            LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)_body.transform.parent); // 여백 칸째로
             FitToBody();
             _scroll.verticalNormalizedPosition = 0f; // 결과가 보이게 맨 아래로
             UIThemeApplier.ApplyNow(_root.transform);
@@ -226,17 +241,25 @@ namespace GN3.UI
             _bodyView = view.GetComponent<RectTransform>();
             Place(_bodyView, new Vector2(18f, -92f), new Vector2(Width - 36f, Height - ChromeHeight));
             view.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.05f); // UIThemeApplier가 어두운 칸으로
-            _body = CreateText(view.transform, "", 16, TextAnchor.UpperLeft, UITheme.BodyText);
+            // 스크롤 내용 = 여백 칸(위아래 14·좌우 12) 안의 본문 글자. 글자에 바로 위치 여백을 주면 스크롤이 0으로 되돌려
+            // 첫 줄이 칸 맨 위에 붙어 글자 윗부분이 잘렸다.
+            var content = new GameObject("Content", typeof(RectTransform), typeof(VerticalLayoutGroup), typeof(ContentSizeFitter));
+            content.transform.SetParent(view.transform, false);
+            var contentRect = (RectTransform)content.transform;
+            contentRect.anchorMin = new Vector2(0f, 1f);
+            contentRect.anchorMax = new Vector2(1f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.offsetMin = contentRect.offsetMax = Vector2.zero;
+            var contentLayout = content.GetComponent<VerticalLayoutGroup>();
+            contentLayout.padding = new RectOffset(12, 12, 14, 14);
+            contentLayout.childControlWidth = contentLayout.childControlHeight = true;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
+            content.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _body = CreateText(content.transform, "", 16, TextAnchor.UpperLeft, UITheme.BodyText);
             _body.supportRichText = true;
-            var bodyRect = _body.rectTransform;
-            bodyRect.anchorMin = new Vector2(0f, 1f);
-            bodyRect.anchorMax = new Vector2(1f, 1f);
-            bodyRect.pivot = new Vector2(0.5f, 1f);
-            bodyRect.offsetMin = new Vector2(12f, 0f);
-            bodyRect.offsetMax = new Vector2(-12f, -10f);
-            _body.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             _scroll = view.GetComponent<ScrollRect>();
-            _scroll.content = bodyRect;
+            _scroll.content = contentRect;
             _scroll.horizontal = false;
             SmoothWheelScroll.Attach(_scroll);
             ScrollListWrapper.AddOverlayScrollbar(_scroll); // 공통 스크롤바(내용이 짧으면 숨음)
@@ -249,6 +272,8 @@ namespace GN3.UI
             _noticeRow = CreateButtonRow(panel.transform);
             CreateButton(_noticeRow.transform, "확인", Confirm, new Color(0.25f, 0.55f, 0.35f, 1f));
             CreateButton(_noticeRow.transform, "우편함 열기", OpenMailbox, new Color(0.3f, 0.3f, 0.35f, 1f));
+            _linkButton = CreateButton(_noticeRow.transform, "", FollowLink, new Color(0.25f, 0.55f, 0.35f, 1f)); // 편지에 할 일 버튼이 있을 때만(예: [재계약])
+            _linkButton.gameObject.SetActive(false);
 
             _choiceRow = CreateButtonRow(panel.transform);
             _choiceRow.SetActive(false);

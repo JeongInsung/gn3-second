@@ -14,7 +14,7 @@ namespace GN3.Quests
         /// <summary>대표 적(마지막 라운드). 제목·예전 저장용.</summary>
         public string EnemyName { get; }
         /// <summary>모든 라운드 적 수 합(보상 계산 등).</summary>
-        public int EnemyCount => Waves.Sum(w => w.Count);
+        public int EnemyCount => Waves.Sum(w => w.TotalCount);
         public int Difficulty { get; }
 
         /// <summary>부탁한 마을 사람과 부탁 글(QuestRequests). 예전 저장에서 불러온 퀘스트는 null.</summary>
@@ -32,7 +32,8 @@ namespace GN3.Quests
 
         /// <summary>이 의뢰의 적들에게서 나올 수 있는 건설 재료(게시판 "얻는 재료").</summary>
         public IEnumerable<GN3.Economy.LootItem> DroppedMaterials =>
-            Waves.SelectMany(w => GN3.Economy.LootCatalog.MaterialsForEnemy(w.EnemyName)).Distinct();
+            Waves.SelectMany(w => GN3.Economy.LootCatalog.MaterialsForEnemy(w.EnemyName)
+                .Concat(w.HasSupport ? GN3.Economy.LootCatalog.MaterialsForEnemy(w.SupportName) : Enumerable.Empty<GN3.Economy.LootItem>())).Distinct();
 
         /// <summary>"쇠못 2 · 밧줄 1"(재료 보상이 없으면 빈 문자열).</summary>
         public string MaterialRewardText => string.Join(" · ", MaterialReward.Select(m => $"{m.item.Name} {m.count}"));
@@ -41,7 +42,7 @@ namespace GN3.Quests
         public IReadOnlyList<QuestWave> Waves { get; }
         public int WaveCount => Waves.Count;
         /// <summary>한 라운드에 나오는 적의 최대 수(파견 인원·습격 규모 기준).</summary>
-        public int MaxWaveSize => Waves.Max(w => w.Count);
+        public int MaxWaveSize => Waves.Max(w => w.TotalCount);
 
         /// <summary>가장 높은 몬스터 계층(0=약탈 세력/1=지형 동물/2=보스). 난이도는 은월의 숲 Lv(1~5)라 계층과 1:1이 아니다.</summary>
         public int Tier => Waves.Max(w => w.Tier);
