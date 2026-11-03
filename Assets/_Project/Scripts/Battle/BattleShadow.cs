@@ -26,8 +26,9 @@ namespace GN3.Battle
 
         // 다시 그릴지 판단용 마지막 상태
         private Vector2 _lastDir;
-        private Vector3 _lastPosition;
         private Vector2 _lastSize;
+        private Vector3 _lastScale;
+        private float _lastBaseLine;
         private Sprite _lastSprite;
 
         // Domain Reload가 꺼져 있어도 Play마다 비운다(Sprite.Create로 만든 스프라이트는 Play가 끝나면 파괴된다).
@@ -104,29 +105,41 @@ namespace GN3.Battle
             var src = _source.rectTransform;
             var parent = rect.parent;
 
-            _image.sprite = _source.sprite;
-            _image.preserveAspect = _source.preserveAspect;
-            _image.type = Image.Type.Simple;
-            rect.pivot = src.pivot;
-            rect.sizeDelta = src.rect.size;
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.position = src.position;
-            rect.rotation = src.rotation;
+            // 같은 값이어도 대입하면 캔버스를 다시 묶게 하는 것이 있어, 바뀐 것만 넣는다(나무·꽃 그림자는 거의 안 바뀐다)
+            if (_image.sprite != _source.sprite) _image.sprite = _source.sprite;
+            if (_image.preserveAspect != _source.preserveAspect) _image.preserveAspect = _source.preserveAspect;
+            if (_image.type != Image.Type.Simple) _image.type = Image.Type.Simple;
+            if (rect.pivot != src.pivot) rect.pivot = src.pivot;
+            Vector2 size = src.rect.size;
+            if (rect.sizeDelta != size) rect.sizeDelta = size;
+            var center = new Vector2(0.5f, 0.5f);
+            if (rect.anchorMin != center || rect.anchorMax != center) rect.anchorMin = rect.anchorMax = center;
+            if (rect.position != src.position) rect.position = src.position;
+            if (rect.rotation != src.rotation) rect.rotation = src.rotation;
             Vector3 parentScale = parent != null ? parent.lossyScale : Vector3.one;
             Vector3 srcScale = src.lossyScale;
-            rect.localScale = new Vector3(SafeDiv(srcScale.x, parentScale.x), SafeDiv(srcScale.y, parentScale.y), 1f);
+            var scale = new Vector3(SafeDiv(srcScale.x, parentScale.x), SafeDiv(srcScale.y, parentScale.y), 1f);
+            if (rect.localScale != scale) rect.localScale = scale;
 
             var sky = BattleLighting.Current;
             float alpha = sky.ShadowAlpha * _source.color.a * _source.canvasRenderer.GetInheritedAlpha();
-            _image.color = new Color(0f, 0f, 0f, alpha);
-            _image.enabled = _source.isActiveAndEnabled && _source.sprite != null && alpha > 0.002f;
+            alpha = Mathf.Round(alpha * 255f) / 255f; // 8비트로 그리므로 그보다 잘게 바뀐 건 다시 칠하지 않는다
+            var color = new Color(0f, 0f, 0f, alpha);
+            if (_image.color != color) _image.color = color;
+            bool show = _source.isActiveAndEnabled && _source.sprite != null && alpha > 0.002f;
+            if (_image.enabled != show) _image.enabled = show;
 
-            if (sky.ShadowDir != _lastDir || rect.position != _lastPosition || rect.sizeDelta != _lastSize || _image.sprite != _lastSprite || _groundAnchor != null)
+            // 메시는 로컬 좌표라 자리 이동만으로는 다시 만들 필요가 없다(캔버스가 옮겨 그린다).
+            // 모양이 바뀌는 것(해 방향·그림·크기·뒤집기·발밑 선)이 바뀔 때만 다시 만든다 — 전엔 유닛 그림자가 매 프레임 다시 만들어졌다.
+            float baseLine = _groundAnchor != null ? rect.InverseTransformPoint(_groundAnchor.position).y : 0f;
+            if (sky.ShadowDir != _lastDir || rect.sizeDelta != _lastSize || _image.sprite != _lastSprite
+                || rect.localScale != _lastScale || Mathf.Abs(baseLine - _lastBaseLine) > 0.01f)
             {
                 _lastDir = sky.ShadowDir;
-                _lastPosition = rect.position;
                 _lastSize = rect.sizeDelta;
                 _lastSprite = _image.sprite;
+                _lastScale = rect.localScale;
+                _lastBaseLine = baseLine;
                 _image.SetVerticesDirty();
             }
         }

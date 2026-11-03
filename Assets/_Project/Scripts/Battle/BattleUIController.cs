@@ -965,16 +965,12 @@ namespace GN3.Battle
             var kb = Keyboard.current;
             if (kb == null) return;
             if (kb.qKey.wasPressedThisFrame) PressSkill();
-<<<<<<< HEAD
+            if (kb.aKey.wasPressedThisFrame) ToggleLeaderAuto();
             if (kb.escapeKey.wasPressedThisFrame && _escConsumedFrame != Time.frameCount)
             {
                 if (_picking || _focusPicking) { _picking = false; _focusPicking = false; }
                 else ClearSelection(); // 고르는 중이 아니면 Esc는 여러 대원 선택 해제
             }
-=======
-            if (kb.aKey.wasPressedThisFrame) ToggleLeaderAuto();
-            if (kb.escapeKey.wasPressedThisFrame && _escConsumedFrame != Time.frameCount) { _picking = false; _focusPicking = false; }
->>>>>>> 9c25d77aac9d4c1b75a095a295717b31bdb0e77c
             // 분대 명령 1~4: 멈추지 않아도 바로(일시정지 화면 버튼과 같은 명령·쿨타임)
             if (!_resultShown && !_salvaging)
             {
@@ -1208,15 +1204,10 @@ namespace GN3.Battle
                 ? (skill != null && skill.TargetType == SkillTargetType.Ally
                     ? "치료할 아군을 클릭 (Q: 자신 · Esc: 취소)"
                     : "스킬을 쓸 적을 클릭 (Esc: 취소)")
-<<<<<<< HEAD
                 : HasSelection
                 ? $"대원 {_selected.Count}명 선택 — 땅 클릭: 함께 이동 · 적 클릭: 함께 공격 · Esc: 선택 해제"
                     + "\n빈 땅을 끌어 다시 고르기 · Shift+끌기: 더 고르기 · Shift+클릭: 넣기/빼기"
-                : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지" + (_session.HasTwoSquads ? " · Tab: 분대 전환" : "")
-                    + "\n대원을 끌어 땅에 놓으면 그 자리로 · 적 위에 놓으면 그 적 공격 · 빈 땅 끌기·Shift+클릭: 여러 명 선택";
-=======
                 : "F1: 가이드북"; // 기본 조작 설명은 가이드북에 — 화면에는 지금 고르는 중일 때 필요한 안내만
->>>>>>> 9c25d77aac9d4c1b75a095a295717b31bdb0e77c
         }
 
         private void UpdateUnitView(UnitView v)
@@ -3131,6 +3122,9 @@ namespace GN3.Battle
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.matchWidthOrHeight = 0.5f;
+            // 화면 밖 컬링: 오버레이 UI는 카메라 컬링이 안 되므로, 화면(캔버스 루트) 밖으로 완전히 나간 그림
+            // (판 밖 잔디·숲 등)은 RectMask2D가 묶기·그리기에서 뺀다. 화면 안에 걸친 그림은 그대로 그린다.
+            canvasGO.AddComponent<RectMask2D>();
             var root = canvasGO.transform;
 
             if (FindFirstObjectByType<EventSystem>() == null)

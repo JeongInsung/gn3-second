@@ -96,6 +96,7 @@ namespace GN3.Battle
             var layer = new GameObject("GroundTiles", typeof(RectTransform));
             layer.transform.SetParent(field, false);
             layer.transform.SetAsFirstSibling();
+            SeparateCanvas(layer);
             var layerRect = (RectTransform)layer.transform;
             layerRect.anchorMin = Vector2.zero;
             layerRect.anchorMax = Vector2.one;
@@ -129,6 +130,7 @@ namespace GN3.Battle
 
             var surroundings = new GameObject("Surroundings", typeof(RectTransform));
             surroundings.transform.SetParent(root, false);
+            SeparateCanvas(surroundings);
             var backdrop = root.Find("Backdrop");
             surroundings.transform.SetSiblingIndex(backdrop != null ? backdrop.GetSiblingIndex() + 1 : 0);
             var surroundRect = (RectTransform)surroundings.transform;
@@ -196,6 +198,7 @@ namespace GN3.Battle
             // 판 안에 만들어 두고, BattleUIController가 유닛 층 바로 위로 옮긴다.
             var frontGo = new GameObject("ForestFront", typeof(RectTransform));
             frontGo.transform.SetParent(field, false);
+            SeparateCanvas(frontGo);
             var frontRect = (RectTransform)frontGo.transform;
             frontRect.anchorMin = frontRect.anchorMax = frontRect.pivot = Vector2.zero;
             var frontSway = frontGo.AddComponent<BattleTreeSway>();
@@ -338,8 +341,10 @@ namespace GN3.Battle
         private static (RectTransform shadows, BattleTreeSway sway) CreateForestLayer(Transform parent, string name, int siblingIndex)
         {
             var shadows = BattleDecor.CreateLayer(parent, name + "Shadows"); // 나무 해 그림자(나무보다 먼저 그린다)
+            SeparateCanvas(shadows.gameObject);
             var forest = new GameObject(name, typeof(RectTransform));
             forest.transform.SetParent(parent, false);
+            SeparateCanvas(forest); // 흔들림(1.5fps)으로 스프라이트가 바뀌어도 이 층만 다시 묶는다
             var forestRect = (RectTransform)forest.transform;
             forestRect.anchorMin = forestRect.anchorMax = forestRect.pivot = Vector2.zero;
             if (siblingIndex >= 0)
@@ -348,6 +353,16 @@ namespace GN3.Battle
                 forest.transform.SetSiblingIndex(siblingIndex + 1);
             }
             return (shadows, forest.AddComponent<BattleTreeSway>());
+        }
+
+        /// <summary>
+        /// 거의 안 바뀌는 층(바닥 타일·판 밖 잔디·숲)을 하위 캔버스로 떼어 낸다. uGUI는 캔버스 안 그림 하나만 바뀌어도
+        /// 그 캔버스 전체를 다시 묶는데, 유닛·이펙트는 매 프레임 바뀌므로 같은 캔버스에 있으면 타일 1,000여 장도 매 프레임 같이 묶였다.
+        /// overrideSorting을 켜지 않아 그리는 순서는 지금처럼 계층 순서 그대로. 클릭 받는 그림이 없어 GraphicRaycaster는 안 붙인다.
+        /// </summary>
+        internal static void SeparateCanvas(GameObject go)
+        {
+            if (go.GetComponent<Canvas>() == null) go.AddComponent<Canvas>();
         }
 
         /// <summary>이미 심은 나무와 너무 가깝지 않으면 심는다 → 빼곡하지만 줄이 맞지 않는다.</summary>
