@@ -596,7 +596,8 @@ namespace GN3.Battle
         {
             bool canDrag = _deploying || (_session.HasStarted && !_session.IsOver && !_resultShown);
             foreach (var v in _views.Values)
-                v.Animator?.SetOutline(canDrag && v.Unit.IsAlive && (v.Unit == _hoverUnit || v.Unit == _dragUnit));
+                v.Animator?.SetOutline(canDrag && v.Unit.IsAlive && (v.Unit == _hoverUnit || v.Unit == _dragUnit
+                    || (!_deploying && (IsSelected(v.Unit) || _boxPreview.Contains(v.Unit)))));
         }
 
         private void ResetFormation()
@@ -728,6 +729,13 @@ namespace GN3.Battle
             if (!CanOrderDrag(unit) || !TryFieldPoint(e, out var local)) return;
             var clamped = FieldBattleSession.ClampToField(new System.Numerics.Vector2(local.x, local.y));
             var enemy = EnemyAtDrop(new Vector2(clamped.X, clamped.Y));
+            if (IsSelected(unit) && _selected.Count > 1)
+            {
+                // 선택한 대원 하나를 끌어 놓으면 선택 전체가 따른다
+                if (enemy != null) CommandSelectionAttack(enemy);
+                else CommandSelectionMove(new Vector2(clamped.X, clamped.Y));
+                return;
+            }
             string name = unit.Combatant.Name;
             if (enemy != null)
             {
@@ -864,6 +872,7 @@ namespace GN3.Battle
             foreach (var v in _views.Values) UpdateUnitView(v);
             SortByDepth();
             if (_dragUnit != null) UpdateOrderDrag(_orderDragPoint);
+            UpdateSelection();
             UpdateDeployOutlines();
             RefreshSquadOrderBar();
 
@@ -886,7 +895,11 @@ namespace GN3.Battle
             var kb = Keyboard.current;
             if (kb == null) return;
             if (kb.qKey.wasPressedThisFrame) PressSkill();
-            if (kb.escapeKey.wasPressedThisFrame && _escConsumedFrame != Time.frameCount) { _picking = false; _focusPicking = false; }
+            if (kb.escapeKey.wasPressedThisFrame && _escConsumedFrame != Time.frameCount)
+            {
+                if (_picking || _focusPicking) { _picking = false; _focusPicking = false; }
+                else ClearSelection(); // 고르는 중이 아니면 Esc는 여러 대원 선택 해제
+            }
             // 분대 명령 1~4: 멈추지 않아도 바로(일시정지 화면 버튼과 같은 명령·쿨타임)
             if (!_resultShown && !_salvaging)
             {
@@ -970,7 +983,7 @@ namespace GN3.Battle
 
         private void OnGroundClicked(PointerEventData e)
         {
-            if (_deploying) return;
+            if (_deploying || e.dragging) return; // 끌기(네모 선택·대원 끌어 놓기)를 놓을 때 따라오는 클릭은 무시
             if (_focusPicking)
             {
                 _focusPicking = false; // 빈 땅을 누르면 집중 공격 대상 고르기 취소
@@ -983,6 +996,11 @@ namespace GN3.Battle
             }
             _picking = false;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(_field, e.position, e.pressEventCamera, out var local)) return;
+            if (HasSelection)
+            {
+                CommandSelectionMove(local); // 여러 대원을 골라 두었으면 그들이 함께 간다(분대장은 선택에 있을 때만)
+                return;
+            }
             _session.OrderMove(new System.Numerics.Vector2(local.x, local.y));
             if (_session.Leader != null && _session.Leader.IsAlive)
                 StartCoroutine(MoveMarker(local));
@@ -1011,7 +1029,9 @@ namespace GN3.Battle
                 if (_session.OrderSkill(unit)) _picking = false;
                 return;
             }
-            if (!unit.IsPlayerSide) _session.OrderAttack(unit);
+            if (unit.IsPlayerSide && ShiftHeld && !e.dragging) ToggleSelect(unit); // Shift+클릭: 여러 대원 고르기
+            else if (!unit.IsPlayerSide && HasSelection) CommandSelectionAttack(unit);
+            else if (!unit.IsPlayerSide) _session.OrderAttack(unit);
             else OnGroundClicked(e); // 아군을 누르면 그 자리로 이동
         }
 
@@ -1072,8 +1092,11 @@ namespace GN3.Battle
                 ? (skill != null && skill.TargetType == SkillTargetType.Ally
                     ? "치료할 아군을 클릭 (Q: 자신 · Esc: 취소)"
                     : "스킬을 쓸 적을 클릭 (Esc: 취소)")
+                : HasSelection
+                ? $"대원 {_selected.Count}명 선택 — 땅 클릭: 함께 이동 · 적 클릭: 함께 공격 · Esc: 선택 해제"
+                    + "\n빈 땅을 끌어 다시 고르기 · Shift+끌기: 더 고르기 · Shift+클릭: 넣기/빼기"
                 : "땅 클릭: 이동 · 적 클릭: 공격 · Q: 스킬 · Space: 일시정지" + (_session.HasTwoSquads ? " · Tab: 분대 전환" : "")
-                    + "\n대원을 끌어 땅에 놓으면 그 자리로 · 적 위에 놓으면 그 적 공격";
+                    + "\n대원을 끌어 땅에 놓으면 그 자리로 · 적 위에 놓으면 그 적 공격 · 빈 땅 끌기·Shift+클릭: 여러 명 선택";
         }
 
         private void UpdateUnitView(UnitView v)
@@ -2979,6 +3002,7 @@ namespace GN3.Battle
             _field.localScale = new Vector3(FieldZoom, FieldZoom, 1f);
             _field.anchoredPosition = new Vector2(-FieldBattleSession.FieldWidth * FieldZoom / 2f, FieldBottom);
             fieldGO.AddComponent<BattleClickTarget>().OnClick = OnGroundClicked;
+            AttachBoxSelect(fieldGO); // 빈 땅을 끌면 점선 네모로 여러 대원 선택(BattleUIController.Selection.cs)
             var frontTrees = BattleGroundTiles.Build(_field, quest.Region, quest.Title.GetHashCode(), // 지역별 바닥 타일(맨 아래 층)
                 deepForest: quest.Waves.Any(w => w.IsBoss)); // 보스전은 숲 한가운데(양옆까지 숲)
             if (quest.Waves.Any(w => w.IsBoss))
